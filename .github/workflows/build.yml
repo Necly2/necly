@@ -1,0 +1,42 @@
+name: Build Sugrob
+
+on:
+  push:
+    branches: [sugrob]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build app
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Package
+        run: |
+          ditto -c -k --keepParent build/Sugrob.app Sugrob.zip
+          ls -la Sugrob.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sugrob
+          path: Sugrob.zip
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="sugrob-latest"
+          gh release delete "$TAG" --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
+          gh release create "$TAG" Sugrob.zip -R "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Сугроб ❄️" \
+            --notes "Скачайте Sugrob.zip, распакуйте и перетащите Sugrob.app в «Программы». Первый запуск: Системные настройки → Конфиденциальность и безопасность → «Открыть всё равно»."
