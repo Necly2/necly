@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var displayLink: AnyObject?
     var last = CACurrentMediaTime()
     let defaults = UserDefaults.standard
+    let updater = Updater(appName: "Lenta", title: "Лента", tag: "lenta-latest", zipName: "Lenta.zip")
 
     var result: FeedResult?
     var loading = false
@@ -68,6 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         NotificationCenter.default.addObserver(self, selector: #selector(screensChanged),
                                                name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        updater.start()
         startClock()
         refresh()
         refreshQuotes()
@@ -247,6 +249,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(pause)
 
         menu.addItem(.separator())
+        if let b = updater.available {
+            menu.addItem(item("⬆ Обновить до сборки \(b)…", #selector(installUpdate)))
+        }
+        menu.addItem(item("Проверить обновления…", #selector(checkUpdates)))
         let settings = item("Настройки…", #selector(openSettings))
         settings.keyEquivalent = ","
         menu.addItem(settings)
@@ -374,6 +380,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             w.note("Нужно для расположений возле Dock: без доступа ширина Dock оценивается приблизительно.")
         }
 
+        w.section("Обновления")
+        w.checkbox("", "Проверять обновления автоматически (раз в день)", on: updater.autoUpdate) { [weak self] on in
+            self?.updater.autoUpdate = on
+        }
+        w.button("", "Проверить сейчас") { [weak self] in self?.checkUpdates() }
+        w.note("Установлена сборка \(updater.currentBuild). Новая версия скачивается с GitHub и ставится сама — с перезапуском.")
+
         w.onClose = { [weak self] in self?.settingsWindow = nil }
         settingsWindow = w
         w.show()
@@ -438,6 +451,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
     }
+
+    @objc func checkUpdates() { Task { await updater.check(interactive: true) } }
+    @objc func installUpdate() { if let b = updater.available { updater.offer(b) } }
 
     @objc func quit() { NSApp.terminate(nil) }
 }

@@ -12,5 +12,9 @@ done
 lipo -create build/tmp/Lenta-arm64 build/tmp/Lenta-x86_64 -output "$APP/Contents/MacOS/Lenta"
 rm -rf build/tmp
 cp Info.plist "$APP/Contents/Info.plist"
+if [ -n "$BUILD_NUMBER" ]; then
+  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$APP/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.$BUILD_NUMBER" "$APP/Contents/Info.plist"
+fi
 codesign --force -s - "$APP"
 echo "Готово: $APP"
