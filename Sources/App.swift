@@ -25,7 +25,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let levels: [(String, CGFloat)] = [("Лёгкий снег", 2), ("Снегопад", 4.5), ("Метель", 10)]
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        defaults.register(defaults: ["level": 1, "fastPiles": false, "dock": true])
+        defaults.register(defaults: ["level": 1, "fastPiles": false, "dock": true, "snowing": true,
+                                     "garland": true, "gDock": true, "gMenu": true, "gWin": false,
+                                     "gMode": 0, "gPalette": 0, "gBright": 0.9])
+        engine.snowing = defaults.bool(forKey: "snowing")
+        loadGarland()
         let level = min(max(defaults.integer(forKey: "level"), 0), levels.count - 1)
         engine.intensity = levels[level].1
         engine.fastPiles = defaults.bool(forKey: "fastPiles")
@@ -96,43 +100,92 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-
-        let snow = item("Снег идёт", #selector(toggleSnowing))
-        snow.state = engine.snowing ? .on : .off
-        menu.addItem(snow)
-
-        let current = defaults.integer(forKey: "level")
-        for (i, l) in levels.enumerated() {
-            let it = item("   " + l.0, #selector(setLevel(_:)))
-            it.tag = i
-            it.state = i == current ? .on : .off
-            menu.addItem(it)
-        }
-
-        menu.addItem(.separator())
         menu.addItem(item("Сюрприз 🚀", #selector(surprise)))
-
-        menu.addItem(.separator())
-        let fast = item("Быстрые сугробы", #selector(toggleFast))
-        fast.state = engine.fastPiles ? .on : .off
-        menu.addItem(fast)
-
-        let d = item("Снег на Dock", #selector(toggleDock))
-        d.state = engine.dockEnabled ? .on : .off
-        menu.addItem(d)
-        if !AXIsProcessTrusted() {
-            // Без доступа Dock определяется приблизительно; с доступом — точно.
-            menu.addItem(item("   Точнее определять Dock…", #selector(askAccessibility)))
-        }
-
-        let behind = item("Снег за окнами", #selector(toggleBehind))
-        behind.state = engine.snowBehindWindows ? .on : .off
-        menu.addItem(behind)
-
         menu.addItem(item("Стряхнуть весь снег", #selector(shake)))
         menu.addItem(.separator())
         menu.addItem(item(paused ? "Продолжить" : "Пауза", #selector(togglePause)))
+        let settings = item("Настройки…", #selector(openSettings))
+        settings.keyEquivalent = ","
+        menu.addItem(settings)
         menu.addItem(item("Выйти", #selector(quit)))
+    }
+
+    // MARK: Окно настроек
+
+    var settingsWindow: SettingsWindow?
+
+    func loadGarland() {
+        var g = GarlandSettings()
+        g.enabled = defaults.bool(forKey: "garland")
+        g.onDock = defaults.bool(forKey: "gDock")
+        g.onMenuBar = defaults.bool(forKey: "gMenu")
+        g.onWindows = defaults.bool(forKey: "gWin")
+        g.mode = defaults.integer(forKey: "gMode")
+        g.palette = defaults.integer(forKey: "gPalette")
+        g.brightness = CGFloat(defaults.double(forKey: "gBright"))
+        engine.garland = g
+    }
+
+    private func setDefault(_ key: String, _ value: Any) {
+        defaults.set(value, forKey: key)
+        loadGarland()
+    }
+
+    @objc func openSettings() {
+        settingsWindow?.window.close()
+        let w = SettingsWindow(title: "Сугроб — настройки")
+
+        w.section("Снег")
+        w.checkbox("", "Снег идёт", on: engine.snowing) { [weak self] on in
+            self?.engine.snowing = on
+            self?.defaults.set(on, forKey: "snowing")
+        }
+        w.popup("Интенсивность:", levels.map { $0.0 }, selected: defaults.integer(forKey: "level")) { [weak self] i in
+            guard let self else { return }
+            self.defaults.set(i, forKey: "level")
+            self.engine.intensity = self.levels[i].1
+        }
+        w.checkbox("", "Быстрые сугробы (копятся в 5 раз быстрее)", on: engine.fastPiles) { [weak self] on in
+            self?.engine.fastPiles = on
+            self?.defaults.set(on, forKey: "fastPiles")
+        }
+        w.checkbox("", "Снег на Dock", on: engine.dockEnabled) { [weak self] on in
+            self?.engine.dockEnabled = on
+            self?.defaults.set(on, forKey: "dock")
+        }
+        w.checkbox("", "Снег за окнами (падает только над рабочим столом)", on: engine.snowBehindWindows) { [weak self] on in
+            self?.engine.snowBehindWindows = on
+            self?.defaults.set(on, forKey: "behind")
+        }
+
+        w.section("Гирлянда")
+        w.checkbox("", "Включить гирлянду", on: defaults.bool(forKey: "garland")) { [weak self] on in
+            self?.setDefault("garland", on)
+        }
+        w.checkboxes("Где:", [("Dock", defaults.bool(forKey: "gDock")),
+                              ("Строка меню", defaults.bool(forKey: "gMenu")),
+                              ("Окна", defaults.bool(forKey: "gWin"))]) { [weak self] i, on in
+            self?.setDefault(["gDock", "gMenu", "gWin"][i], on)
+        }
+        w.popup("Режим:", GarlandSettings.modes, selected: defaults.integer(forKey: "gMode")) { [weak self] i in
+            self?.setDefault("gMode", i)
+        }
+        w.popup("Цвета:", GarlandSettings.palettes.map { $0.0 }, selected: defaults.integer(forKey: "gPalette")) { [weak self] i in
+            self?.setDefault("gPalette", i)
+        }
+        w.slider("Яркость:", value: defaults.double(forKey: "gBright"), min: 0.3, max: 1) { [weak self] v in
+            self?.setDefault("gBright", v)
+        }
+
+        if !AXIsProcessTrusted() {
+            w.section("Dock")
+            w.button("", "Точнее определять Dock…") { [weak self] in self?.askAccessibility() }
+            w.note("Без доступа «Универсальный доступ» положение Dock оценивается приблизительно.")
+        }
+
+        w.onClose = { [weak self] in self?.settingsWindow = nil }
+        settingsWindow = w
+        w.show()
     }
 
     private func item(_ title: String, _ action: Selector) -> NSMenuItem {
@@ -141,35 +194,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return it
     }
 
-    @objc func toggleSnowing() { engine.snowing.toggle() }
-
-    @objc func setLevel(_ sender: NSMenuItem) {
-        defaults.set(sender.tag, forKey: "level")
-        engine.intensity = levels[sender.tag].1
-        engine.snowing = true
-    }
-
-    @objc func toggleFast() {
-        engine.fastPiles.toggle()
-        defaults.set(engine.fastPiles, forKey: "fastPiles")
-    }
-
-    @objc func toggleDock() {
-        engine.dockEnabled.toggle()
-        defaults.set(engine.dockEnabled, forKey: "dock")
-    }
-
     @objc func askAccessibility() {
         let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
     }
 
     @objc func shake() { engine.shakeAll() }
-
-    @objc func toggleBehind() {
-        engine.snowBehindWindows.toggle()
-        defaults.set(engine.snowBehindWindows, forKey: "behind")
-    }
 
     @objc func surprise() {
         if paused { togglePause() }

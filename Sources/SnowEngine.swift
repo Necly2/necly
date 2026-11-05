@@ -99,6 +99,10 @@ final class SnowEngine {
     var fastPiles = false
     var dockEnabled = true
     var snowBehindWindows = false     // false — снег падает поверх окон
+    var garland = GarlandSettings()
+    /// Нижние края строки меню на каждом экране (глобальные координаты).
+    var menuBarLines: [CGRect] = []
+    var windowSurfaces: [Surface] { windowOrder }
 
     private(set) var flakes: [Flake] = []
 
@@ -141,6 +145,11 @@ final class SnowEngine {
 
     func screensChanged() {
         screenRects = NSScreen.screens.map(Geo.globalRect)
+        menuBarLines = NSScreen.screens.compactMap { sc in
+            let g = Geo.globalRect(of: sc)
+            let h = sc.frame.maxY - sc.visibleFrame.maxY
+            return h > 4 ? CGRect(x: g.minX, y: g.minY, width: g.width, height: h) : nil
+        }
         bounds = screenRects.reduce(CGRect.null) { $0.union($1) }
         dockAcc = 10
     }
@@ -604,6 +613,7 @@ final class SnowEngine {
             ctx.fillEllipse(in: CGRect(x: f.x - f.r, y: f.y - f.r, width: f.r * 2, height: f.r * 2))
         }
 
+        drawGarland(in: ctx, region: region)
         drawSurprise(in: ctx, region: region)
     }
 
