@@ -27,7 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         defaults.register(defaults: ["level": 1, "fastPiles": false, "dock": true, "snowing": true,
                                      "garland": true, "gDock": true, "gMenu": true, "gWin": false,
-                                     "gMode": 0, "gPalette": 0, "gBright": 0.9])
+                                     "gMode": 0, "gPalette": 0, "gBright": 0.9, "fps": 1])
         engine.snowing = defaults.bool(forKey: "snowing")
         loadGarland()
         let level = min(max(defaults.integer(forKey: "level"), 0), levels.count - 1)
@@ -53,12 +53,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             displayLink = nil
             if let view = overlays.first?.contentView {
                 let link = view.displayLink(target: self, selector: #selector(frameTick(_:)))
+                // Ограничение кадров: 30 или 60 в секунду, даже на экранах 120 Гц — меньше нагрев
+                let fps: Float = defaults.integer(forKey: "fps") == 0 ? 30 : 60
+                link.preferredFrameRateRange = CAFrameRateRange(minimum: fps / 2, maximum: fps, preferred: fps)
+                link.isPaused = paused
                 link.add(to: .main, forMode: .common)
                 displayLink = link
                 return
             }
         }
-        let t = Timer(timeInterval: 1.0 / 120, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
+        let t = Timer(timeInterval: defaults.integer(forKey: "fps") == 0 ? 1.0 / 30 : 1.0 / 60,
+                      target: self, selector: #selector(tick), userInfo: nil, repeats: true)
         RunLoop.main.add(t, forMode: .common)
         timer = t
     }
@@ -158,6 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.defaults.set(on, forKey: "behind")
         }
 
+        w.column()      // вторая колонка — окно широкое, а не высокое
         w.section("Гирлянда")
         w.checkbox("", "Включить гирлянду", on: defaults.bool(forKey: "garland")) { [weak self] on in
             self?.setDefault("garland", on)
@@ -175,6 +181,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         w.slider("Яркость:", value: defaults.double(forKey: "gBright"), min: 0.3, max: 1) { [weak self] v in
             self?.setDefault("gBright", v)
+        }
+
+        w.section("Производительность")
+        w.popup("Плавность:", ["30 кадров/с (меньше нагрев)", "60 кадров/с"], selected: defaults.integer(forKey: "fps")) { [weak self] i in
+            self?.defaults.set(i, forKey: "fps")
+            self?.startClock()
         }
 
         if !AXIsProcessTrusted() {
@@ -208,6 +220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func togglePause() {
         paused.toggle()
+        if #available(macOS 14.0, *) { (displayLink as? CADisplayLink)?.isPaused = paused }   // на паузе — ноль нагрузки
         if paused { overlays.forEach { $0.orderOut(nil) } }
         else { last = CACurrentMediaTime(); overlays.forEach { $0.orderFrontRegardless() } }
     }
