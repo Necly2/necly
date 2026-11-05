@@ -28,6 +28,15 @@ public class AppSettings
     public int GBright { get; set; } = 90;
     public string Word { get; set; } = "СЕРГЕЙ";
     public int Fps { get; set; } = 1;              // 0 — 30 кадров, 1 — 60 кадров
+    public int WeatherMode { get; set; }
+    public string City { get; set; } = "Москва";
+    public double CityLat { get; set; } = 55.75;
+    public double CityLon { get; set; } = 37.62;
+    public bool Snowman { get; set; } = true;
+    public int SnowmanLife { get; set; }
+    public int SnowmanStyle { get; set; }
+    public int SnowmanMax { get; set; } = 1;
+    public List<double[]> Snowmen { get; set; } = new();
 
     static string Dir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Sugrob");
     static string FilePath => Path.Combine(Dir, "settings.json");
@@ -67,6 +76,8 @@ public class TrayApp : ApplicationContext
     readonly List<Overlay> overlays = new();
     readonly NotifyIcon tray = new();
     readonly System.Windows.Forms.Timer timer = new() { Interval = 15 };
+    readonly System.Windows.Forms.Timer weatherTimer = new() { Interval = 15 * 60 * 1000 };
+    string? weatherError;
     readonly Stopwatch clock = Stopwatch.StartNew();
     double last, frameAcc;
     int topAcc;
@@ -93,10 +104,54 @@ public class TrayApp : ApplicationContext
         tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) OpenSettings(); };
         BuildMenu();
 
+        // Сохранённые снеговики
+        if (s.SnowmanLife != 3)
+            engine.Snowmen = s.Snowmen.Where(a => a.Length == 2)
+                .Select(a => new Snowman { XFromCenter = (float)a[0] * engine.S, Created = DateTime.FromBinary((long)a[1]), Build = 1 }).ToList();
+        engine.OnSnowmenChanged = SaveSnowmen;
+
         W.timeBeginPeriod(1);
         timer.Tick += (_, _) => Tick();
         timer.Start();
+        weatherTimer.Tick += (_, _) => RefreshWeather();
+        weatherTimer.Start();
+        RefreshWeather();
     }
+
+    // MARK: Погода и снеговики
+
+    void SaveSnowmen()
+    {
+        s.Snowmen = engine.Snowmen.Select(sm => new[] { sm.XFromCenter / engine.S, (double)sm.Created.ToBinary() }).ToList();
+        s.Save();
+    }
+
+    bool NeedsWeather => s.WeatherMode == 1 || s.SnowmanLife == 1;
+
+    async void RefreshWeather()
+    {
+        if (!NeedsWeather) return;
+        var w = await WeatherService.Current(s.CityLat, s.CityLon);
+        if (w != null) { engine.Weather = w; weatherError = null; }
+        else weatherError = "Не удалось получить погоду";
+    }
+
+    async void SetCity(string name)
+    {
+        name = name.Trim();
+        if (name.Length == 0) return;
+        var g = await WeatherService.Geocode(name);
+        if (g is var (n, lat, lon))
+        {
+            s.City = n; s.CityLat = lat; s.CityLon = lon; s.Save();
+            engine.Weather = null;
+            RefreshWeather();
+        }
+        else weatherError = $"Город «{name}» не найден";
+        if (settingsForm != null && !settingsForm.IsDisposed) OpenSettings();
+    }
+
+    string WeatherLine => engine.Weather is WeatherNow w ? $"{s.City}: {w.TempText}, {w.Description}" : weatherError ?? $"{s.City}: погода загружается…";
 
     void Apply()
     {
@@ -105,6 +160,12 @@ public class TrayApp : ApplicationContext
         engine.FastPiles = s.FastPiles;
         engine.TaskbarEnabled = s.Taskbar;
         engine.SnowBehindWindows = s.Behind;
+        engine.WeatherMode = s.WeatherMode;
+        engine.SnowmanEnabled = s.Snowman;
+        engine.SnowmanLifetime = s.SnowmanLife;
+        engine.SnowmanStyle = s.SnowmanStyle;
+        engine.MaxSnowmen = Engine.SnowmanCounts[Math.Clamp(s.SnowmanMax, 0, 2)];
+        while (engine.Snowmen.Count > engine.MaxSnowmen) engine.Snowmen.RemoveAt(0);
         engine.Garland = new GarlandSettings
         {
             Enabled = s.Garland, OnTaskbar = s.GTaskbar, OnTop = s.GTop, OnWindows = s.GWindows,
@@ -150,6 +211,11 @@ public class TrayApp : ApplicationContext
     {
         var m = tray.ContextMenuStrip!;
         m.Items.Clear();
+        if (NeedsWeather)
+        {
+            m.Items.Add(new ToolStripMenuItem(WeatherLine) { Enabled = false });
+            m.Items.Add(new ToolStripSeparator());
+        }
         m.Items.Add("Сюрприз 🚀", null, (_, _) => Surprise());
         m.Items.Add("Стряхнуть весь снег", null, (_, _) => engine.ShakeAll());
         m.Items.Add(new ToolStripSeparator());
@@ -195,6 +261,21 @@ public class TrayApp : ApplicationContext
         w.Checkbox("", "Быстрые сугробы (копятся в 5 раз быстрее)", s.FastPiles, on => { s.FastPiles = on; Save(); });
         w.Checkbox("", "Снег на панели задач", s.Taskbar, on => { s.Taskbar = on; Save(); });
         w.Checkbox("", "Снег за окнами (падает только над рабочим столом)", s.Behind, on => { s.Behind = on; Save(); });
+
+        w.Section("Погода");
+        w.Popup("Что показывать:", Engine.WeatherModes, s.WeatherMode, i => { s.WeatherMode = i; Save(); RefreshWeather(); });
+        w.TextField("Город:", s.City, "Применить", 180, SetCity);
+        w.Note(WeatherLine + ". По погоде: снег — идёт снег, дождь — капли и сугробы тают, ясная морозная ночь — иней на краях окон. Обновление раз в 15 минут.");
+
+        w.Column();
+        w.Section("Снеговик");
+        w.Checkbox("", "Лепить снеговика из кучи снега на панели задач", s.Snowman, on => { s.Snowman = on; Save(); });
+        w.Popup("Сколько стоит:", Engine.SnowmanLifetimes, s.SnowmanLife, i => { s.SnowmanLife = i; Save(); RefreshWeather(); });
+        w.Popup("Наряд:", Engine.SnowmanStyles, s.SnowmanStyle, i => { s.SnowmanStyle = i; Save(); });
+        w.Popup("Сколько может быть:", Engine.SnowmanCounts.Select(c => "до " + c).ToArray(), s.SnowmanMax, i => { s.SnowmanMax = i; Save(); SaveSnowmen(); });
+        w.Button("", "Слепить снеговика сейчас", () => engine.BuildSnowmanNow());
+        w.Button("", "Убрать всех снеговиков", () => engine.RemoveAllSnowmen());
+        w.Note("Ведите курсором по снегу на панели задач в одну сторону: снег сгребается в кучу, и когда она станет большой — из неё вырастет снеговик.");
 
         w.Section("Гирлянда");
         w.Checkbox("", "Включить гирлянду", s.Garland, on => { s.Garland = on; Save(); });

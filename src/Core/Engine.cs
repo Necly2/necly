@@ -29,6 +29,7 @@ public class Surface
     public bool[] Visible;
     public float[] Profile = Array.Empty<float>();
     public float[] Lumps = Array.Empty<float>();
+    public float[] Heap;        // куча, сметённая курсором (только панель задач) — из неё лепится снеговик
     public float CornerR;
     public PointF Velocity;
     public double LastChange;
@@ -42,8 +43,12 @@ public class Surface
         int n = Columns(frame.Width);
         Heights = new float[n];
         Visible = Enumerable.Repeat(true, n).ToArray();
+        Heap = new float[n];
         MakeShape(n);
     }
+
+    /// Высота снега вместе с кучей.
+    public float Total(int i) => Heights[i] + (i < Heap.Length ? Heap[i] : 0);
 
     public int Columns(float w) => Math.Max(1, (int)(w / e.ColW));
     public float Top => Frame.Top;
@@ -126,7 +131,7 @@ public class GarlandSettings
 }
 
 /// Физика снега — перенос с версии для macOS.
-public class Engine
+public partial class Engine
 {
     public readonly Random Rnd = new();
     public float S = 1;                 // масштаб (DPI / 96)
@@ -190,6 +195,8 @@ public class Engine
         MoveFlakes(dt);
         Relax();
         Brush();
+        UpdateWeatherEffects(dt);
+        UpdateSnowmen(dt);
         UpdateSurprise(dt);
     }
 
@@ -291,9 +298,16 @@ public class Engine
 
     void Remap(Surface s, RectangleF r, PointF v, bool dropOutside)
     {
-        var old = s.Frame; var oldH = s.Heights;
+        var old = s.Frame; var oldH = s.Heights; var oldHeap = s.Heap;
         int n = s.Columns(r.Width);
         var nh = new float[n];
+        var nheap = new float[n];
+        for (int j = 0; j < oldHeap.Length; j++)
+        {
+            if (oldHeap[j] <= 0.1f) continue;
+            float pos = (old.Left + (j + 0.5f) * ColW - r.Left) / ColW;
+            if (pos >= 0 && (int)pos < n) nheap[(int)pos] = Math.Max(nheap[(int)pos], oldHeap[j]);
+        }
         for (int j = 0; j < oldH.Length; j++)
         {
             if (oldH[j] <= 0.3f) continue;
@@ -302,7 +316,7 @@ public class Engine
             if (pos >= 0 && (int)pos < n) nh[(int)pos] = Math.Max(nh[(int)pos], oldH[j]);
             else if (!dropOutside) Emit(x, old.Top, oldH[j], new PointF(v.X * 0.6f, 0), 50 * S, s.Id);
         }
-        s.Frame = r; s.Heights = nh; s.Visible = Enumerable.Repeat(true, n).ToArray();
+        s.Frame = r; s.Heights = nh; s.Heap = nheap; s.Visible = Enumerable.Repeat(true, n).ToArray();
         if (s.Profile.Length != n) s.MakeShape(n);
     }
 
@@ -354,8 +368,9 @@ public class Engine
 
     void Spawn(float dt)
     {
-        if (!Snowing || Bounds.IsEmpty) return;
-        spawnAcc += Intensity * (Bounds.Width / S) / 100 * dt;
+        float rate = SnowRate;
+        if (rate <= 0 || Bounds.IsEmpty) return;
+        spawnAcc += rate * (Bounds.Width / S) / 100 * dt;
         while (spawnAcc >= 1)
         {
             spawnAcc -= 1;
@@ -406,7 +421,7 @@ public class Engine
                     if (f.Loose && f.IgnoreId == s.Id && T < f.IgnoreUntil) continue;
                     if (Frozen && !s.IsTaskbar) continue;
                     if (s.Column(f.X) is not int c) continue;
-                    float sy = s.Top + s.Base(c) - s.Heights[c];
+                    float sy = s.Top + s.Base(c) - s.Total(c);
                     if (prevY <= sy + 0.5f && f.Y >= sy && s.Visible[c])
                     {
                         Deposit(s, c, f.Loose ? f.R * 0.9f : f.R * 0.55f * dep);
@@ -471,6 +486,7 @@ public class Engine
                 mouse.X < s.Frame.Left - R || mouse.X > s.Frame.Right + R) continue;
             int i0 = Math.Max(0, (int)Math.Floor((mouse.X - R - s.Frame.Left) / ColW));
             int i1 = Math.Min(s.Heights.Length - 1, (int)Math.Floor((mouse.X + R - s.Frame.Left) / ColW));
+            if (s.IsTaskbar && SnowmanEnabled) { SweepIntoHeap(s, i0, i1); continue; }
             for (int i = i0; i <= i1; i++)
             {
                 if (!s.Visible[i] || s.Heights[i] <= 0.4f) continue;
