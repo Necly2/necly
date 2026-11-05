@@ -15,6 +15,8 @@ public class TrayApp : ApplicationContext
     readonly AppSettings s = AppSettings.Load();
     readonly TickerForm ticker = new();
     readonly NotifyIcon tray = new();
+    Updater updater = null!;
+    Action? balloonAction;
     readonly System.Windows.Forms.Timer newsTimer = new() { Interval = 120_000 };
     readonly System.Windows.Forms.Timer quotesTimer = new() { Interval = 60_000 };
     SettingsForm? settingsForm;
@@ -55,6 +57,14 @@ public class TrayApp : ApplicationContext
         tray.Icon = MakeIcon();
         tray.Text = "Лента";
         tray.Visible = true;
+        updater = new Updater("Lenta", "Лента", "lenta-windows-latest", "Lenta-Windows.zip",
+            () => s.SkippedBuild, b => { s.SkippedBuild = b; s.Save(); }, Quit)
+        {
+            AutoUpdate = () => s.AutoUpdate,
+            Notify = (text, action) => { balloonAction = action; tray.ShowBalloonTip(8000, "Лента", text, ToolTipIcon.Info); },
+        };
+        tray.BalloonTipClicked += (_, _) => balloonAction?.Invoke();
+        updater.Start();
         tray.ContextMenuStrip = new ContextMenuStrip();
         tray.ContextMenuStrip.Opening += (_, e) => { BuildMenu(); e.Cancel = false; };
         tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) OpenSettings(); };
@@ -203,6 +213,8 @@ public class TrayApp : ApplicationContext
         pause.Click += (_, _) => ticker.Paused = !ticker.Paused;
         m.Items.Add(pause);
         m.Items.Add(new ToolStripSeparator());
+        if (updater.Available is int b) m.Items.Add($"⬆ Обновить до сборки {b}…", null, (_, _) => updater.Offer(b));
+        m.Items.Add("Проверить обновления…", null, async (_, _) => await updater.Check(true));
         m.Items.Add("Настройки…", null, (_, _) => OpenSettings());
         m.Items.Add("Выйти", null, (_, _) => Quit());
     }
@@ -291,6 +303,11 @@ public class TrayApp : ApplicationContext
             if (on) { ticker.Show(); ApplyAll(); } else { ticker.UnregisterAppBar(); ticker.Hide(); }
         });
         w.Checkbox("", "Запускать вместе с Windows", AppSettings.Autostart, on => AppSettings.Autostart = on);
+
+        w.Section("Обновления");
+        w.Checkbox("", "Проверять обновления автоматически (раз в день)", s.AutoUpdate, on => { s.AutoUpdate = on; s.Save(); });
+        w.Button("", "Проверить сейчас", async () => await updater.Check(true));
+        w.Note($"Установлена сборка {Updater.CurrentBuild}. Новая версия скачивается с GitHub и ставится сама — с перезапуском.");
 
         settingsForm = w;
         w.Show();

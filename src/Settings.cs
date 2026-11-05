@@ -22,6 +22,8 @@ public class AppSettings
     public int Theme { get; set; } = 0;
     public int Speed { get; set; } = 1;
     public bool Visible { get; set; } = true;
+    public bool AutoUpdate { get; set; } = true;
+    public int SkippedBuild { get; set; }
     public int NewsInterval { get; set; } = 1;     // индекс в TrayApp.NewsIntervals
     public int QuotesInterval { get; set; } = 1;
 

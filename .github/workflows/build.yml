@@ -24,6 +24,7 @@ jobs:
       - name: Publish single-file exe
         run: |
           dotnet publish src/Lenta.csproj -c Release -r win-x64 --self-contained true \
+            -p:Version=1.0.${{ github.run_number }} \
             -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
             -p:EnableCompressionInSingleFile=true -o out
           ls -la out
@@ -31,6 +32,7 @@ jobs:
       - name: Package
         run: |
           7z a Lenta-Windows.zip ./out/Lenta.exe
+          echo "${{ github.run_number }}" > version.txt
           ls -la Lenta-Windows.zip
 
       - uses: actions/upload-artifact@v4
@@ -44,7 +46,7 @@ jobs:
         run: |
           TAG="lenta-windows-latest"
           gh release delete "$TAG" --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
-          gh release create "$TAG" Lenta-Windows.zip -R "$GITHUB_REPOSITORY" \
+          gh release create "$TAG" Lenta-Windows.zip version.txt -R "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "Лента 📰 для Windows" \
-            --notes "Скачайте Lenta-Windows.zip, распакуйте и запустите Lenta.exe. Если Windows покажет «Windows защитила ваш компьютер» — «Подробнее» → «Выполнить в любом случае»."
+            --notes-file README.md
