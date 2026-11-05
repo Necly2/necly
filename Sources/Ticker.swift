@@ -63,6 +63,29 @@ final class TickerView: NSView {
         let text: NSAttributedString
         let width: CGFloat
         let link: URL?
+        var key: String? = nil      // заголовок — чтобы перемотать к нему
+    }
+
+    static let alertRed = NSColor(srgbRed: 215 / 255, green: 25 / 255, blue: 35 / 255, alpha: 1)
+
+    /// Правила срочных новостей (см. UrgentRules).
+    var urgentRules: [[String]] = [] { didSet { rebuild() } }
+    var highlightUrgent = true { didSet { rebuild() } }
+    private var flashStart: CFTimeInterval = -100
+    private var isFlashing: Bool { CACurrentMediaTime() - flashStart < 3.2 }
+
+    /// Тревога: мигаем красным и перематываем строку к срочному заголовку.
+    func alert(_ title: String) {
+        flashStart = CACurrentMediaTime()
+        var x: CGFloat = 0
+        for seg in segments {
+            if seg.key == title {
+                offset = max(0, x - 12)
+                break
+            }
+            x += seg.width
+        }
+        needsDisplay = true
     }
 
     var segments: [Segment] = []
@@ -175,14 +198,24 @@ final class TickerView: NSView {
                     .font: timeFont, .foregroundColor: fg.withAlphaComponent(0.72),
                 ]))
             }
+            let urgent = highlightUrgent && UrgentRules.matches(h.title, urgentRules)
+            if urgent {
+                s.append(NSAttributedString(string: " СРОЧНО ", attributes: [
+                    .font: NSFont.systemFont(ofSize: fontSize - 2, weight: .black),
+                    .foregroundColor: NSColor.white,
+                    .backgroundColor: TickerView.alertRed,
+                    .baselineOffset: 1,
+                ]))
+                s.append(NSAttributedString(string: "  ", attributes: [.font: font]))
+            }
             s.append(NSAttributedString(string: h.title, attributes: [
-                .font: font, .foregroundColor: fg,
+                .font: urgent ? NSFont.systemFont(ofSize: fontSize, weight: .bold) : font, .foregroundColor: fg,
             ]))
             let sep = i == lastItems.count - 1 ? "      " : "    •    "
             s.append(NSAttributedString(string: sep, attributes: [
                 .font: font, .foregroundColor: fg.withAlphaComponent(0.55),
             ]))
-            segs.append(Segment(text: s, width: ceil(s.size().width), link: h.link))
+            segs.append(Segment(text: s, width: ceil(s.size().width), link: h.link, key: h.title))
         }
         segments = segs
         totalWidth = segs.reduce(0) { $0 + $1.width }
@@ -193,6 +226,7 @@ final class TickerView: NSView {
     // MARK: Анимация
 
     func advance(_ dt: CGFloat) {
+        if isFlashing { needsDisplay = true }
         guard totalWidth > 0, !paused, !hovering else { return }
         offset += speed * dt
         if offset >= totalWidth { offset -= totalWidth }
@@ -211,6 +245,13 @@ final class TickerView: NSView {
 
         NSGraphicsContext.saveGraphicsState()
         bg.addClip()
+        if isFlashing {
+            // Красная пульсация фона во время тревоги
+            let e = CACurrentMediaTime() - flashStart
+            let k = CGFloat(0.5 + 0.5 * sin(e * 11)) * CGFloat(max(0, 1 - e / 3.2) * 0.6 + 0.4)
+            TickerView.alertRed.withAlphaComponent(0.9 * k).setFill()
+            bounds.fill()
+        }
         let f = font
         let y = (bounds.height - (f.ascender - f.descender)) / 2 - 0.5
         let pad = cornerRadius * 0.6

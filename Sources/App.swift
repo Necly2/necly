@@ -47,13 +47,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         defaults.register(defaults: ["speed": 1, "visible": true, "position": 0, "size": 1, "theme": 0,
                                      "content": 2, "stocks": "SBER, GAZP, LKOH, YDEX, ROSN, VTBR",
-                                     "index": true, "currencies": "USD,EUR,CNY"])
+                                     "index": true, "currencies": "USD,EUR,CNY",
+                                     "urgentOn": true, "urgentSound": true, "urgentRules": UrgentRules.defaultText])
 
         panel = TickerPanel()
         applyAppearance()
         panel.ticker.speed = speeds[min(max(defaults.integer(forKey: "speed"), 0), speeds.count - 1)].1
         panel.ticker.onOpen = { url in NSWorkspace.shared.open(url) }
         panel.ticker.contentMode = defaults.integer(forKey: "content")
+        applyUrgentSettings()
         panel.ticker.setMessage("Загрузка…")
         if defaults.bool(forKey: "visible") { panel.window.orderFrontRegardless() }
 
@@ -67,7 +69,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                                name: NSApplication.didChangeScreenParametersNotification, object: nil)
         startClock()
         refresh()
-        let r = Timer(timeInterval: 300, target: self, selector: #selector(refresh), userInfo: nil, repeats: true)
+        // Каждые 2 минуты — чтобы срочные новости появлялись быстро.
+        let r = Timer(timeInterval: 120, target: self, selector: #selector(refresh), userInfo: nil, repeats: true)
         RunLoop.main.add(r, forMode: .common)
         refreshTimer = r
 
@@ -159,6 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.resultSource = sourceURL
                 self.lastError = nil
                 self.panel.ticker.setHeadlines(r.items, source: r.siteName)
+                self.detectUrgent(r.items)
             } catch {
                 self.lastError = error.localizedDescription
                 if self.result == nil || self.resultSource != self.sourceURL {
@@ -180,6 +184,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !str.lowercased().hasPrefix("http") { str = "https://" + str }
         guard URL(string: str)?.host != nil else { return }
         sourceURL = str
+        seenTitles = []
         result = nil
         resultSource = nil
         panel.ticker.setMessage("Загрузка заголовков…")
@@ -207,7 +212,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let r = result, !r.items.isEmpty {
             let latest = NSMenu()
             for (i, h) in r.items.prefix(15).enumerated() {
-                let title = h.title.count > 90 ? String(h.title.prefix(88)) + "…" : h.title
+                var title = h.title.count > 90 ? String(h.title.prefix(88)) + "…" : h.title
+                if UrgentRules.matches(h.title, urgentRules) { title = "⚡ " + title }
                 let it = item(title, #selector(openHeadline(_:)))
                 it.tag = i
                 it.isEnabled = h.link != nil
@@ -265,6 +271,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DispatchQueue.main.async { self.openSettings() }   // обновить поле со ссылкой
         }
 
+        w.section("Срочные новости")
+        w.checkbox("", "Выделять срочные и мигать строкой", on: defaults.bool(forKey: "urgentOn")) { [weak self] on in
+            self?.defaults.set(on, forKey: "urgentOn")
+            self?.applyUrgentSettings()
+        }
+        w.checkbox("", "Звуковой сигнал", on: defaults.bool(forKey: "urgentSound")) { [weak self] on in
+            self?.defaults.set(on, forKey: "urgentSound")
+        }
+        w.textField("Слова:", value: defaults.string(forKey: "urgentRules") ?? "", placeholder: UrgentRules.defaultText,
+                    button: "Применить", width: 380) { [weak self] v in
+            self?.defaults.set(v, forKey: "urgentRules")
+            self?.applyUrgentSettings()
+        }
+        w.note("Через запятую. Достаточно начала слова: «эвакуац» найдёт «эвакуация» и «эвакуацию». «+» — должны встретиться все части: «ключев+ставк».")
+        w.button("", "Вернуть слова по умолчанию") { [weak self] in
+            self?.defaults.set(UrgentRules.defaultText, forKey: "urgentRules")
+            self?.applyUrgentSettings()
+            DispatchQueue.main.async { self?.openSettings() }
+        }
+        w.button("", "Показать, как выглядит тревога") { [weak self] in
+            guard let self, let h = self.result?.items.first else { return }
+            self.triggerAlert(h.title)
+        }
+
         w.section("Котировки")
         w.textField("Акции (тикеры):", value: defaults.string(forKey: "stocks") ?? "",
                     placeholder: "SBER, GAZP, LKOH", button: "Применить") { [weak self] v in
@@ -318,6 +348,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         w.onClose = { [weak self] in self?.settingsWindow = nil }
         settingsWindow = w
         w.show()
+    }
+
+    // MARK: Срочные новости
+
+    var seenTitles = Set<String>()
+    var urgentRules: [[String]] { UrgentRules.parse(defaults.string(forKey: "urgentRules") ?? UrgentRules.defaultText) }
+
+    func applyUrgentSettings() {
+        panel.ticker.urgentRules = urgentRules
+        panel.ticker.highlightUrgent = defaults.bool(forKey: "urgentOn")
+    }
+
+    /// Новые срочные заголовки (свежее часа; при первой загрузке — свежее 30 минут) поднимают тревогу.
+    func detectUrgent(_ items: [Headline]) {
+        defer { seenTitles.formUnion(items.map { $0.title }) }
+        guard defaults.bool(forKey: "urgentOn"), defaults.integer(forKey: "content") != 1 else { return }
+        let rules = urgentRules
+        let now = Date()
+        let first = seenTitles.isEmpty
+        var newest: Headline?
+        for h in items where !seenTitles.contains(h.title) && UrgentRules.matches(h.title, rules) {
+            let age = h.date.map { now.timeIntervalSince($0) } ?? 0
+            if age > (first ? 1800 : 3600) { continue }
+            if newest == nil || (h.date ?? now) > (newest?.date ?? now) { newest = h }
+        }
+        if let h = newest { triggerAlert(h.title) }
+    }
+
+    func triggerAlert(_ title: String) {
+        panel.ticker.alert(title)
+        if defaults.bool(forKey: "urgentSound") { NSSound(named: "Glass")?.play() }
     }
 
     func applyAppearance() {
