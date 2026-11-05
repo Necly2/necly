@@ -16,6 +16,7 @@ final class Surface {
     var visible: [Bool]        // колонка не закрыта окном спереди
     var profile: [CGFloat] = []   // 0…1: форма холмиков — сколько снега может лечь в колонку
     var lumps: [CGFloat] = []     // 0…1: размер комка на верхушке колонки
+    var heap: [CGFloat] = []      // куча, сметённая курсором (только Dock) — из неё лепится снеговик
     var cornerR: CGFloat = 0       // радиус скругления верхних углов
     var velocity = CGVector.zero   // сглаженная скорость окна
     var lastChange: Double = 0     // когда позиция менялась в последний раз
@@ -29,8 +30,12 @@ final class Surface {
         let n = Surface.columns(for: frame.width)
         heights = [CGFloat](repeating: 0, count: n)
         visible = [Bool](repeating: true, count: n)
+        heap = [CGFloat](repeating: 0, count: n)
         makeShape(n)
     }
+
+    /// Высота снега вместе с кучей.
+    func total(_ i: Int) -> CGFloat { heights[i] + (i < heap.count ? heap[i] : 0) }
 
     /// Случайный, но плавный рельеф: крупные холмы + мелкая рябь + шум.
     func makeShape(_ n: Int) {
@@ -100,6 +105,24 @@ final class SnowEngine {
     var dockEnabled = true
     var snowBehindWindows = false     // false — снег падает поверх окон
     var garland = GarlandSettings()
+
+    // Погода (Weather.swift / WeatherFX.swift)
+    /// 0 — снег всегда, 1 — по реальной погоде, 2 — дождь (проверка), 3 — иней (проверка)
+    var weatherMode = 0
+    var weather: WeatherNow?
+    var drops: [RainDrop] = []
+    var splashes: [Splash] = []
+    var rainAcc: CGFloat = 0
+    var frostLevel: CGFloat = 0
+    var frostCache: [Int: [FrostSpike]] = [:]
+
+    // Снеговики (Snowman.swift)
+    var snowmanEnabled = true
+    var snowmanLifetime = 0      // 0 до весны, 1 тает в оттепель, 2 час, 3 до выхода
+    var snowmanStyle = 0         // 0 цилиндр, 1 ведро, 2 шапка с помпоном, 3 без шапки
+    var maxSnowmen = 3
+    var snowmen: [Snowman] = []
+    var onSnowmenChanged: (() -> Void)?
     /// Нижние края строки меню на каждом экране (глобальные координаты).
     var menuBarLines: [CGRect] = []
     var windowSurfaces: [Surface] { windowOrder }
@@ -132,12 +155,12 @@ final class SnowEngine {
     /// Насколько вперёд «предсказывать» положение движущегося окна (компенсация задержки).
     private let leadTime: CGFloat = 1.0 / 120
     private var spawnAcc: CGFloat = 0
-    private var mouse = CGPoint.zero
-    private var mouseV = CGVector.zero
-    private var hasMouse = false
-    private var wind: CGFloat = 0
+    var mouse = CGPoint.zero
+    var mouseV = CGVector.zero
+    var hasMouse = false
+    var wind: CGFloat = 0
 
-    private var bounds = CGRect.null
+    var bounds = CGRect.null
     private let ownPID = ProcessInfo.processInfo.processIdentifier
     private let maxFlakes = 6000
 
@@ -176,6 +199,8 @@ final class SnowEngine {
         moveFlakes(dt)
         relax()
         brush()
+        updateWeatherEffects(dt)
+        updateSnowmen(dt)
         updateSurprise(dt)
     }
 
@@ -319,8 +344,14 @@ final class SnowEngine {
     private func remap(_ s: Surface, to rect: CGRect, edgeVelocity v: CGVector, dropOutside: Bool = false) {
         let old = s.frame
         let oldH = s.heights
+        let oldHeap = s.heap
         let n = Surface.columns(for: rect.width)
         var nh = [CGFloat](repeating: 0, count: n)
+        var nheap = [CGFloat](repeating: 0, count: n)
+        for j in 0..<oldHeap.count where oldHeap[j] > 0.1 {
+            let pos = (old.minX + (CGFloat(j) + 0.5) * colW - rect.minX) / colW
+            if pos >= 0, Int(pos) < n { nheap[Int(pos)] = max(nheap[Int(pos)], oldHeap[j]) }
+        }
         for j in 0..<oldH.count where oldH[j] > 0.3 {
             let x = old.minX + (CGFloat(j) + 0.5) * colW
             let pos = (x - rect.minX) / colW
@@ -334,6 +365,7 @@ final class SnowEngine {
         }
         s.frame = rect
         s.heights = nh
+        s.heap = nheap
         s.visible = [Bool](repeating: true, count: n)
         if s.profile.count != n { s.makeShape(n) }
     }
@@ -393,8 +425,9 @@ final class SnowEngine {
     // MARK: - Снежинки
 
     private func spawn(_ dt: CGFloat) {
-        guard snowing, !bounds.isNull else { return }
-        spawnAcc += intensity * bounds.width / 100 * dt
+        let rate = snowRate
+        guard rate > 0, !bounds.isNull else { return }
+        spawnAcc += rate * bounds.width / 100 * dt
         while spawnAcc >= 1 {
             spawnAcc -= 1
             if flakes.count >= maxFlakes { spawnAcc = 0; break }
@@ -449,7 +482,7 @@ final class SnowEngine {
                     if f.loose && f.ignoreID == s.id && t < f.ignoreUntil { continue }
                     if frozen && !s.isDock { continue }
                     guard let c = s.column(at: f.x) else { continue }
-                    let sy = s.top + s.base(c) - s.heights[c]
+                    let sy = s.top + s.base(c) - s.total(c)
                     if prevY <= sy + 0.5, f.y >= sy, s.visible[c] {
                         deposit(s, c, f.loose ? f.r * 0.9 : f.r * 0.55 * depositScale)
                         landed = true
@@ -519,6 +552,10 @@ final class SnowEngine {
             let i0 = max(0, Int(((mouse.x - R - s.frame.minX) / colW).rounded(.down)))
             let i1 = min(s.heights.count - 1, Int(((mouse.x + R - s.frame.minX) / colW).rounded(.down)))
             if i0 > i1 { continue }
+            if s.isDock && snowmanEnabled {
+                sweepIntoHeap(s, i0, i1)
+                continue
+            }
             for i in i0...i1 where s.visible[i] && s.heights[i] > 0.4 {
                 let amt = s.heights[i]
                 if mouse.y < s.top - amt - 12 { continue }
@@ -543,7 +580,7 @@ final class SnowEngine {
         }
     }
 
-    private func emit(x: CGFloat, top: CGFloat, amount: CGFloat, velocity: CGVector,
+    func emit(x: CGFloat, top: CGFloat, amount: CGFloat, velocity: CGVector,
                       spread: CGFloat, ignoreID: Int) {
         let count = max(1, Int(amount / 1.8 + CGFloat.random(in: 0..<1)))
         for _ in 0..<count {
@@ -581,6 +618,8 @@ final class SnowEngine {
     // MARK: - Отрисовка
 
     func draw(in ctx: CGContext, region: CGRect) {
+        drawFrost(in: ctx, region: region)
+
         // Сугробы
         ctx.saveGState()
         ctx.setShadow(offset: .zero, blur: 2, color: CGColor(gray: 0, alpha: 0.28))
@@ -599,6 +638,9 @@ final class SnowEngine {
         ctx.fillPath()
         ctx.endTransparencyLayer()
         ctx.restoreGState()
+
+        drawSnowmen(in: ctx, region: region)
+        drawRain(in: ctx, region: region)
 
         // Снежинки: тонкая тёмная подложка, чтобы их было видно на белых окнах.
         let area = region.insetBy(dx: -4, dy: -4)
@@ -628,17 +670,17 @@ final class SnowEngine {
         let top = s.top + oy
         var i = 0
         while i < n {
-            if !s.visible[i] || s.heights[i] < 0.3 { i += 1; continue }
+            if !s.visible[i] || s.total(i) < 0.3 { i += 1; continue }
             // Собираем непрерывный участок и рисуем его плавной кривой.
             // Все точки держим строго внутри окна (и не залезаем на окна спереди).
             let minX = s.frame.minX + 1.5 + ox, maxX = s.frame.maxX - 1.5 + ox
             var pts: [CGPoint] = []
             var bases: [CGPoint] = []
             let segStart = i
-            while i < n && s.visible[i] && s.heights[i] >= 0.3 { i += 1 }
+            while i < n && s.visible[i] && s.total(i) >= 0.3 { i += 1 }
             let segEnd = i - 1
             for k in segStart...segEnd {
-                let h = s.heights[k]
+                let h = s.total(k)
                 let b = top + s.base(k)
                 let x = min(maxX, max(minX, s.colX(k) + ox))
                 pts.append(CGPoint(x: x, y: b - h))

@@ -27,7 +27,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         defaults.register(defaults: ["level": 1, "fastPiles": false, "dock": true, "snowing": true,
                                      "garland": true, "gDock": true, "gMenu": true, "gWin": false,
-                                     "gMode": 0, "gPalette": 0, "gBright": 0.9, "fps": 1])
+                                     "gMode": 0, "gPalette": 0, "gBright": 0.9, "fps": 1,
+                                     "weatherMode": 0, "city": "Москва", "cityLat": 55.75, "cityLon": 37.62,
+                                     "snowman": true, "snowmanLife": 0, "snowmanStyle": 0, "snowmanMax": 1])
         engine.snowing = defaults.bool(forKey: "snowing")
         loadGarland()
         let level = min(max(defaults.integer(forKey: "level"), 0), levels.count - 1)
@@ -35,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         engine.fastPiles = defaults.bool(forKey: "fastPiles")
         engine.dockEnabled = defaults.bool(forKey: "dock")
         engine.snowBehindWindows = defaults.bool(forKey: "behind")
+        loadWeatherAndSnowmen()
 
         buildOverlays()
         NotificationCenter.default.addObserver(self, selector: #selector(screensChanged),
@@ -42,6 +45,76 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                                object: nil)
         setupMenu()
         startClock()
+        refreshWeather()
+        let wt = Timer(timeInterval: 900, target: self, selector: #selector(refreshWeather), userInfo: nil, repeats: true)
+        wt.tolerance = 120
+        RunLoop.main.add(wt, forMode: .common)
+        weatherTimer = wt
+    }
+
+    // MARK: Погода и снеговики
+
+    var weatherTimer: Timer?
+    var weatherError: String?
+
+    func loadWeatherAndSnowmen() {
+        engine.weatherMode = defaults.integer(forKey: "weatherMode")
+        engine.snowmanEnabled = defaults.bool(forKey: "snowman")
+        engine.snowmanLifetime = defaults.integer(forKey: "snowmanLife")
+        engine.snowmanStyle = defaults.integer(forKey: "snowmanStyle")
+        engine.maxSnowmen = SnowEngine.snowmanCounts[min(max(defaults.integer(forKey: "snowmanMax"), 0), 2)]
+        // Сохранённые снеговики (если они «живут» дольше одного запуска)
+        if engine.snowmen.isEmpty, engine.snowmanLifetime != 3,
+           let saved = defaults.array(forKey: "snowmen") as? [[Double]] {
+            engine.snowmen = saved.compactMap { a in
+                a.count == 2 ? Snowman(xFromCenter: CGFloat(a[0]), created: Date(timeIntervalSince1970: a[1]), build: 1) : nil
+            }
+        }
+        engine.onSnowmenChanged = { [weak self] in self?.saveSnowmen() }
+    }
+
+    func saveSnowmen() {
+        let arr = engine.snowmen.map { [Double($0.xFromCenter), $0.created.timeIntervalSince1970] }
+        defaults.set(arr, forKey: "snowmen")
+    }
+
+    /// Погода нужна для режима «по погоде» и для снеговиков, которые тают в оттепель.
+    var needsWeather: Bool { engine.weatherMode == 1 || engine.snowmanLifetime == 1 }
+
+    @objc func refreshWeather() {
+        guard needsWeather else { return }
+        let lat = defaults.double(forKey: "cityLat"), lon = defaults.double(forKey: "cityLon")
+        Task { @MainActor in
+            if let w = await WeatherService.current(lat: lat, lon: lon) {
+                self.engine.weather = w
+                self.weatherError = nil
+            } else {
+                self.weatherError = "Не удалось получить погоду"
+            }
+        }
+    }
+
+    func setCity(_ name: String) {
+        let q = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return }
+        Task { @MainActor in
+            if let g = await WeatherService.geocode(q) {
+                self.defaults.set(g.name, forKey: "city")
+                self.defaults.set(g.lat, forKey: "cityLat")
+                self.defaults.set(g.lon, forKey: "cityLon")
+                self.engine.weather = nil
+                self.refreshWeather()
+            } else {
+                self.weatherError = "Город «\(q)» не найден"
+            }
+            if self.settingsWindow != nil { self.openSettings() }
+        }
+    }
+
+    var weatherLine: String {
+        let city = defaults.string(forKey: "city") ?? "Москва"
+        if let w = engine.weather { return "\(city): \(w.tempText), \(w.description)" }
+        return weatherError ?? "\(city): погода загружается…"
     }
 
     /// Кадры синхронизированы с обновлением экрана (60/120 Гц). На macOS 13 — обычный таймер.
@@ -105,6 +178,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        if needsWeather {
+            let wl = NSMenuItem(title: weatherLine, action: nil, keyEquivalent: "")
+            wl.isEnabled = false
+            menu.addItem(wl)
+            menu.addItem(.separator())
+        }
         menu.addItem(item("Сюрприз 🚀", #selector(surprise)))
         menu.addItem(item("Стряхнуть весь снег", #selector(shake)))
         menu.addItem(.separator())
@@ -163,7 +242,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.defaults.set(on, forKey: "behind")
         }
 
+        w.section("Погода")
+        w.popup("Что показывать:", SnowEngine.weatherModes, selected: defaults.integer(forKey: "weatherMode")) { [weak self] i in
+            guard let self else { return }
+            self.defaults.set(i, forKey: "weatherMode")
+            self.engine.weatherMode = i
+            self.refreshWeather()
+        }
+        w.textField("Город:", value: defaults.string(forKey: "city") ?? "Москва", placeholder: "Москва",
+                    button: "Применить", width: 180) { [weak self] v in self?.setCity(v) }
+        w.note(weatherLine + ". По погоде: снег — идёт снег, дождь — капли и сугробы тают, ясная морозная ночь — иней на краях окон. Обновление раз в 15 минут.")
+
         w.column()      // вторая колонка — окно широкое, а не высокое
+        w.section("Снеговик")
+        w.checkbox("", "Лепить снеговика из кучи снега на Dock", on: engine.snowmanEnabled) { [weak self] on in
+            self?.defaults.set(on, forKey: "snowman")
+            self?.engine.snowmanEnabled = on
+        }
+        w.popup("Сколько стоит:", SnowEngine.snowmanLifetimes, selected: defaults.integer(forKey: "snowmanLife")) { [weak self] i in
+            guard let self else { return }
+            self.defaults.set(i, forKey: "snowmanLife")
+            self.engine.snowmanLifetime = i
+            self.refreshWeather()
+        }
+        w.popup("Наряд:", SnowEngine.snowmanStyles, selected: defaults.integer(forKey: "snowmanStyle")) { [weak self] i in
+            self?.defaults.set(i, forKey: "snowmanStyle")
+            self?.engine.snowmanStyle = i
+        }
+        w.popup("Сколько может быть:", SnowEngine.snowmanCounts.map { "до \($0)" }, selected: defaults.integer(forKey: "snowmanMax")) { [weak self] i in
+            guard let self else { return }
+            self.defaults.set(i, forKey: "snowmanMax")
+            self.engine.maxSnowmen = SnowEngine.snowmanCounts[i]
+            while self.engine.snowmen.count > self.engine.maxSnowmen { self.engine.snowmen.removeFirst() }
+            self.saveSnowmen()
+        }
+        w.button("", "Слепить снеговика сейчас") { [weak self] in self?.engine.buildSnowmanNow() }
+        w.button("", "Убрать всех снеговиков") { [weak self] in self?.engine.removeAllSnowmen() }
+        w.note("Ведите курсором по снегу на Dock в одну сторону: снег сгребается в кучу, и когда она станет большой — из неё вырастет снеговик.")
+
         w.section("Гирлянда")
         w.checkbox("", "Включить гирлянду", on: defaults.bool(forKey: "garland")) { [weak self] on in
             self?.setDefault("garland", on)
