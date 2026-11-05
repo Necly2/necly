@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var last = CACurrentMediaTime()
     var paused = false
     let defaults = UserDefaults.standard
+    let updater = Updater(appName: "Sugrob", title: "Сугроб", tag: "sugrob-latest", zipName: "Sugrob.zip")
 
     let levels: [(String, CGFloat)] = [("Лёгкий снег", 2), ("Снегопад", 4.5), ("Метель", 10)]
 
@@ -44,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                                name: NSApplication.didChangeScreenParametersNotification,
                                                object: nil)
         setupMenu()
+        updater.start()
         startClock()
         refreshWeather()
         let wt = Timer(timeInterval: 900, target: self, selector: #selector(refreshWeather), userInfo: nil, repeats: true)
@@ -188,6 +190,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(item("Стряхнуть весь снег", #selector(shake)))
         menu.addItem(.separator())
         menu.addItem(item(paused ? "Продолжить" : "Пауза", #selector(togglePause)))
+        if let b = updater.available {
+            menu.addItem(item("⬆ Обновить до сборки \(b)…", #selector(installUpdate)))
+        }
+        menu.addItem(item("Проверить обновления…", #selector(checkUpdates)))
         let settings = item("Настройки…", #selector(openSettings))
         settings.keyEquivalent = ","
         menu.addItem(settings)
@@ -311,6 +317,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             w.note("Без доступа «Универсальный доступ» положение Dock оценивается приблизительно.")
         }
 
+        w.section("Обновления")
+        w.checkbox("", "Проверять обновления автоматически (раз в день)", on: updater.autoUpdate) { [weak self] on in
+            self?.updater.autoUpdate = on
+        }
+        w.button("", "Проверить сейчас") { [weak self] in self?.checkUpdates() }
+        w.note("Установлена сборка \(updater.currentBuild). Новая версия скачивается с GitHub и ставится сама — с перезапуском.")
+
         w.onClose = { [weak self] in self?.settingsWindow = nil }
         settingsWindow = w
         w.show()
@@ -340,6 +353,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if paused { overlays.forEach { $0.orderOut(nil) } }
         else { last = CACurrentMediaTime(); overlays.forEach { $0.orderFrontRegardless() } }
     }
+
+    @objc func checkUpdates() { Task { await updater.check(interactive: true) } }
+    @objc func installUpdate() { if let b = updater.available { updater.offer(b) } }
 
     @objc func quit() { NSApp.terminate(nil) }
 }

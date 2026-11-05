@@ -19,6 +19,10 @@ lipo -create build/tmp/Sugrob-arm64 build/tmp/Sugrob-x86_64 -output "$APP/Conten
 rm -rf build/tmp
 
 cp Info.plist "$APP/Contents/Info.plist"
+if [ -n "$BUILD_NUMBER" ]; then
+  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$APP/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.$BUILD_NUMBER" "$APP/Contents/Info.plist"
+fi
 codesign --force -s - "$APP"
 
 echo "Готово: $APP"
