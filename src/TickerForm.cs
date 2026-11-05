@@ -38,14 +38,17 @@ public class TickerForm : Form
     bool highlightUrgent = true;
 
     readonly Stopwatch clock = Stopwatch.StartNew();
-    double lastTick;
     double flashStart = -100;
     bool IsFlashing => clock.Elapsed.TotalSeconds - flashStart < 3.2;
     static readonly Color AlertRed = Color.FromArgb(215, 25, 35);
 
     Font font = null!, bold = null!, timeFont = null!, badgeFont = null!;
-    readonly System.Windows.Forms.Timer timer = new() { Interval = 10 };
-    int reassert;
+    FrameClock? frames;
+    double reassert;
+    int targetFps = 60;
+
+    /// Частота кадров (до частоты экрана: 120/144/165/240 Гц).
+    public void SetFps(int fps) { targetFps = fps; if (frames != null) frames.TargetFps = fps; }
 
     public TickerForm()
     {
@@ -56,7 +59,6 @@ public class TickerForm : Form
         DoubleBuffered = true;
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
         MakeFonts();
-        timer.Tick += (_, _) => Tick();
         MouseEnter += (_, _) => hovering = true;
         MouseLeave += (_, _) => { hovering = false; Cursor = Cursors.Default; };
         MouseMove += (_, e) => Cursor = LinkAt(e.X) != null ? Cursors.Hand : Cursors.Default;
@@ -79,7 +81,8 @@ public class TickerForm : Form
     {
         base.OnHandleCreated(e);
         Native.timeBeginPeriod(1);        // точнее таймер — плавнее прокрутка
-        timer.Start();
+        frames = new FrameClock(this, dt => Tick(dt)) { TargetFps = targetFps };
+        frames.Start();
     }
 
     float Scale96 => DeviceDpi / 96f;
@@ -196,11 +199,9 @@ public class TickerForm : Form
 
     // MARK: Анимация
 
-    void Tick()
+    void Tick(double frameDt)
     {
-        double now = clock.Elapsed.TotalSeconds;
-        float dt = (float)Math.Min(now - lastTick, 0.05);
-        lastTick = now;
+        float dt = (float)Math.Min(frameDt, 0.05);
         if (totalWidth > 0 && !Paused && !hovering)
         {
             offset += Speed * Scale96 * dt;
@@ -210,7 +211,8 @@ public class TickerForm : Form
         else if (IsFlashing) Invalidate();
 
         // Не даём панели задач перекрыть строку
-        if (++reassert > 200)
+        reassert += frameDt;
+        if (reassert > 2)
         {
             reassert = 0;
             if (Visible && !fullscreenApp) Native.SetWindowPos(Handle, Native.HWND_TOPMOST, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
@@ -362,6 +364,7 @@ public class TickerForm : Form
 
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
+        frames?.Dispose();
         UnregisterAppBar();
         Native.timeEndPeriod(1);
         base.OnFormClosed(e);

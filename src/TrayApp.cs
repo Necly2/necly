@@ -82,6 +82,7 @@ public class TrayApp : ApplicationContext
     void ApplyAll()
     {
         ticker.Speed = Speeds[Math.Clamp(s.Speed, 0, Speeds.Length - 1)].Speed;
+        ticker.SetFps(FrameClock.Fps(s.FrameRate));
         ticker.SetContentMode(s.Content);
         ticker.SetUrgent(UrgentRules.Parse(s.UrgentRulesText), s.UrgentOn);
         ticker.ApplyLook(TickerTheme.All[Math.Clamp(s.Theme, 0, TickerTheme.All.Length - 1)],
@@ -296,6 +297,7 @@ public class TrayApp : ApplicationContext
         w.Popup("Расположение:", Positions.Titles, s.Position, i => { s.Position = i; s.Save(); ApplyAll(); });
         w.Popup("Размер:", TickerSize.All.Select(x => x.Name).ToArray(), s.Size, i => { s.Size = i; s.Save(); ApplyAll(); });
         w.Popup("Цвета:", TickerTheme.All.Select(x => x.Name).ToArray(), s.Theme, i => { s.Theme = i; s.Save(); ApplyAll(); });
+        w.Popup("Частота кадров:", FrameClock.Titles, s.FrameRate, i => { s.FrameRate = i; s.Save(); ApplyAll(); });
         w.Popup("Скорость:", Speeds.Select(x => x.Name).ToArray(), s.Speed, i => { s.Speed = i; s.Save(); ApplyAll(); });
         w.Checkbox("", "Показывать строку", s.Visible, on =>
         {

@@ -21,6 +21,7 @@ public class AppSettings
     public int Size { get; set; } = 1;
     public int Theme { get; set; } = 0;
     public int Speed { get; set; } = 1;
+    public int FrameRate { get; set; } = 0;        // 0 — как у экрана
     public bool Visible { get; set; } = true;
     public bool AutoUpdate { get; set; } = true;
     public int SkippedBuild { get; set; }
