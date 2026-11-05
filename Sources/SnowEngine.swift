@@ -3,6 +3,11 @@ import Cocoa
 /// Ширина одной «колонки» сугроба в точках.
 let colW: CGFloat = 3
 
+/// На macOS 26 (Tahoe) у окон и Dock заметно сильнее скруглены углы.
+let isTahoe = ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26
+let windowCornerRadius: CGFloat = isTahoe ? 24 : 10
+let dockCornerRadius: CGFloat = isTahoe ? 20 : 12
+
 /// Поверхность, на которой копится снег: верхняя кромка окна или Dock.
 final class Surface {
     let id: Int
@@ -11,6 +16,7 @@ final class Surface {
     var visible: [Bool]        // колонка не закрыта окном спереди
     var profile: [CGFloat] = []   // 0…1: форма холмиков — сколько снега может лечь в колонку
     var lumps: [CGFloat] = []     // 0…1: размер комка на верхушке колонки
+    var cornerR: CGFloat = 0       // радиус скругления верхних углов
     var velocity = CGVector.zero   // сглаженная скорость окна
     var lastChange: Double = 0     // когда позиция менялась в последний раз
     let isDock: Bool
@@ -19,6 +25,7 @@ final class Surface {
         self.id = id
         self.frame = frame
         self.isDock = isDock
+        self.cornerR = isDock ? dockCornerRadius : windowCornerRadius
         let n = Surface.columns(for: frame.width)
         heights = [CGFloat](repeating: 0, count: n)
         visible = [Bool](repeating: true, count: n)
@@ -44,6 +51,16 @@ final class Surface {
     var maxHeight: CGFloat { isDock ? 20 : 26 }
 
     func colX(_ i: Int) -> CGFloat { frame.minX + (CGFloat(i) + 0.5) * colW }
+
+    /// На сколько опущена кромка в колонке из-за скругления угла.
+    func base(_ i: Int) -> CGFloat {
+        let r = min(cornerR, frame.width / 2)
+        let x = colX(i)
+        let dx = min(x - frame.minX, frame.maxX - x)
+        if dx >= r || r <= 0 { return 0 }
+        let k = r - max(0, dx)
+        return r - (max(0, r * r - k * k)).squareRoot()
+    }
 
     func column(at x: CGFloat) -> Int? {
         let v = (x - frame.minX) / colW
@@ -93,6 +110,12 @@ final class SnowEngine {
     private var windowOrder: [Surface] = []
     private(set) var order: [Surface] = []     // спереди назад, Dock первым
     private var dock: Surface?
+    private var stash: [Int: (Surface, Double)] = [:]   // спрятанные окна (Mission Control, другой стол)
+    private var transitionUntil: Double = -1
+    private var dockBaseline = Set<Int>()
+    private var screenRects: [CGRect] = []
+    /// Идёт системная анимация (Mission Control, смена стола, «Показать рабочий стол»).
+    var frozen: Bool { t < transitionUntil }
 
     private(set) var t: Double = 0
     private var dockAcc: Double = 10
@@ -112,7 +135,8 @@ final class SnowEngine {
     init() { screensChanged() }
 
     func screensChanged() {
-        bounds = NSScreen.screens.map(Geo.globalRect).reduce(CGRect.null) { $0.union($1) }
+        screenRects = NSScreen.screens.map(Geo.globalRect)
+        bounds = screenRects.reduce(CGRect.null) { $0.union($1) }
         dockAcc = 10
     }
 
@@ -146,24 +170,58 @@ final class SnowEngine {
     private func pollWindows() {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
                                                     kCGNullWindowID) as? [[String: Any]] else { return }
-        var newOrder: [Surface] = []
+        var found: [(Int, CGRect)] = []
         var seen = Set<Int>()
+        var dockBig = Set<Int>()
 
         for info in list {
-            guard let layer = (info[kCGWindowLayer as String] as? NSNumber)?.intValue, layer == 0,
-                  let pid = (info[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value, pid != ownPID,
+            guard let layer = (info[kCGWindowLayer as String] as? NSNumber)?.intValue,
+                  let pid = (info[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
                   let id = (info[kCGWindowNumber as String] as? NSNumber)?.intValue,
                   let bd = info[kCGWindowBounds as String] as? NSDictionary,
                   let rect = CGRect(dictionaryRepresentation: bd as CFDictionary)
             else { continue }
+            // Полноэкранное окно Dock над остальными — признак Mission Control.
+            if layer > 0, (info[kCGWindowOwnerName as String] as? String) == "Dock", isScreenSized(rect) {
+                dockBig.insert(id)
+            }
+            guard layer == 0, pid != ownPID else { continue }
             let alpha = (info[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? 1
             if alpha < 0.1 || rect.width < 120 || rect.height < 60 || seen.contains(id) { continue }
             seen.insert(id)
+            found.append((id, rect))
+        }
 
+        // Первые 2 секунды запоминаем «обычные» окна Dock, чтобы не путать их с Mission Control.
+        var missionControl = false
+        if t < 2 { dockBaseline.formUnion(dockBig) } else { missionControl = !dockBig.subtracting(dockBaseline).isEmpty }
+
+        // Если разом сдвинулись или пропали несколько окон — это системная анимация, а не пользователь.
+        var changed = 0
+        for (id, rect) in found {
+            guard let e = surfaces[id] else { continue }
+            let dPos: CGFloat = abs(e.frame.minX - rect.minX) + abs(e.frame.minY - rect.minY)
+            let dSize: CGFloat = abs(e.frame.width - rect.width) + abs(e.frame.height - rect.height)
+            if dPos + dSize > 2 { changed += 1 }
+        }
+        let vanished = surfaces.keys.filter { !seen.contains($0) }.count
+        let total = max(1, max(surfaces.count, found.count))
+        if missionControl || (changed + vanished >= 2 && (changed + vanished) * 2 >= total) {
+            transitionUntil = t + 0.4
+        }
+        let freeze = frozen
+
+        var newOrder: [Surface] = []
+        for (id, rect) in found {
             let s: Surface
             if let existing = surfaces[id] {
                 s = existing
-                update(s, to: rect)
+                if freeze { quietMove(s, to: rect) } else { update(s, to: rect) }
+            } else if let entry = stash.removeValue(forKey: id) {
+                // Окно вернулось (после Mission Control / с другого стола) — со своим снегом.
+                s = entry.0
+                quietMove(s, to: rect)
+                surfaces[id] = s
             } else {
                 s = Surface(id: id, frame: rect)
                 s.lastChange = t
@@ -172,14 +230,34 @@ final class SnowEngine {
             newOrder.append(s)
         }
 
-        // Окно закрыли или свернули — снег с него падает вниз.
         for (id, s) in surfaces where !seen.contains(id) {
-            shed(s, fraction: 1, frame: s.frame, velocity: .zero, spread: 40, ignore: false)
+            if freeze {
+                stash[id] = (s, t)          // спрятать до возвращения окна
+            } else {
+                // Окно закрыли или свернули — снег с него падает вниз.
+                shed(s, fraction: 1, frame: s.frame, velocity: .zero, spread: 40, ignore: false)
+            }
             surfaces[id] = nil
         }
+        stash = stash.filter { t - $0.value.1 < 900 }
 
         windowOrder = newOrder
         rebuildOrder()
+    }
+
+    private func isScreenSized(_ r: CGRect) -> Bool {
+        screenRects.contains { r.width >= $0.width * 0.9 && r.height >= $0.height * 0.9 }
+    }
+
+    /// Переместить сугроб вместе с окном без всякой физики (во время системных анимаций).
+    private func quietMove(_ s: Surface, to rect: CGRect) {
+        if abs(rect.width - s.frame.width) > 0.5 {
+            remap(s, to: rect, edgeVelocity: .zero, dropOutside: true)
+        } else {
+            s.frame = rect
+        }
+        s.velocity = .zero
+        s.lastChange = t
     }
 
     private func update(_ s: Surface, to rect: CGRect) {
@@ -224,7 +302,7 @@ final class SnowEngine {
         }
     }
 
-    private func remap(_ s: Surface, to rect: CGRect, edgeVelocity v: CGVector) {
+    private func remap(_ s: Surface, to rect: CGRect, edgeVelocity v: CGVector, dropOutside: Bool = false) {
         let old = s.frame
         let oldH = s.heights
         let n = Surface.columns(for: rect.width)
@@ -235,7 +313,7 @@ final class SnowEngine {
             if pos >= 0, Int(pos) < n {
                 let i = Int(pos)
                 nh[i] = max(nh[i], oldH[j])
-            } else {
+            } else if !dropOutside {
                 emit(x: x, top: old.minY, amount: oldH[j],
                      velocity: CGVector(dx: v.dx * 0.6, dy: 0), spread: 50, ignoreID: s.id)
             }
@@ -355,8 +433,9 @@ final class SnowEngine {
             if !f.loose || f.vy > 0 {
                 for s in order {
                     if f.loose && f.ignoreID == s.id && t < f.ignoreUntil { continue }
+                    if frozen && !s.isDock { continue }
                     guard let c = s.column(at: f.x) else { continue }
-                    let sy = s.top - s.heights[c]
+                    let sy = s.top + s.base(c) - s.heights[c]
                     if prevY <= sy + 0.5, f.y >= sy, s.visible[c] {
                         deposit(s, c, f.loose ? f.r * 0.9 : f.r * 0.55 * depositScale)
                         landed = true
@@ -413,7 +492,7 @@ final class SnowEngine {
 
     /// Курсор сметает снег с кромки окна или с Dock.
     private func brush() {
-        guard hasMouse, hypot(mouseV.dx, mouseV.dy) > 60 else { return }
+        guard hasMouse, !frozen, hypot(mouseV.dx, mouseV.dy) > 60 else { return }
         let R: CGFloat = 16
         for s in order {
             let below: CGFloat = s.isDock ? 14 : 8
@@ -496,6 +575,7 @@ final class SnowEngine {
         let path = CGMutablePath()
         let lumps = CGMutablePath()
         for s in order where s.frame.insetBy(dx: -4, dy: -40).intersects(region) {
+            if frozen && !s.isDock { continue }
             addPile(s, to: path, lumps: lumps)
         }
         ctx.addPath(path)
@@ -507,7 +587,10 @@ final class SnowEngine {
 
         // Снежинки: тонкая тёмная подложка, чтобы их было видно на белых окнах.
         let area = region.insetBy(dx: -4, dy: -4)
+        // Снег идёт «за» окнами программ: над окнами снежинки не рисуем.
+        let windowRects = windowOrder.map(\.frame).filter { $0.intersects(area) }
         for f in flakes where area.contains(CGPoint(x: f.x, y: f.y)) {
+            if windowRects.contains(where: { $0.contains(CGPoint(x: f.x, y: f.y)) }) { continue }
             let rr = f.r + 0.6
             ctx.setFillColor(CGColor(gray: 0, alpha: 0.12 * f.alpha))
             ctx.fillEllipse(in: CGRect(x: f.x - rr, y: f.y - rr, width: rr * 2, height: rr * 2))
@@ -532,19 +615,22 @@ final class SnowEngine {
             if !s.visible[i] || s.heights[i] < 0.3 { i += 1; continue }
             // Собираем непрерывный участок и рисуем его плавной кривой.
             var pts: [CGPoint] = []
+            var bases: [CGPoint] = []
             while i < n && s.visible[i] && s.heights[i] >= 0.3 {
                 let h = s.heights[i]
-                pts.append(CGPoint(x: s.colX(i) + ox, y: top - h))
+                let b = top + s.base(i)
+                pts.append(CGPoint(x: s.colX(i) + ox, y: b - h))
+                bases.append(CGPoint(x: s.colX(i) + ox, y: b + 1))
                 // Комки на верхушке: каждая вторая колонка, размер зависит от высоты.
                 if i % 2 == 0, h > 3, s.lumps[i] > 0.3 {
                     let r = min(h * 0.35, 1.3 + s.lumps[i] * 2.8)
                     let cx = s.colX(i) + ox + (s.lumps[i] - 0.5) * 2
-                    let cy = top - h + r * 0.55
+                    let cy = b - h + r * 0.55
                     lumps.addEllipse(in: CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2))
                 }
                 i += 1
             }
-            path.move(to: CGPoint(x: pts[0].x - colW / 2, y: top + 1))
+            path.move(to: CGPoint(x: pts[0].x - colW / 2, y: bases[0].y))
             path.addLine(to: pts[0])
             if pts.count > 1 {
                 for j in 1..<pts.count {
@@ -553,7 +639,9 @@ final class SnowEngine {
                 }
             }
             path.addLine(to: pts[pts.count - 1])
-            path.addLine(to: CGPoint(x: pts[pts.count - 1].x + colW / 2, y: top + 1))
+            path.addLine(to: CGPoint(x: pts[pts.count - 1].x + colW / 2, y: bases[bases.count - 1].y))
+            // Низ сугроба повторяет кромку окна, включая скруглённые углы.
+            for b in bases.reversed() { path.addLine(to: b) }
             path.closeSubpath()
         }
     }
