@@ -68,18 +68,71 @@ final class Updater {
         if latest > currentBuild {
             available = latest
             // Если пользователь уже отказался от этой сборки — сам не напоминаем
-            if interactive || defaults.integer(forKey: "skippedBuild") != latest { offer(latest) }
+            if interactive || defaults.integer(forKey: "skippedBuild") != latest { await offerAsync(latest) }
         } else {
             available = nil
             if interactive { message("Установлена последняя версия", "«\(title)», сборка \(currentBuild).") }
         }
     }
 
+    /// Ветка на GitHub, где лежит история изменений («sugrob-latest» → «sugrob»).
+    var branch: String { tag.replacingOccurrences(of: "-latest", with: "") }
+
+    /// Что изменилось между установленной и новой сборкой — из CHANGELOG.md, иначе из notes.txt.
+    func changesSummary(upTo build: Int) async -> String {
+        func get(_ url: String) async -> String? {
+            guard let u = URL(string: url) else { return nil }
+            let req = URLRequest(url: u, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+            guard let (data, resp) = try? await URLSession.shared.data(for: req),
+                  (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+            return String(data: data, encoding: .utf8)
+        }
+        var parts: [String] = []
+        if let log = await get("https://raw.githubusercontent.com/Necly2/necly/\(branch)/CHANGELOG.md") {
+            // Разделы «## Сборка N — дата», берём те, что новее установленной
+            var current: (Int, [String])? = nil
+            func flush() {
+                if let c = current, c.0 > currentBuild, c.0 <= build {
+                    parts.append(c.1.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines))
+                }
+            }
+            for line in log.components(separatedBy: "\n") {
+                if line.hasPrefix("## ") {
+                    flush()
+                    let num = Int(line.drop(while: { !$0.isNumber }).prefix(while: { $0.isNumber })) ?? 0
+                    current = (num, [])
+                } else if current != nil, !line.trimmingCharacters(in: .whitespaces).isEmpty {
+                    current?.1.append(line)
+                }
+            }
+            flush()
+        }
+        if parts.isEmpty, let n = await get(Updater.base + tag + "/notes.txt") {
+            parts = [n.trimmingCharacters(in: .whitespacesAndNewlines)]
+        }
+        var text = parts.joined(separator: "\n")
+            .replacingOccurrences(of: "**", with: "")
+            .replacingOccurrences(of: "\n- ", with: "\n• ")
+        if text.hasPrefix("- ") { text = "• " + text.dropFirst(2) }
+        // Окно не должно быть огромным
+        let lines = text.components(separatedBy: "\n")
+        if lines.count > 14 { text = lines.prefix(14).joined(separator: "\n") + "\n…и другие изменения — подробнее на GitHub." }
+        return text
+    }
+
     func offer(_ build: Int) {
+        Task { await offerAsync(build) }
+    }
+
+    func offerAsync(_ build: Int) async {
+        let summary = await changesSummary(upTo: build)
         NSApp.activate(ignoringOtherApps: true)
         let a = NSAlert()
         a.messageText = "Доступна новая версия «\(title)»"
-        a.informativeText = "Сборка \(build) (у вас — \(currentBuild)). Приложение скачает её, заменит себя и перезапустится — переустанавливать вручную не нужно."
+        var info = "Сборка \(build) (у вас — \(currentBuild))."
+        if !summary.isEmpty { info += "\n\nЧто нового:\n" + summary }
+        info += "\n\nПриложение скачает обновление, заменит себя и перезапустится — переустанавливать вручную не нужно."
+        a.informativeText = info
         a.addButton(withTitle: "Обновить")
         a.addButton(withTitle: "Позже")
         if a.runModal() == .alertFirstButtonReturn {
