@@ -45,13 +45,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        defaults.register(defaults: ["speed": 1, "visible": true, "position": 0, "size": 1, "theme": 0])
+        defaults.register(defaults: ["speed": 1, "visible": true, "position": 0, "size": 1, "theme": 0,
+                                     "content": 2, "stocks": "SBER, GAZP, LKOH, YDEX, ROSN, VTBR",
+                                     "index": true, "currencies": "USD,EUR,CNY"])
 
         panel = TickerPanel()
         applyAppearance()
         panel.ticker.speed = speeds[min(max(defaults.integer(forKey: "speed"), 0), speeds.count - 1)].1
         panel.ticker.onOpen = { url in NSWorkspace.shared.open(url) }
-        panel.ticker.setMessage("Загрузка заголовков…")
+        panel.ticker.contentMode = defaults.integer(forKey: "content")
+        panel.ticker.setMessage("Загрузка…")
         if defaults.bool(forKey: "visible") { panel.window.orderFrontRegardless() }
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -67,6 +70,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let r = Timer(timeInterval: 300, target: self, selector: #selector(refresh), userInfo: nil, repeats: true)
         RunLoop.main.add(r, forMode: .common)
         refreshTimer = r
+
+        refreshQuotes()
+        let q = Timer(timeInterval: 60, target: self, selector: #selector(refreshQuotes), userInfo: nil, repeats: true)
+        RunLoop.main.add(q, forMode: .common)
+        quotesTimer = q
+    }
+
+    // MARK: Котировки
+
+    var quotesTimer: Timer?
+    var quotes: [Quote] = []
+    var loadingQuotes = false
+
+    var stockList: [String] {
+        (defaults.string(forKey: "stocks") ?? "").uppercased()
+            .components(separatedBy: CharacterSet(charactersIn: ", ;\n")).filter { !$0.isEmpty }
+    }
+    var currencyList: [String] {
+        (defaults.string(forKey: "currencies") ?? "").components(separatedBy: ",").filter { !$0.isEmpty }
+    }
+
+    @objc func refreshQuotes() {
+        guard defaults.integer(forKey: "content") != 0, !loadingQuotes else { return }
+        loadingQuotes = true
+        let stocks = stockList, cur = currencyList, idx = defaults.bool(forKey: "index")
+        Task { @MainActor in
+            let q = await QuoteLoader.load(stocks: stocks, index: idx, currencies: cur)
+            self.loadingQuotes = false
+            if !q.isEmpty || (stocks.isEmpty && cur.isEmpty && !idx) {
+                self.quotes = q
+                self.panel.ticker.setQuotes(q)
+            }
+        }
     }
 
     // MARK: Анимация
@@ -168,18 +204,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(ei)
         }
 
-        menu.addItem(item("Вставить ссылку на сайт…", #selector(askURL)))
-        let presetMenu = NSMenu()
-        for (i, p) in presets.enumerated() {
-            let it = item(p.0, #selector(choosePreset(_:)))
-            it.tag = i
-            it.state = sourceURL == p.1 ? .on : .off
-            presetMenu.addItem(it)
-        }
-        let pm = NSMenuItem(title: "Популярные сайты", action: nil, keyEquivalent: "")
-        pm.submenu = presetMenu
-        menu.addItem(pm)
-
         if let r = result, !r.items.isEmpty {
             let latest = NSMenu()
             for (i, h) in r.items.prefix(15).enumerated() {
@@ -193,57 +217,107 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             lm.submenu = latest
             menu.addItem(lm)
         }
-        menu.addItem(item("Обновить сейчас", #selector(refresh)))
-
-        menu.addItem(.separator())
-        let speedMenu = NSMenu()
-        let cur = defaults.integer(forKey: "speed")
-        for (i, s) in speeds.enumerated() {
-            let it = item(s.0, #selector(setSpeed(_:)))
-            it.tag = i
-            it.state = i == cur ? .on : .off
-            speedMenu.addItem(it)
-        }
-        let sm = NSMenuItem(title: "Скорость", action: nil, keyEquivalent: "")
-        sm.submenu = speedMenu
-        menu.addItem(sm)
-
-        menu.addItem(submenu("Расположение", TickerPosition.allCases.map { $0.title },
-                             selected: defaults.integer(forKey: "position"), action: #selector(setPosition(_:))))
-        menu.addItem(submenu("Размер", TickerSize.all.map { $0.name },
-                             selected: defaults.integer(forKey: "size"), action: #selector(setSize(_:))))
-        menu.addItem(submenu("Цвета", TickerTheme.all.map { $0.name },
-                             selected: defaults.integer(forKey: "theme"), action: #selector(setTheme(_:))))
-
-        if !AXIsProcessTrusted() {
-            menu.addItem(item("   Точнее определять Dock…", #selector(askAccessibility)))
-        }
-
+        menu.addItem(item("Обновить сейчас", #selector(refreshAll)))
         let pause = item("Пауза", #selector(togglePause))
         pause.state = panel.ticker.paused ? .on : .off
         menu.addItem(pause)
-        let vis = item("Показывать строку", #selector(toggleVisible))
-        vis.state = defaults.bool(forKey: "visible") ? .on : .off
-        menu.addItem(vis)
 
         menu.addItem(.separator())
-        let hint = NSMenuItem(title: "⌥ + клик по заголовку — открыть статью", action: nil, keyEquivalent: "")
+        let settings = item("Настройки…", #selector(openSettings))
+        settings.keyEquivalent = ","
+        menu.addItem(settings)
+        let hint = NSMenuItem(title: "⌥ + клик по строке — открыть статью или котировку", action: nil, keyEquivalent: "")
         hint.isEnabled = false
         menu.addItem(hint)
         menu.addItem(item("Выйти", #selector(quit)))
     }
 
-    private func submenu(_ title: String, _ names: [String], selected: Int, action: Selector) -> NSMenuItem {
-        let sub = NSMenu()
-        for (i, n) in names.enumerated() {
-            let it = item(n, action)
-            it.tag = i
-            it.state = i == selected ? .on : .off
-            sub.addItem(it)
+    @objc func refreshAll() {
+        refresh()
+        refreshQuotes()
+    }
+
+    // MARK: Окно настроек
+
+    var settingsWindow: SettingsWindow?
+
+    @objc func openSettings() {
+        settingsWindow?.window.close()
+        let w = SettingsWindow(title: "Лента — настройки")
+
+        w.section("Содержимое")
+        w.popup("Показывать:", ["Новости", "Котировки", "Котировки и новости"],
+                selected: defaults.integer(forKey: "content")) { [weak self] i in
+            guard let self else { return }
+            self.defaults.set(i, forKey: "content")
+            self.panel.ticker.contentMode = i
+            self.refreshQuotes()
         }
-        let m = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        m.submenu = sub
-        return m
+
+        w.section("Новости")
+        w.textField("Сайт или RSS:", value: sourceURL, placeholder: "https://www.rbc.ru", button: "Применить") { [weak self] v in
+            self?.setSource(v)
+        }
+        let presetIndex = presets.firstIndex { $0.1 == sourceURL }.map { $0 + 1 } ?? 0
+        w.popup("Популярные:", ["—"] + presets.map { $0.0 }, selected: presetIndex) { [weak self] i in
+            guard let self, i > 0 else { return }
+            self.setSource(self.presets[i - 1].1)
+            DispatchQueue.main.async { self.openSettings() }   // обновить поле со ссылкой
+        }
+
+        w.section("Котировки")
+        w.textField("Акции (тикеры):", value: defaults.string(forKey: "stocks") ?? "",
+                    placeholder: "SBER, GAZP, LKOH", button: "Применить") { [weak self] v in
+            self?.defaults.set(v, forKey: "stocks")
+            self?.refreshQuotes()
+        }
+        w.checkbox("Индекс:", "Индекс Мосбиржи (IMOEX)", on: defaults.bool(forKey: "index")) { [weak self] on in
+            self?.defaults.set(on, forKey: "index")
+            self?.refreshQuotes()
+        }
+        let allCur = ["USD", "EUR", "CNY"]
+        let curSel = Set(currencyList)
+        w.checkboxes("Курсы ЦБ:", allCur.map { ($0, curSel.contains($0)) }) { [weak self] i, on in
+            guard let self else { return }
+            var set = Set(self.currencyList)
+            if on { set.insert(allCur[i]) } else { set.remove(allCur[i]) }
+            self.defaults.set(allCur.filter { set.contains($0) }.joined(separator: ","), forKey: "currencies")
+            self.refreshQuotes()
+        }
+        w.note("Акции и индекс — Московская биржа, обновление раз в минуту. Валюты — официальный курс ЦБ на сегодня.")
+
+        w.section("Вид")
+        w.popup("Расположение:", TickerPosition.allCases.map { $0.title },
+                selected: defaults.integer(forKey: "position")) { [weak self] i in
+            self?.defaults.set(i, forKey: "position")
+            self?.applyAppearance()
+        }
+        w.popup("Размер:", TickerSize.all.map { $0.name }, selected: defaults.integer(forKey: "size")) { [weak self] i in
+            self?.defaults.set(i, forKey: "size")
+            self?.applyAppearance()
+        }
+        w.popup("Цвета:", TickerTheme.all.map { $0.name }, selected: defaults.integer(forKey: "theme")) { [weak self] i in
+            self?.defaults.set(i, forKey: "theme")
+            self?.applyAppearance()
+        }
+        w.popup("Скорость:", speeds.map { $0.0 }, selected: defaults.integer(forKey: "speed")) { [weak self] i in
+            guard let self else { return }
+            self.defaults.set(i, forKey: "speed")
+            self.panel.ticker.speed = self.speeds[i].1
+        }
+        w.checkbox("", "Показывать строку", on: defaults.bool(forKey: "visible")) { [weak self] on in
+            guard let self else { return }
+            self.defaults.set(on, forKey: "visible")
+            if on { self.panel.window.orderFrontRegardless() } else { self.panel.window.orderOut(nil) }
+        }
+        if !AXIsProcessTrusted() {
+            w.button("Dock:", "Точнее определять Dock…") { [weak self] in self?.askAccessibility() }
+            w.note("Нужно для расположений возле Dock: без доступа ширина Dock оценивается приблизительно.")
+        }
+
+        w.onClose = { [weak self] in self?.settingsWindow = nil }
+        settingsWindow = w
+        w.show()
     }
 
     func applyAppearance() {
@@ -256,48 +330,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.place()
     }
 
-    @objc func setPosition(_ sender: NSMenuItem) {
-        defaults.set(sender.tag, forKey: "position")
-        applyAppearance()
-    }
-
-    @objc func setSize(_ sender: NSMenuItem) {
-        defaults.set(sender.tag, forKey: "size")
-        applyAppearance()
-    }
-
-    @objc func setTheme(_ sender: NSMenuItem) {
-        defaults.set(sender.tag, forKey: "theme")
-        applyAppearance()
-    }
-
     private func item(_ title: String, _ action: Selector) -> NSMenuItem {
         let it = NSMenuItem(title: title, action: action, keyEquivalent: "")
         it.target = self
         return it
     }
-
-    @objc func askURL() {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = "Ссылка на сайт или RSS"
-        alert.informativeText = "Например: https://www.rbc.ru. Приложение само найдёт ленту новостей."
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
-        if let clip = NSPasteboard.general.string(forType: .string), clip.lowercased().hasPrefix("http") {
-            field.stringValue = clip
-        } else {
-            field.stringValue = sourceURL
-        }
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Показать")
-        alert.addButton(withTitle: "Отмена")
-        alert.window.initialFirstResponder = field
-        if alert.runModal() == .alertFirstButtonReturn {
-            setSource(field.stringValue)
-        }
-    }
-
-    @objc func choosePreset(_ sender: NSMenuItem) { setSource(presets[sender.tag].1) }
 
     @objc func openHeadline(_ sender: NSMenuItem) {
         if let r = result, sender.tag < r.items.count, let url = r.items[sender.tag].link {
@@ -305,22 +342,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    @objc func setSpeed(_ sender: NSMenuItem) {
-        defaults.set(sender.tag, forKey: "speed")
-        panel.ticker.speed = speeds[sender.tag].1
-    }
-
     @objc func togglePause() { panel.ticker.paused.toggle() }
 
     @objc func askAccessibility() {
         let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
-    }
-
-    @objc func toggleVisible() {
-        let v = !defaults.bool(forKey: "visible")
-        defaults.set(v, forKey: "visible")
-        if v { panel.window.orderFrontRegardless() } else { panel.window.orderOut(nil) }
     }
 
     @objc func quit() { NSApp.terminate(nil) }

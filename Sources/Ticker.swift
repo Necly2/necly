@@ -6,16 +6,22 @@ struct TickerTheme {
     let name: String
     let background: NSColor
     let text: NSColor
+    let up: NSColor      // рост котировки
+    let down: NSColor    // падение
 
     static func rgb(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat) -> NSColor {
         NSColor(srgbRed: r / 255, green: g / 255, blue: b / 255, alpha: 1)
     }
 
     static let all: [TickerTheme] = [
-        TickerTheme(name: "ТАСС (белый на синем)", background: rgb(22, 32, 138), text: .white),
-        TickerTheme(name: "Белый на чёрном", background: rgb(12, 12, 12), text: .white),
-        TickerTheme(name: "Чёрный на белом", background: rgb(250, 250, 250), text: rgb(15, 15, 15)),
-        TickerTheme(name: "Белый на тёмно-зелёном", background: rgb(21, 87, 54), text: .white),
+        TickerTheme(name: "ТАСС (белый на синем)", background: rgb(22, 32, 138), text: .white,
+                    up: rgb(120, 240, 150), down: rgb(255, 140, 140)),
+        TickerTheme(name: "Белый на чёрном", background: rgb(12, 12, 12), text: .white,
+                    up: rgb(80, 220, 110), down: rgb(255, 95, 95)),
+        TickerTheme(name: "Чёрный на белом", background: rgb(250, 250, 250), text: rgb(15, 15, 15),
+                    up: rgb(0, 130, 55), down: rgb(200, 25, 25)),
+        TickerTheme(name: "Белый на тёмно-зелёном", background: rgb(21, 87, 54), text: .white,
+                    up: rgb(170, 255, 170), down: rgb(255, 160, 150)),
     ]
 }
 
@@ -76,7 +82,10 @@ final class TickerView: NSView {
     private var tracking: NSTrackingArea?
     private var lastItems: [Headline] = []
     private var lastSource = ""
-    private var lastMessage: String? = "Загрузка заголовков…"
+    private var lastMessage: String? = "Загрузка…"
+    private var lastQuotes: [Quote] = []
+    /// 0 — новости, 1 — котировки, 2 — котировки и новости.
+    var contentMode = 0 { didSet { rebuild() } }
 
     private var font: NSFont { NSFont.systemFont(ofSize: fontSize, weight: .medium) }
     private var timeFont: NSFont { NSFont.monospacedDigitSystemFont(ofSize: fontSize - 1, weight: .regular) }
@@ -98,9 +107,42 @@ final class TickerView: NSView {
         rebuild()
     }
 
+    func setQuotes(_ q: [Quote]) {
+        lastQuotes = q
+        rebuild()
+    }
+
+    private var showNews: Bool { contentMode != 1 && lastMessage == nil && !lastItems.isEmpty }
+    private var showQuotes: Bool { contentMode != 0 && !lastQuotes.isEmpty }
+
+    private func quoteSegments() -> [Segment] {
+        let fg = theme.text
+        var segs: [Segment] = []
+        for q in lastQuotes {
+            let s = NSMutableAttributedString()
+            let name: String
+            switch q.kind {
+            case .currency: name = q.symbol + " ₽"
+            default: name = q.symbol
+            }
+            s.append(NSAttributedString(string: name + " ", attributes: [.font: sourceFont, .foregroundColor: fg]))
+            s.append(NSAttributedString(string: QuoteLoader.format(q.value), attributes: [.font: font, .foregroundColor: fg]))
+            if let c = q.changePct {
+                let up = c >= 0
+                let pct = String(format: "%.2f", abs(c)).replacingOccurrences(of: ".", with: ",")
+                s.append(NSAttributedString(string: (up ? "  ▲ +" : "  ▼ −") + pct + "%", attributes: [
+                    .font: timeFont, .foregroundColor: up ? theme.up : theme.down,
+                ]))
+            }
+            s.append(NSAttributedString(string: "      ", attributes: [.font: font]))
+            segs.append(Segment(text: s, width: ceil(s.size().width), link: q.link))
+        }
+        return segs
+    }
+
     private func rebuild() {
         let fg = theme.text
-        if let msg = lastMessage {
+        if !showNews && !showQuotes, let msg = lastMessage ?? (contentMode == 1 ? "Загрузка котировок…" : nil) {
             let s = NSAttributedString(string: "   " + msg, attributes: [
                 .font: font, .foregroundColor: fg.withAlphaComponent(0.85),
             ])
@@ -113,7 +155,14 @@ final class TickerView: NSView {
 
         let df = DateFormatter()
         df.dateFormat = "HH:mm"
-        var segs: [Segment] = []
+        var segs: [Segment] = showQuotes ? quoteSegments() : []
+        if !showNews {
+            segments = segs
+            totalWidth = segs.reduce(0) { $0 + $1.width }
+            if offset > totalWidth { offset = 0 }
+            needsDisplay = true
+            return
+        }
         let src = NSAttributedString(string: "  \(lastSource)  ", attributes: [
             .font: sourceFont, .foregroundColor: fg,
         ])
