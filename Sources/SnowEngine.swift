@@ -9,7 +9,8 @@ final class Surface {
     var frame: CGRect          // глобальные координаты (верх-лево)
     var heights: [CGFloat]     // высота снега в каждой колонке
     var visible: [Bool]        // колонка не закрыта окном спереди
-    var velocity = CGVector.zero
+    var velocity = CGVector.zero   // сглаженная скорость окна
+    var lastChange: Double = 0     // когда позиция менялась в последний раз
     let isDock: Bool
 
     init(id: Int, frame: CGRect, isDock: Bool = false) {
@@ -66,9 +67,10 @@ final class SnowEngine {
     private var dock: Surface?
 
     private var t: Double = 0
-    private var pollAcc: Double = 1
     private var dockAcc: Double = 10
-    private var lastPoll: Double = 0
+    private var frameDt: CGFloat = 1.0 / 60
+    /// Насколько вперёд «предсказывать» положение движущегося окна (компенсация задержки).
+    private let leadTime: CGFloat = 1.0 / 120
     private var spawnAcc: CGFloat = 0
     private var mouse = CGPoint.zero
     private var mouseV = CGVector.zero
@@ -99,12 +101,9 @@ final class SnowEngine {
             pollDock()
             rebuildOrder()
         }
-        pollAcc += dtIn
-        if pollAcc >= 1.0 / 30 {
-            pollWindows(dt: max(t - lastPoll, 1.0 / 120))
-            lastPoll = t
-            pollAcc = 0
-        }
+        frameDt = dt
+        // Окна опрашиваем каждый кадр, чтобы сугроб не отставал от окна.
+        pollWindows()
 
         updateMouse(dt)
         spawn(dt)
@@ -115,7 +114,7 @@ final class SnowEngine {
 
     // MARK: - Окна
 
-    private func pollWindows(dt: Double) {
+    private func pollWindows() {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
                                                     kCGNullWindowID) as? [[String: Any]] else { return }
         var newOrder: [Surface] = []
@@ -135,9 +134,10 @@ final class SnowEngine {
             let s: Surface
             if let existing = surfaces[id] {
                 s = existing
-                update(s, to: rect, dt: CGFloat(dt))
+                update(s, to: rect)
             } else {
                 s = Surface(id: id, frame: rect)
+                s.lastChange = t
                 surfaces[id] = s
             }
             newOrder.append(s)
@@ -153,35 +153,46 @@ final class SnowEngine {
         rebuildOrder()
     }
 
-    private func update(_ s: Surface, to rect: CGRect, dt: CGFloat) {
+    private func update(_ s: Surface, to rect: CGRect) {
         let old = s.frame
-        let v = CGVector(dx: (rect.minX - old.minX) / dt, dy: (rect.minY - old.minY) / dt)
-        let widthChanged = abs(rect.width - old.width) > 0.5
-        let heightChanged = abs(rect.height - old.height) > 0.5
+        let sizeChanged = abs(rect.width - old.width) > 0.5 || abs(rect.height - old.height) > 0.5
 
-        if widthChanged || heightChanged {
+        if sizeChanged {
             // Изменение размера: всё, что вышло за новые края, осыпается, остальное трясётся.
-            remap(s, to: rect, edgeVelocity: v)
             let topMoved = abs(rect.minY - old.minY) > 0.5
+            let widthChanged = abs(rect.width - old.width) > 0.5
+            remap(s, to: rect, edgeVelocity: .zero)
             if widthChanged || topMoved {
                 shed(s, fraction: 0.2, frame: s.frame, velocity: CGVector(dx: 0, dy: -40), spread: 70, ignore: true)
             }
             s.velocity = .zero
+            s.lastChange = t
             return
         }
 
-        // Резкий рывок или резкая остановка: снег продолжает лететь с прежней скоростью.
-        let dv = hypot(v.dx - s.velocity.dx, v.dy - s.velocity.dy)
-        if dv > 2200 {
-            let frac = min(1, 0.35 + (dv - 2200) / 3000)
-            shed(s, fraction: frac, frame: old, velocity: s.velocity, spread: 120, ignore: true)
-        } else if hypot(v.dx, v.dy) > 2600 {
-            // Очень быстрое движение — снег сдувает встречным ветром.
-            shed(s, fraction: 0.12, frame: rect,
-                 velocity: CGVector(dx: v.dx * 0.8, dy: v.dy * 0.8), spread: 100, ignore: true)
+        if rect.origin != old.origin {
+            // Окно сдвинулось: сугроб просто едет вместе с ним (heights хранятся относительно окна).
+            let dtc = CGFloat(max(t - s.lastChange, 1.0 / 240))
+            let v = CGVector(dx: (rect.minX - old.minX) / dtc, dy: (rect.minY - old.minY) / dtc)
+            s.velocity = CGVector(dx: s.velocity.dx * 0.5 + v.dx * 0.5, dy: s.velocity.dy * 0.5 + v.dy * 0.5)
+            s.frame = rect
+            s.lastChange = t
+            // Очень быстрое движение — снег понемногу сдувает встречным ветром.
+            if hypot(s.velocity.dx, s.velocity.dy) > 2600 {
+                shed(s, fraction: min(0.5, 1.2 * frameDt), frame: rect,
+                     velocity: CGVector(dx: s.velocity.dx * 0.8, dy: s.velocity.dy * 0.8), spread: 90, ignore: true)
+            }
+        } else if t - s.lastChange > 0.07, s.velocity != .zero {
+            // Окно остановилось. Если до этого оно летело быстро — это «бросок»:
+            // снег по инерции срывается и летит дальше.
+            let speed = hypot(s.velocity.dx, s.velocity.dy)
+            if speed > 1400 {
+                let frac = min(1, 0.4 + (speed - 1400) / 2500)
+                shed(s, fraction: frac, frame: rect,
+                     velocity: CGVector(dx: s.velocity.dx * 0.55, dy: s.velocity.dy * 0.55 - 120), spread: 120, ignore: true)
+            }
+            s.velocity = .zero
         }
-        s.frame = rect
-        s.velocity = v
     }
 
     private func remap(_ s: Surface, to rect: CGRect, edgeVelocity v: CGVector) {
@@ -462,17 +473,23 @@ final class SnowEngine {
 
     private func addPile(_ s: Surface, to path: CGMutablePath) {
         let n = s.heights.count
-        let top = s.top
+        // Пока окно движется, рисуем сугроб чуть «на опережение», чтобы скрыть задержку.
+        var ox: CGFloat = 0, oy: CGFloat = 0
+        if t - s.lastChange < 0.03 {
+            ox = max(-12, min(12, s.velocity.dx * leadTime))
+            oy = max(-12, min(12, s.velocity.dy * leadTime))
+        }
+        let top = s.top + oy
         var i = 0
         while i < n {
             if !s.visible[i] || s.heights[i] < 0.3 { i += 1; continue }
             let start = i
-            path.move(to: CGPoint(x: s.colX(start) - colW / 2, y: top + 1))
+            path.move(to: CGPoint(x: s.colX(start) - colW / 2 + ox, y: top + 1))
             while i < n && s.visible[i] && s.heights[i] >= 0.3 {
-                path.addLine(to: CGPoint(x: s.colX(i), y: top - s.heights[i]))
+                path.addLine(to: CGPoint(x: s.colX(i) + ox, y: top - s.heights[i]))
                 i += 1
             }
-            path.addLine(to: CGPoint(x: s.colX(i - 1) + colW / 2, y: top + 1))
+            path.addLine(to: CGPoint(x: s.colX(i - 1) + colW / 2 + ox, y: top + 1))
             path.closeSubpath()
         }
     }

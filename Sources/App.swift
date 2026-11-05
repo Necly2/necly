@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var overlays: [NSWindow] = []
     var statusItem: NSStatusItem!
     var timer: Timer?
+    var displayLink: AnyObject?
     var last = CACurrentMediaTime()
     var paused = false
     let defaults = UserDefaults.standard
@@ -35,11 +36,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                                name: NSApplication.didChangeScreenParametersNotification,
                                                object: nil)
         setupMenu()
+        startClock()
+    }
 
-        let t = Timer(timeInterval: 1.0 / 60, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
+    /// Кадры синхронизированы с обновлением экрана (60/120 Гц). На macOS 13 — обычный таймер.
+    func startClock() {
+        timer?.invalidate()
+        timer = nil
+        if #available(macOS 14.0, *) {
+            (displayLink as? CADisplayLink)?.invalidate()
+            displayLink = nil
+            if let view = overlays.first?.contentView {
+                let link = view.displayLink(target: self, selector: #selector(frameTick(_:)))
+                link.add(to: .main, forMode: .common)
+                displayLink = link
+                return
+            }
+        }
+        let t = Timer(timeInterval: 1.0 / 120, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
         RunLoop.main.add(t, forMode: .common)
         timer = t
     }
+
+    @objc func frameTick(_ sender: AnyObject) { tick() }
 
     @objc func tick() {
         let now = CACurrentMediaTime()
@@ -59,7 +78,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !paused { overlays.forEach { $0.orderFrontRegardless() } }
     }
 
-    @objc func screensChanged() { buildOverlays() }
+    @objc func screensChanged() {
+        buildOverlays()
+        startClock()
+    }
 
     // MARK: - Меню
 
