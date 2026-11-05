@@ -10,6 +10,7 @@ struct Headline {
     var title: String
     var link: URL?
     var date: Date?
+    var source: String? = nil      // короткое название источника («РБК»), когда их несколько
 }
 
 struct FeedResult {

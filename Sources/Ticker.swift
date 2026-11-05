@@ -229,12 +229,17 @@ final class TickerView: NSView {
 
     // MARK: Содержимое
 
-    func setHeadlines(_ items: [Headline], source: String) {
+    /// grouped — блоки по источникам с названием перед каждым; tags — метка источника у каждого заголовка.
+    func setHeadlines(_ items: [Headline], source: String, grouped: Bool = false, tags: Bool = false) {
         lastItems = items
         lastSource = source
+        groupBySource = grouped
+        sourceTags = tags
         lastMessage = nil
         rebuild()
     }
+    private var groupBySource = false
+    private var sourceTags = false
 
     func setMessage(_ text: String) {
         lastMessage = text
@@ -297,13 +302,23 @@ final class TickerView: NSView {
             renderLayers()
             return
         }
-        let src = NSAttributedString(string: "  \(lastSource)  ", attributes: [
-            .font: sourceFont, .foregroundColor: fg,
-        ])
-        segs.append(Segment(text: src, width: ceil(src.size().width), link: nil))
+        func label(_ name: String) {
+            let src = NSAttributedString(string: "  \(name)  ", attributes: [.font: sourceFont, .foregroundColor: fg])
+            segs.append(Segment(text: src, width: ceil(src.size().width), link: nil))
+        }
+        if !groupBySource && !sourceTags { label(lastSource) }
 
+        var prevSource: String? = nil
         for (i, h) in lastItems.enumerated() {
+            // Блоки по источникам: название перед первым заголовком каждого источника
+            if groupBySource, let src = h.source, src != prevSource { label(src) }
+            prevSource = h.source
             let s = NSMutableAttributedString()
+            if sourceTags, let src = h.source {
+                s.append(NSAttributedString(string: src + "  ", attributes: [
+                    .font: NSFont.systemFont(ofSize: fontSize - 1, weight: .heavy), .foregroundColor: fg.withAlphaComponent(0.85),
+                ]))
+            }
             if let d = h.date {
                 s.append(NSAttributedString(string: df.string(from: d) + "  ", attributes: [
                     .font: timeFont, .foregroundColor: fg.withAlphaComponent(0.72),

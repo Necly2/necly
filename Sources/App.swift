@@ -22,27 +22,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let defaults = UserDefaults.standard
     let updater = Updater(appName: "Lenta", title: "Лента", tag: "lenta-latest", zipName: "Lenta.zip")
 
-    var result: FeedResult?
     var loading = false
     var lastError: String?
+    /// Найденные ленты по каждому источнику (чтобы не искать RSS заново) и ошибки.
+    var feeds: [String: FeedResult] = [:]
+    var feedErrors: [String: String] = [:]
+    /// Все заголовки из всех включённых источников — в том порядке, как они бегут.
+    var combined: [Headline] = []
 
     let presets: [(String, String)] = [
         ("РБК", "https://www.rbc.ru"),
         ("Коммерсантъ", "https://www.kommersant.ru"),
         ("Интерфакс", "https://www.interfax.ru"),
         ("Lenta.ru", "https://lenta.ru"),
+        ("ТАСС", "https://tass.ru"),
         ("Хабр", "https://habr.com/ru/"),
     ]
     /// Короткие названия для известных сайтов.
     let friendlyNames: [String: String] = [
         "rbc.ru": "РБК", "kommersant.ru": "Коммерсантъ", "interfax.ru": "Интерфакс",
-        "lenta.ru": "Lenta.ru", "habr.com": "Хабр",
+        "lenta.ru": "Lenta.ru", "habr.com": "Хабр", "tass.ru": "ТАСС",
     ]
     let speeds: [(String, CGFloat)] = [("Медленно", 30), ("Обычно", 51), ("Быстро", 81)]   // на 15% медленнее прежних 35/60/95
 
-    var sourceURL: String {
-        get { defaults.string(forKey: "source") ?? "https://www.rbc.ru" }
-        set { defaults.set(newValue, forKey: "source") }
+    /// Включённые источники (адреса сайтов или RSS). Раньше был один — переносим его.
+    var sources: [String] {
+        get {
+            if let a = defaults.stringArray(forKey: "sources") { return a }
+            return [defaults.string(forKey: "source") ?? "https://www.rbc.ru"]
+        }
+        set { defaults.set(newValue, forKey: "sources") }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -173,30 +182,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: Загрузка
 
     @objc func refresh() {
-        guard !loading, let url = URL(string: sourceURL) else { return }
+        guard !loading else { return }
+        let list = sources.compactMap { src -> (String, URL)? in URL(string: src).map { (src, $0) } }
+        guard !list.isEmpty else {
+            combined = []
+            panel.ticker.setMessage("Выберите источник новостей в настройках")
+            return
+        }
         loading = true
+        let known = feeds
         Task { @MainActor in
             defer { self.loading = false }
-            do {
-                // Если лента уже найдена — грузим её напрямую, иначе ищем заново.
-                let target = (result?.feedURL.absoluteString.isEmpty == false && result?.isRSS == true
-                              && resultSource == sourceURL) ? result!.feedURL : url
-                var r = try await FeedLoader.load(target)
-                r.siteName = displayName(for: url, fallback: r.siteName)
-                self.result = r
-                self.resultSource = sourceURL
-                self.lastError = nil
-                self.panel.ticker.setHeadlines(r.items, source: r.siteName)
-                self.detectUrgent(r.items)
-            } catch {
-                self.lastError = error.localizedDescription
-                if self.result == nil || self.resultSource != self.sourceURL {
-                    self.panel.ticker.setMessage("Не удалось получить заголовки с \(url.host ?? self.sourceURL)")
+            // Все источники грузятся одновременно
+            var results: [String: FeedResult] = [:]
+            var errors: [String: String] = [:]
+            await withTaskGroup(of: (String, FeedResult?, String?).self) { group in
+                for (src, url) in list {
+                    // Если лента уже найдена — грузим её напрямую, иначе ищем заново
+                    let target = (known[src]?.isRSS == true) ? known[src]!.feedURL : url
+                    group.addTask {
+                        do { return (src, try await FeedLoader.load(target), nil) }
+                        catch { return (src, nil, error.localizedDescription) }
+                    }
+                }
+                for await (src, r, err) in group {
+                    if let r { results[src] = r } else { errors[src] = err ?? "ошибка" }
                 }
             }
+            for (src, url) in list {
+                if var r = results[src] {
+                    r.siteName = self.displayName(for: url, fallback: r.siteName)
+                    self.feeds[src] = r
+                }
+            }
+            self.feedErrors = errors
+            self.lastError = errors.isEmpty ? nil : "Не загрузились: " + errors.keys.compactMap { URL(string: $0)?.host }.joined(separator: ", ")
+            self.applyFeeds()
         }
     }
-    var resultSource: String?
+
+    /// 0 — по времени вперемешку, 1 — блоками по источникам
+    var mixOrder: Int { defaults.integer(forKey: "mixOrder") }
+
+    /// Собрать строку из всех включённых источников.
+    func applyFeeds() {
+        let active = sources.compactMap { feeds[$0] }
+        guard !active.isEmpty else {
+            combined = []
+            if let first = sources.first {
+                panel.ticker.setMessage("Не удалось получить заголовки с \(URL(string: first)?.host ?? first)")
+            }
+            return
+        }
+        if active.count == 1 {
+            combined = active[0].items
+            panel.ticker.setHeadlines(combined, source: active[0].siteName)
+        } else {
+            // Не больше 25 заголовков с каждого источника — чтобы никто не забивал остальных
+            let tagged = active.map { f in f.items.prefix(25).map { var h = $0; h.source = f.siteName; return h } }
+            if mixOrder == 0 {
+                combined = tagged.flatMap { $0 }.sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
+                panel.ticker.setHeadlines(combined, source: "", tags: true)
+            } else {
+                combined = tagged.flatMap { $0 }
+                panel.ticker.setHeadlines(combined, source: "", grouped: true)
+            }
+        }
+        detectUrgent(combined)
+    }
 
     func displayName(for url: URL, fallback: String) -> String {
         let host = (url.host ?? "").replacingOccurrences(of: "www.", with: "")
@@ -204,26 +257,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return fallback
     }
 
-    func setSource(_ s: String) {
+    static func normalize(_ s: String) -> String? {
         var str = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        if str.isEmpty { return nil }
         if !str.lowercased().hasPrefix("http") { str = "https://" + str }
-        guard URL(string: str)?.host != nil else { return }
-        sourceURL = str
-        seenTitles = []
-        result = nil
-        resultSource = nil
-        panel.ticker.setMessage("Загрузка заголовков…")
+        return URL(string: str)?.host != nil ? str : nil
+    }
+
+    func setSources(_ list: [String]) {
+        var seen = Set<String>()
+        sources = list.filter { seen.insert($0).inserted }
+        feeds = feeds.filter { sources.contains($0.key) }
+        if combined.isEmpty { panel.ticker.setMessage("Загрузка заголовков…") }
         refresh()
     }
+
+    var customSources: [String] { sources.filter { s in !presets.contains { $0.1 == s } } }
 
     // MARK: Меню
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
 
-        let host = URL(string: sourceURL)?.host ?? sourceURL
-        var status = "Источник: \(host)"
-        if let r = result { status += r.isRSS ? " · RSS, \(r.items.count) загол." : " · со страницы" }
+        let names = sources.map { src in feeds[src]?.siteName ?? URL(string: src)?.host ?? src }
+        var status = (names.count == 1 ? "Источник: " : "Источники: ") + names.joined(separator: ", ")
+        if !combined.isEmpty { status += " · \(combined.count) загол." }
         if loading { status += " · загрузка…" }
         let st = NSMenuItem(title: status, action: nil, keyEquivalent: "")
         st.isEnabled = false
@@ -234,10 +292,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(ei)
         }
 
-        if let r = result, !r.items.isEmpty {
+        if !combined.isEmpty {
             let latest = NSMenu()
-            for (i, h) in r.items.prefix(15).enumerated() {
+            for (i, h) in combined.prefix(15).enumerated() {
                 var title = h.title.count > 90 ? String(h.title.prefix(88)) + "…" : h.title
+                if let src = h.source { title = src + ": " + title }
                 if UrgentRules.matches(h.title, urgentRules) { title = "⚡ " + title }
                 let it = item(title, #selector(openHeadline(_:)))
                 it.tag = i
@@ -290,15 +349,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         w.section("Новости")
-        w.textField("Сайт или RSS:", value: sourceURL, placeholder: "https://www.rbc.ru", button: "Применить") { [weak self] v in
-            self?.setSource(v)
+        // Можно включить несколько источников сразу
+        let current = Set(sources)
+        let togglePreset: (Int, Bool) -> Void = { [weak self] i, on in
+            guard let self else { return }
+            let url = self.presets[i].1
+            var list = self.sources.filter { $0 != url }
+            if on {
+                // пресеты держим в своём порядке, свои сайты — после них
+                list.append(url)
+                let order = self.presets.map { $0.1 }
+                list.sort { (order.firstIndex(of: $0) ?? 99) < (order.firstIndex(of: $1) ?? 99) }
+            }
+            self.setSources(list)
         }
-        let presetIndex = presets.firstIndex { $0.1 == sourceURL }.map { $0 + 1 } ?? 0
-        w.popup("Популярные:", ["—"] + presets.map { $0.0 }, selected: presetIndex) { [weak self] i in
-            guard let self, i > 0 else { return }
-            self.setSource(self.presets[i - 1].1)
-            DispatchQueue.main.async { self.openSettings() }   // обновить поле со ссылкой
+        w.checkboxes("Источники:", presets[0..<3].map { ($0.0, current.contains($0.1)) }) { i, on in togglePreset(i, on) }
+        w.checkboxes("", presets[3...].map { ($0.0, current.contains($0.1)) }) { i, on in togglePreset(i + 3, on) }
+        w.textField("Свои сайты:", value: customSources.joined(separator: ", "), placeholder: "https://example.com, другой-сайт.ru",
+                    button: "Применить", width: 300) { [weak self] v in
+            guard let self else { return }
+            let custom = v.components(separatedBy: CharacterSet(charactersIn: ",;\n ")).compactMap(AppDelegate.normalize)
+            let presetOn = self.sources.filter { s in self.presets.contains { $0.1 == s } }
+            self.setSources(presetOn + custom)
         }
+        w.popup("Порядок:", ["По времени — вперемешку", "По источникам — блоками"], selected: mixOrder) { [weak self] i in
+            self?.defaults.set(i, forKey: "mixOrder")
+            self?.applyFeeds()
+        }
+        w.note("Можно включить сколько угодно источников: строка соберёт их вместе. «По времени» — свежие заголовки первыми, у каждого метка источника. Для своих сайтов подойдёт адрес сайта или прямая ссылка на RSS.")
 
         w.section("Срочные новости")
         w.checkbox("", "Выделять срочные и мигать строкой", on: defaults.bool(forKey: "urgentOn")) { [weak self] on in
@@ -320,7 +398,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DispatchQueue.main.async { self?.openSettings() }
         }
         w.button("", "Показать, как выглядит тревога") { [weak self] in
-            guard let self, let h = self.result?.items.first else { return }
+            guard let self, let h = self.combined.first else { return }
             self.triggerAlert(h.title)
         }
 
@@ -449,7 +527,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func openHeadline(_ sender: NSMenuItem) {
-        if let r = result, sender.tag < r.items.count, let url = r.items[sender.tag].link {
+        if sender.tag < combined.count, let url = combined[sender.tag].link {
             NSWorkspace.shared.open(url)
         }
     }
