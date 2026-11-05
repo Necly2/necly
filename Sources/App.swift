@@ -37,7 +37,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             defaults.set(true, forKey: "frameRateSet")
         }
         if defaults.object(forKey: "levelV2") == nil {           // добавились два уровня слабее — сдвигаем старый выбор
-            defaults.set(defaults.integer(forKey: "level") + 2, forKey: "level")
+            let saved = defaults.persistentDomain(forName: Bundle.main.bundleIdentifier ?? "")?["level"] as? Int
+            if let old = saved { defaults.set(min(old + 2, levels.count - 1), forKey: "level") }
             defaults.set(true, forKey: "levelV2")
         }
         engine.snowing = defaults.bool(forKey: "snowing")
