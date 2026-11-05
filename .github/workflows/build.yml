@@ -44,9 +44,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          { echo "## Что нового в сборке ${{ github.run_number }}"; echo; cat WHATSNEW.md; echo;
+            echo "[Вся история изменений](https://github.com/Necly2/necly/blob/lenta-windows/CHANGELOG.md)"; echo; echo "---"; echo;
+            cat README.md; } > release-notes.md
+          cp WHATSNEW.md notes.txt
           TAG="lenta-windows-latest"
           gh release delete "$TAG" --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
-          gh release create "$TAG" Lenta-Windows.zip version.txt -R "$GITHUB_REPOSITORY" \
+          gh release create "$TAG" Lenta-Windows.zip version.txt notes.txt -R "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "Лента 📰 для Windows" \
-            --notes-file README.md
+            --notes-file release-notes.md
+
+      - name: Update changelog
+        continue-on-error: true
+        run: |
+          if [ -f WHATSNEW.md ] && ! cmp -s WHATSNEW.md .github/last-whatsnew.md; then
+            DATE=$(date +%d.%m.%Y)
+            { head -n 2 CHANGELOG.md; echo "## Сборка ${{ github.run_number }} — $DATE"; echo; cat WHATSNEW.md; echo; tail -n +3 CHANGELOG.md; } > CHANGELOG.tmp
+            mv CHANGELOG.tmp CHANGELOG.md
+            cp WHATSNEW.md .github/last-whatsnew.md
+            git config user.name "github-actions"
+            git config user.email "github-actions@users.noreply.github.com"
+            git add CHANGELOG.md .github/last-whatsnew.md
+            git commit -m "История изменений: сборка ${{ github.run_number }} [skip ci]"
+            git push
+          fi
