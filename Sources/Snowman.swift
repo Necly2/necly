@@ -41,14 +41,16 @@ extension SnowEngine {
                 for i in 0..<(n - 1) {
                     let diff = d.heap[i] - d.heap[i + 1]
                     if abs(diff) > 4 {
-                        let m = (abs(diff) - 4) * 0.08
+                        let m = (abs(diff) - 4) * 0.12
                         if diff > 0 { d.heap[i] -= m; d.heap[i + 1] += m } else { d.heap[i] += m; d.heap[i + 1] -= m }
                     }
                 }
             }
             // Куча выросла — лепим снеговика
+            // Нужна и высокая горка, и много сгребённого снега рядом с ней
             if snowmanEnabled, let idx = d.heap.indices.max(by: { d.heap[$0] < d.heap[$1] }),
-               d.heap[idx] >= d.maxHeight * 2.3 {
+               d.heap[idx] >= d.maxHeight * 1.25,
+               d.heap.indices.filter({ abs($0 - idx) * Int(colW) <= 60 }).reduce(CGFloat(0), { $0 + d.heap[$1] }) >= 250 {
                 let x = d.colX(idx)
                 let fromCenter = x - d.frame.midX
                 let free = !snowmen.contains { abs($0.xFromCenter - fromCenter) < 45 }
