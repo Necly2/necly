@@ -186,7 +186,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(wl)
             menu.addItem(.separator())
         }
-        menu.addItem(item("Сюрприз 🚀", #selector(surprise)))
         menu.addItem(item("Стряхнуть весь снег", #selector(shake)))
         menu.addItem(.separator())
         menu.addItem(item(paused ? "Продолжить" : "Пауза", #selector(togglePause)))
@@ -341,11 +340,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func shake() { engine.shakeAll() }
-
-    @objc func surprise() {
-        if paused { togglePause() }
-        engine.launchSurprise()
-    }
 
     @objc func togglePause() {
         paused.toggle()

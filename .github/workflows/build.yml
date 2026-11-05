@@ -42,4 +42,4 @@ jobs:
           gh release create "$TAG" Sugrob.zip version.txt -R "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "Сугроб ❄️" \
-            --notes "Скачайте Sugrob.zip, распакуйте и перетащите Sugrob.app в «Программы». Первый запуск: Системные настройки → Конфиденциальность и безопасность → «Открыть всё равно»."
+            --notes-file README.md

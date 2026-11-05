@@ -129,14 +129,6 @@ final class SnowEngine {
 
     private(set) var flakes: [Flake] = []
 
-    // Состояние режима «Сюрприз» (Surprise.swift)
-    var word: [WordFlake] = []
-    var wordPoints: [CGPoint] = []
-    var puffs: [Puff] = []
-    var surpriseStart: Double = -1
-    var impactTime: Double = -1
-    var rocketFrom = CGPoint.zero
-    var rocketTo = CGPoint.zero
     var dockSurface: Surface? { dock }
     private var surfaces: [Int: Surface] = [:]
     private var windowOrder: [Surface] = []
@@ -201,7 +193,6 @@ final class SnowEngine {
         brush()
         updateWeatherEffects(dt)
         updateSnowmen(dt)
-        updateSurprise(dt)
     }
 
     // MARK: - Окна
@@ -656,7 +647,6 @@ final class SnowEngine {
         }
 
         drawGarland(in: ctx, region: region)
-        drawSurprise(in: ctx, region: region)
     }
 
     private func addPile(_ s: Surface, to path: CGMutablePath, lumps: CGMutablePath) {
