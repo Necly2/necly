@@ -42,4 +42,4 @@ jobs:
           gh release create "$TAG" Lenta.zip version.txt -R "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "Лента 📰" \
-            --notes "Скачайте Lenta.zip, распакуйте и перетащите Lenta.app в «Программы». Первый запуск: Системные настройки → Конфиденциальность и безопасность → «Открыть всё равно»."
+            --notes-file README.md
