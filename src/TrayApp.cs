@@ -37,6 +37,14 @@ public class TrayApp : ApplicationContext
         ["lenta.ru"] = "Lenta.ru", ["habr.com"] = "Хабр", ["tass.ru"] = "ТАСС",
     };
     static readonly (string Name, float Speed)[] Speeds = { ("Медленно", 30), ("Обычно", 51), ("Быстро", 81) };
+    static readonly (string Name, int Seconds)[] NewsIntervals = { ("1 мин", 60), ("2 мин", 120), ("5 мин", 300), ("10 мин", 600), ("15 мин", 900), ("30 мин", 1800) };
+    static readonly (string Name, int Seconds)[] QuoteIntervals = { ("30 сек", 30), ("1 мин", 60), ("2 мин", 120), ("5 мин", 300), ("15 мин", 900) };
+
+    void ApplyIntervals()
+    {
+        newsTimer.Interval = NewsIntervals[Math.Clamp(s.NewsInterval, 0, NewsIntervals.Length - 1)].Seconds * 1000;
+        quotesTimer.Interval = QuoteIntervals[Math.Clamp(s.QuotesInterval, 0, QuoteIntervals.Length - 1)].Seconds * 1000;
+    }
 
     public TrayApp()
     {
@@ -52,6 +60,7 @@ public class TrayApp : ApplicationContext
         tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) OpenSettings(); };
         BuildMenu();
 
+        ApplyIntervals();
         newsTimer.Tick += (_, _) => Refresh();
         quotesTimer.Tick += (_, _) => RefreshQuotes();
         newsTimer.Start();
@@ -254,6 +263,7 @@ public class TrayApp : ApplicationContext
             if (result?.Items.FirstOrDefault() is Headline h) TriggerAlert(h.Title);
         });
 
+        w.Column();     // вторая колонка — окно широкое, а не высокое
         w.Section("Котировки");
         w.TextField("Акции (тикеры):", s.Stocks, "Применить", 300, v => { s.Stocks = v; s.Save(); RefreshQuotes(); });
         w.Checkbox("Индекс:", "Индекс Мосбиржи (IMOEX)", s.Index, on => { s.Index = on; s.Save(); RefreshQuotes(); });
@@ -264,7 +274,11 @@ public class TrayApp : ApplicationContext
             if (on) set.Add(allCur[i]); else set.Remove(allCur[i]);
             s.Currencies = string.Join(",", allCur.Where(set.Contains)); s.Save(); RefreshQuotes();
         });
-        w.Note("Акции и индекс — Московская биржа, обновление раз в минуту. Валюты — официальный курс ЦБ на сегодня.");
+        w.Note("Акции и индекс — Московская биржа. Валюты — официальный курс ЦБ на сегодня.");
+
+        w.Section("Обновление");
+        w.Popup("Новости:", NewsIntervals.Select(x => "каждые " + x.Name).ToArray(), s.NewsInterval, i => { s.NewsInterval = i; s.Save(); ApplyIntervals(); });
+        w.Popup("Котировки:", QuoteIntervals.Select(x => "каждые " + x.Name).ToArray(), s.QuotesInterval, i => { s.QuotesInterval = i; s.Save(); ApplyIntervals(); });
 
         w.Section("Вид");
         w.Popup("Расположение:", Positions.Titles, s.Position, i => { s.Position = i; s.Save(); ApplyAll(); });

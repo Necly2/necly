@@ -22,6 +22,8 @@ public class AppSettings
     public int Theme { get; set; } = 0;
     public int Speed { get; set; } = 1;
     public bool Visible { get; set; } = true;
+    public int NewsInterval { get; set; } = 1;     // индекс в TrayApp.NewsIntervals
+    public int QuotesInterval { get; set; } = 1;
 
     static string Dir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Lenta");
     static string FilePath => Path.Combine(Dir, "settings.json");

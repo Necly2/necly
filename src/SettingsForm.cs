@@ -7,27 +7,58 @@ namespace Lenta;
 /// Простое окно настроек: подпись слева, элемент справа, разделы.
 public class SettingsForm : Form
 {
-    readonly TableLayoutPanel grid = new()
+    TableLayoutPanel grid = NewGrid();
+    readonly FlowLayoutPanel columns = new()
     {
-        ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-        Padding = new Padding(18, 14, 18, 14), Dock = DockStyle.Top,
+        FlowDirection = FlowDirection.LeftToRight, WrapContents = false, AutoSize = true,
+        AutoSizeMode = AutoSizeMode.GrowAndShrink, Location = new Point(0, 0),
     };
+    readonly Panel scroller = new() { Dock = DockStyle.Fill, AutoScroll = true };
+
+    static TableLayoutPanel NewGrid()
+    {
+        var g = new TableLayoutPanel
+        {
+            ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(18, 14, 18, 14),
+        };
+        g.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        g.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        return g;
+    }
 
     public SettingsForm(string title)
     {
         Text = title;
         Font = new Font("Segoe UI", 9.5f);
-        FormBorderStyle = FormBorderStyle.FixedDialog;
+        // Размер окна можно менять; если не помещается — появляется прокрутка
+        FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = false;
-        MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
-        AutoSize = true;
-        AutoSizeMode = AutoSizeMode.GrowAndShrink;
         ShowIcon = false;
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        Controls.Add(grid);
+        MinimumSize = new Size(420, 260);
+        columns.Controls.Add(grid);
+        scroller.Controls.Add(columns);
+        Controls.Add(scroller);
+    }
+
+    /// Начать новую колонку справа — окно получается широким, а не высоким.
+    public void Column()
+    {
+        grid = NewGrid();
+        columns.Controls.Add(grid);
+    }
+
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        var pref = columns.PreferredSize;
+        var wa = Screen.FromPoint(Cursor.Position).WorkingArea;
+        var extra = Size - ClientSize;
+        Size = new Size(Math.Min(pref.Width + extra.Width + 4, (int)(wa.Width * 0.92)),
+                        Math.Min(pref.Height + extra.Height + 4, (int)(wa.Height * 0.88)));
+        CenterToScreen();
     }
 
     void Add(string label, Control c)
@@ -96,6 +127,13 @@ public class SettingsForm : Form
         var b = new Button { Text = text, AutoSize = true };
         b.Click += (_, _) => action();
         Add(label, b);
+    }
+
+    public void Slider(string label, int value, int min, int max, Action<int> onChange)
+    {
+        var t = new TrackBar { Minimum = min, Maximum = max, Value = Math.Clamp(value, min, max), Width = 220, TickStyle = TickStyle.None };
+        t.ValueChanged += (_, _) => onChange(t.Value);
+        Add(label, t);
     }
 
     public void Note(string text)
