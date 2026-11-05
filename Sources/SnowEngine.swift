@@ -9,6 +9,8 @@ final class Surface {
     var frame: CGRect          // глобальные координаты (верх-лево)
     var heights: [CGFloat]     // высота снега в каждой колонке
     var visible: [Bool]        // колонка не закрыта окном спереди
+    var profile: [CGFloat] = []   // 0…1: форма холмиков — сколько снега может лечь в колонку
+    var lumps: [CGFloat] = []     // 0…1: размер комка на верхушке колонки
     var velocity = CGVector.zero   // сглаженная скорость окна
     var lastChange: Double = 0     // когда позиция менялась в последний раз
     let isDock: Bool
@@ -20,12 +22,26 @@ final class Surface {
         let n = Surface.columns(for: frame.width)
         heights = [CGFloat](repeating: 0, count: n)
         visible = [Bool](repeating: true, count: n)
+        makeShape(n)
+    }
+
+    /// Случайный, но плавный рельеф: крупные холмы + мелкая рябь + шум.
+    func makeShape(_ n: Int) {
+        let a1 = 2 * CGFloat.pi / CGFloat.random(in: 22...40)   // холмы ~70–120 точек
+        let a2 = 2 * CGFloat.pi / CGFloat.random(in: 7...12)    // бугорки ~20–35 точек
+        let p1 = CGFloat.random(in: 0...(2 * .pi)), p2 = CGFloat.random(in: 0...(2 * .pi))
+        profile = (0..<n).map { i in
+            let x = CGFloat(i)
+            let v = 0.55 + 0.3 * sin(x * a1 + p1) + 0.15 * sin(x * a2 + p2) + CGFloat.random(in: -0.06...0.06)
+            return max(0.15, min(1, v))
+        }
+        lumps = (0..<n).map { _ in CGFloat.random(in: 0...1) }
     }
 
     static func columns(for width: CGFloat) -> Int { max(1, Int(width / colW)) }
 
     var top: CGFloat { frame.minY }
-    var maxHeight: CGFloat { isDock ? 14 : 18 }
+    var maxHeight: CGFloat { isDock ? 20 : 26 }
 
     func colX(_ i: Int) -> CGFloat { frame.minX + (CGFloat(i) + 0.5) * colW }
 
@@ -39,7 +55,9 @@ final class Surface {
     /// Предельная высота колонки: к краям сугроб скругляется.
     func cap(_ i: Int) -> CGFloat {
         let n = heights.count
-        return min(maxHeight, 2 + CGFloat(min(i, n - 1 - i)) * 1.2)
+        let edge = 2 + CGFloat(min(i, n - 1 - i)) * 1.5
+        let shape = i < profile.count ? profile[i] : 1
+        return min(edge, maxHeight * (0.35 + 0.65 * shape))
     }
 }
 
@@ -214,6 +232,7 @@ final class SnowEngine {
         s.frame = rect
         s.heights = nh
         s.visible = [Bool](repeating: true, count: n)
+        if s.profile.count != n { s.makeShape(n) }
     }
 
     // MARK: - Dock
@@ -347,9 +366,9 @@ final class SnowEngine {
 
     private func deposit(_ s: Surface, _ c: Int, _ amt: CGFloat) {
         let n = s.heights.count
-        s.heights[c] = min(s.cap(c), s.heights[c] + amt * 0.5)
-        if c > 0 { s.heights[c - 1] = min(s.cap(c - 1), s.heights[c - 1] + amt * 0.25) }
-        if c < n - 1 { s.heights[c + 1] = min(s.cap(c + 1), s.heights[c + 1] + amt * 0.25) }
+        s.heights[c] = min(s.cap(c), s.heights[c] + amt * 0.7)
+        if c > 0 { s.heights[c - 1] = min(s.cap(c - 1), s.heights[c - 1] + amt * 0.15) }
+        if c < n - 1 { s.heights[c + 1] = min(s.cap(c + 1), s.heights[c + 1] + amt * 0.15) }
     }
 
     /// Осыпание: слишком крутые склоны сугроба сглаживаются.
@@ -359,8 +378,8 @@ final class SnowEngine {
             if n < 2 { continue }
             for i in 0..<(n - 1) {
                 let d = s.heights[i] - s.heights[i + 1]
-                if abs(d) > 1.6 {
-                    let m = (abs(d) - 1.6) * 0.3
+                if abs(d) > 2.6 {
+                    let m = (abs(d) - 2.6) * 0.2
                     if d > 0 { s.heights[i] -= m; s.heights[i + 1] += m }
                     else { s.heights[i] += m; s.heights[i + 1] -= m }
                 }
@@ -452,12 +471,18 @@ final class SnowEngine {
         ctx.saveGState()
         ctx.setShadow(offset: .zero, blur: 3, color: CGColor(gray: 0, alpha: 0.35))
         ctx.setFillColor(CGColor(red: 0.97, green: 0.98, blue: 1, alpha: 1))
+        // Прозрачный слой: тень ложится на сугроб целиком, а не под каждый комок отдельно.
+        ctx.beginTransparencyLayer(auxiliaryInfo: nil)
         let path = CGMutablePath()
-        for s in order where s.frame.insetBy(dx: -4, dy: -30).intersects(region) {
-            addPile(s, to: path)
+        let lumps = CGMutablePath()
+        for s in order where s.frame.insetBy(dx: -4, dy: -40).intersects(region) {
+            addPile(s, to: path, lumps: lumps)
         }
         ctx.addPath(path)
         ctx.fillPath()
+        ctx.addPath(lumps)
+        ctx.fillPath()
+        ctx.endTransparencyLayer()
         ctx.restoreGState()
 
         // Снежинки: тонкая тёмная подложка, чтобы их было видно на белых окнах.
@@ -471,7 +496,7 @@ final class SnowEngine {
         }
     }
 
-    private func addPile(_ s: Surface, to path: CGMutablePath) {
+    private func addPile(_ s: Surface, to path: CGMutablePath, lumps: CGMutablePath) {
         let n = s.heights.count
         // Пока окно движется, рисуем сугроб чуть «на опережение», чтобы скрыть задержку.
         var ox: CGFloat = 0, oy: CGFloat = 0
@@ -483,13 +508,30 @@ final class SnowEngine {
         var i = 0
         while i < n {
             if !s.visible[i] || s.heights[i] < 0.3 { i += 1; continue }
-            let start = i
-            path.move(to: CGPoint(x: s.colX(start) - colW / 2 + ox, y: top + 1))
+            // Собираем непрерывный участок и рисуем его плавной кривой.
+            var pts: [CGPoint] = []
             while i < n && s.visible[i] && s.heights[i] >= 0.3 {
-                path.addLine(to: CGPoint(x: s.colX(i) + ox, y: top - s.heights[i]))
+                let h = s.heights[i]
+                pts.append(CGPoint(x: s.colX(i) + ox, y: top - h))
+                // Комки на верхушке: каждая вторая колонка, размер зависит от высоты.
+                if i % 2 == 0, h > 3, s.lumps[i] > 0.3 {
+                    let r = min(h * 0.35, 1.3 + s.lumps[i] * 2.8)
+                    let cx = s.colX(i) + ox + (s.lumps[i] - 0.5) * 2
+                    let cy = top - h + r * 0.55
+                    lumps.addEllipse(in: CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2))
+                }
                 i += 1
             }
-            path.addLine(to: CGPoint(x: s.colX(i - 1) + colW / 2 + ox, y: top + 1))
+            path.move(to: CGPoint(x: pts[0].x - colW / 2, y: top + 1))
+            path.addLine(to: pts[0])
+            if pts.count > 1 {
+                for j in 1..<pts.count {
+                    let mid = CGPoint(x: (pts[j - 1].x + pts[j].x) / 2, y: (pts[j - 1].y + pts[j].y) / 2)
+                    path.addQuadCurve(to: mid, control: pts[j - 1])
+                }
+            }
+            path.addLine(to: pts[pts.count - 1])
+            path.addLine(to: CGPoint(x: pts[pts.count - 1].x + colW / 2, y: top + 1))
             path.closeSubpath()
         }
     }
