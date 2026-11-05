@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Text.Json;
@@ -9,7 +10,9 @@ namespace Lenta;
 /// Настройки, сохраняются в %APPDATA%\Lenta\settings.json.
 public class AppSettings
 {
-    public string Source { get; set; } = "https://www.rbc.ru";
+    public string Source { get; set; } = "https://www.rbc.ru";   // старая настройка (один источник)
+    public List<string>? Sources { get; set; }                     // включённые источники
+    public int MixOrder { get; set; }                              // 0 по времени, 1 блоками
     public int Content { get; set; } = 2;          // 0 новости, 1 котировки, 2 всё вместе
     public string Stocks { get; set; } = "SBER, GAZP, LKOH, YDEX, ROSN, VTBR";
     public bool Index { get; set; } = true;

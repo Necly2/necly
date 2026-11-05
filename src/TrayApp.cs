@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Media;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace Lenta;
@@ -21,8 +22,10 @@ public class TrayApp : ApplicationContext
     readonly System.Windows.Forms.Timer quotesTimer = new() { Interval = 60_000 };
     SettingsForm? settingsForm;
 
-    FeedResult? result;
-    string? resultSource;
+    /// Найденные ленты по каждому источнику и все заголовки — в том порядке, как они бегут.
+    readonly Dictionary<string, FeedResult> feeds = new();
+    List<Headline> combined = new();
+    List<string> SourceList => s.Sources ??= new List<string> { s.Source };
     bool loading, loadingQuotes;
     string? lastError;
     readonly HashSet<string> seenTitles = new();
@@ -98,25 +101,68 @@ public class TrayApp : ApplicationContext
 
     async void Refresh()
     {
-        if (loading || !Uri.TryCreate(s.Source, UriKind.Absolute, out var url)) return;
+        if (loading) return;
+        var list = SourceList.Select(src => (src, ok: Uri.TryCreate(src, UriKind.Absolute, out var u), u)).Where(x => x.ok).Select(x => (x.src, x.u!)).ToList();
+        if (list.Count == 0) { combined = new(); ticker.SetMessage("Выберите источник новостей в настройках"); return; }
         loading = true;
         try
         {
-            var target = result != null && result.IsRss && resultSource == s.Source ? result.FeedUrl : url;
-            var r = await FeedLoader.Load(target);
-            r = r with { SiteName = DisplayName(url, r.SiteName) };
-            result = r;
-            resultSource = s.Source;
-            lastError = null;
-            ticker.SetHeadlines(r.Items, r.SiteName);
-            DetectUrgent(r.Items);
-        }
-        catch (Exception e)
-        {
-            lastError = e.Message;
-            if (result == null || resultSource != s.Source) ticker.SetMessage("Не удалось получить заголовки с " + url.Host);
+            // Все источники грузятся одновременно
+            var tasks = list.Select(async x =>
+            {
+                try
+                {
+                    var target = feeds.TryGetValue(x.src, out var known) && known.IsRss ? known.FeedUrl : x.Item2;
+                    var r = await FeedLoader.Load(target);
+                    return (x.src, r: (FeedResult?)(r with { SiteName = DisplayName(x.Item2, r.SiteName) }), err: (string?)null);
+                }
+                catch (Exception e) { return (x.src, r: (FeedResult?)null, err: (string?)e.Message); }
+            }).ToList();
+            var done = await Task.WhenAll(tasks);
+            var failed = new List<string>();
+            foreach (var d in done)
+            {
+                if (d.r != null) feeds[d.src] = d.r;
+                else failed.Add(Uri.TryCreate(d.src, UriKind.Absolute, out var u) ? u.Host : d.src);
+            }
+            lastError = failed.Count == 0 ? null : "Не загрузились: " + string.Join(", ", failed);
+            ApplyFeeds();
         }
         finally { loading = false; }
+    }
+
+    /// Собрать строку из всех включённых источников.
+    void ApplyFeeds()
+    {
+        var active = SourceList.Where(feeds.ContainsKey).Select(k => feeds[k]).ToList();
+        if (active.Count == 0)
+        {
+            combined = new();
+            var first = SourceList.FirstOrDefault();
+            if (first != null) ticker.SetMessage("Не удалось получить заголовки с " + (Uri.TryCreate(first, UriKind.Absolute, out var u) ? u.Host : first));
+            return;
+        }
+        if (active.Count == 1)
+        {
+            combined = active[0].Items;
+            ticker.SetHeadlines(combined, active[0].SiteName);
+        }
+        else
+        {
+            // Не больше 25 заголовков с каждого источника — чтобы никто не забивал остальных
+            var tagged = active.SelectMany(f => f.Items.Take(25).Select(h => h with { Source = f.SiteName })).ToList();
+            if (s.MixOrder == 0)
+            {
+                combined = tagged.OrderByDescending(h => h.Date ?? DateTimeOffset.MinValue).ToList();
+                ticker.SetHeadlines(combined, "", tags: true);
+            }
+            else
+            {
+                combined = tagged;
+                ticker.SetHeadlines(combined, "", grouped: true);
+            }
+        }
+        DetectUrgent(combined);
     }
 
     static string DisplayName(Uri url, string fallback)
@@ -126,17 +172,23 @@ public class TrayApp : ApplicationContext
         return fallback;
     }
 
-    void SetSource(string str)
+    static string? Normalize(string str)
     {
         str = str.Trim();
+        if (str.Length == 0) return null;
         if (!str.StartsWith("http", StringComparison.OrdinalIgnoreCase)) str = "https://" + str;
-        if (!Uri.TryCreate(str, UriKind.Absolute, out _)) return;
-        s.Source = str; s.Save();
-        result = null; resultSource = null;
-        seenTitles.Clear();
-        ticker.SetMessage("Загрузка заголовков…");
+        return Uri.TryCreate(str, UriKind.Absolute, out var u) && u.Host.Length > 0 ? str : null;
+    }
+
+    void SetSources(IEnumerable<string> list)
+    {
+        s.Sources = list.Distinct().ToList(); s.Save();
+        foreach (var k in feeds.Keys.Where(k => !s.Sources.Contains(k)).ToList()) feeds.Remove(k);
+        if (combined.Count == 0) ticker.SetMessage("Загрузка заголовков…");
         Refresh();
     }
+
+    List<string> CustomSources => SourceList.Where(src => !Presets.Any(p => p.Url == src)).ToList();
 
     List<string> StockList => s.Stocks.ToUpperInvariant().Split(new[] { ',', ' ', ';' }, StringSplitOptions.RemoveEmptyEntries).ToList();
     List<string> CurrencyList => s.Currencies.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
@@ -189,18 +241,19 @@ public class TrayApp : ApplicationContext
     {
         var m = tray.ContextMenuStrip!;
         m.Items.Clear();
-        var host = Uri.TryCreate(s.Source, UriKind.Absolute, out var u) ? u.Host : s.Source;
-        var status = "Источник: " + host + (result == null ? "" : result.IsRss ? $" · RSS, {result.Items.Count} загол." : " · со страницы");
+        var names = SourceList.Select(src => feeds.TryGetValue(src, out var f) ? f.SiteName : Uri.TryCreate(src, UriKind.Absolute, out var u) ? u.Host : src).ToList();
+        var status = (names.Count == 1 ? "Источник: " : "Источники: ") + string.Join(", ", names) + (combined.Count > 0 ? $" · {combined.Count} загол." : "");
         m.Items.Add(new ToolStripMenuItem(status) { Enabled = false });
         if (lastError != null) m.Items.Add(new ToolStripMenuItem("⚠ " + lastError) { Enabled = false });
 
-        if (result != null && result.Items.Count > 0)
+        if (combined.Count > 0)
         {
             var latest = new ToolStripMenuItem("Последние заголовки");
             var rules = UrgentRules.Parse(s.UrgentRulesText);
-            foreach (var h in result.Items.Take(15))
+            foreach (var h in combined.Take(15))
             {
                 var t = h.Title.Length > 90 ? h.Title[..88] + "…" : h.Title;
+                if (h.Source != null) t = h.Source + ": " + t;
                 if (UrgentRules.Matches(h.Title, rules)) t = "⚡ " + t;
                 var it = new ToolStripMenuItem(t) { Enabled = h.Link != null };
                 var link = h.Link;
@@ -245,14 +298,25 @@ public class TrayApp : ApplicationContext
         });
 
         w.Section("Новости");
-        w.TextField("Сайт или RSS:", s.Source, "Применить", 300, SetSource);
-        int preset = Array.FindIndex(Presets, p => p.Url == s.Source) + 1;
-        w.Popup("Популярные:", new[] { "—" }.Concat(Presets.Select(p => p.Name)).ToArray(), preset, i =>
+        // Можно включить несколько источников сразу
+        var current = new HashSet<string>(SourceList);
+        void TogglePreset(int idx, bool on)
         {
-            if (i <= 0) return;
-            SetSource(Presets[i - 1].Url);
-            w.BeginInvoke(new Action(OpenSettings));
+            var url = Presets[idx].Url;
+            var list = SourceList.Where(x => x != url).ToList();
+            if (on) list.Add(url);
+            var order = Presets.Select(p => p.Url).ToList();
+            SetSources(list.OrderBy(x => order.IndexOf(x) is int k && k >= 0 ? k : 99));
+        }
+        w.Checkboxes("Источники:", Presets.Take(3).Select(p => (p.Name, current.Contains(p.Url))).ToArray(), (k, on) => TogglePreset(k, on));
+        w.Checkboxes("", Presets.Skip(3).Select(p => (p.Name, current.Contains(p.Url))).ToArray(), (k, on) => TogglePreset(k + 3, on));
+        w.TextField("Свои сайты:", string.Join(", ", CustomSources), "Применить", 300, v =>
+        {
+            var custom = v.Split(new[] { ',', ';', ' ', '\n' }, StringSplitOptions.RemoveEmptyEntries).Select(Normalize).Where(x => x != null).Select(x => x!);
+            SetSources(SourceList.Where(x => Presets.Any(p => p.Url == x)).Concat(custom));
         });
+        w.Popup("Порядок:", new[] { "По времени — вперемешку", "По источникам — блоками" }, s.MixOrder, k => { s.MixOrder = k; s.Save(); ApplyFeeds(); });
+        w.Note("Можно включить сколько угодно источников: строка соберёт их вместе. «По времени» — свежие заголовки первыми, у каждого метка источника. Для своих сайтов подойдёт адрес сайта или прямая ссылка на RSS.");
 
         w.Section("Срочные новости");
         w.Checkbox("", "Выделять срочные и мигать строкой", s.UrgentOn, on =>
@@ -273,7 +337,7 @@ public class TrayApp : ApplicationContext
         });
         w.Button("", "Показать, как выглядит тревога", () =>
         {
-            if (result?.Items.FirstOrDefault() is Headline h) TriggerAlert(h.Title);
+            if (combined.FirstOrDefault() is Headline h) TriggerAlert(h.Title);
         });
 
         w.Column();     // вторая колонка — окно широкое, а не высокое

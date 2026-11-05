@@ -109,7 +109,10 @@ public class TickerForm : Form
 
     public void SetContentMode(int m) { contentMode = m; Rebuild(); }
     public void SetUrgent(List<string[]> rules, bool on) { urgentRules = rules; highlightUrgent = on; Rebuild(); }
-    public void SetHeadlines(List<Headline> h, string src) { items = h; source = src; message = null; Rebuild(); }
+    /// grouped — блоки по источникам с названием перед каждым; tags — метка источника у каждого заголовка.
+    public void SetHeadlines(List<Headline> h, string src, bool grouped = false, bool tags = false)
+    { items = h; source = src; groupBySource = grouped; sourceTags = tags; message = null; Rebuild(); }
+    bool groupBySource, sourceTags;
     public void SetMessage(string m) { message = m; Rebuild(); }
     public void SetQuotes(List<Quote> q) { quotes = q; Rebuild(); }
 
@@ -149,11 +152,17 @@ public class TickerForm : Form
 
         if (ShowNews)
         {
-            segs.Add(Make(new() { new("  " + source + "  ", bold, theme.Text) }, null, null));
+            if (!groupBySource && !sourceTags) segs.Add(Make(new() { new("  " + source + "  ", bold, theme.Text) }, null, null));
+            string? prevSource = null;
             for (int i = 0; i < items.Count; i++)
             {
                 var h = items[i];
+                // Блоки по источникам: название перед первым заголовком каждого источника
+                if (groupBySource && h.Source != null && h.Source != prevSource)
+                    segs.Add(Make(new() { new("  " + h.Source + "  ", bold, theme.Text) }, null, null));
+                prevSource = h.Source;
                 var runs = new List<Run>();
+                if (sourceTags && h.Source != null) runs.Add(new(h.Source + "  ", bold, Color.FromArgb(220, theme.Text)));
                 if (h.Date is DateTimeOffset d) runs.Add(new(d.ToLocalTime().ToString("HH:mm") + "  ", timeFont, muted));
                 bool urgent = highlightUrgent && UrgentRules.Matches(h.Title, urgentRules);
                 if (urgent) { runs.Add(new(" СРОЧНО ", badgeFont, Color.White, AlertRed)); runs.Add(new("  ", font, theme.Text)); }

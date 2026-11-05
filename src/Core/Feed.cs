@@ -11,7 +11,8 @@ using System.Xml.Linq;
 
 namespace Lenta;
 
-public record Headline(string Title, Uri? Link, DateTimeOffset? Date);
+/// Source — короткое название источника («РБК»), когда их несколько.
+public record Headline(string Title, Uri? Link, DateTimeOffset? Date, string? Source = null);
 
 public record FeedResult(string SiteName, List<Headline> Items, Uri FeedUrl, bool IsRss);
 
