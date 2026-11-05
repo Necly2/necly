@@ -45,9 +45,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        defaults.register(defaults: ["speed": 1, "visible": true])
+        defaults.register(defaults: ["speed": 1, "visible": true, "position": 0, "size": 1, "theme": 0])
 
         panel = TickerPanel()
+        applyAppearance()
         panel.ticker.speed = speeds[min(max(defaults.integer(forKey: "speed"), 0), speeds.count - 1)].1
         panel.ticker.onOpen = { url in NSWorkspace.shared.open(url) }
         panel.ticker.setMessage("Загрузка заголовков…")
@@ -87,12 +88,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func frameTick(_ sender: AnyObject) { tick() }
 
+    var placeAcc: CGFloat = 0
+
     @objc func tick() {
         let now = CACurrentMediaTime()
         let dt = CGFloat(min(now - last, 0.05))
         last = now
         panel.updateClickThrough()
         panel.ticker.advance(dt)
+        // Dock меняет ширину, когда запускаются приложения, — подстраиваемся раз в 2 секунды.
+        placeAcc += dt
+        if placeAcc > 2 {
+            placeAcc = 0
+            if panel.position.followsDock { panel.place() }
+        }
     }
 
     @objc func screensChanged() { panel.place() }
@@ -199,6 +208,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         sm.submenu = speedMenu
         menu.addItem(sm)
 
+        menu.addItem(submenu("Расположение", TickerPosition.allCases.map { $0.title },
+                             selected: defaults.integer(forKey: "position"), action: #selector(setPosition(_:))))
+        menu.addItem(submenu("Размер", TickerSize.all.map { $0.name },
+                             selected: defaults.integer(forKey: "size"), action: #selector(setSize(_:))))
+        menu.addItem(submenu("Цвета", TickerTheme.all.map { $0.name },
+                             selected: defaults.integer(forKey: "theme"), action: #selector(setTheme(_:))))
+
         let pause = item("Пауза", #selector(togglePause))
         pause.state = panel.ticker.paused ? .on : .off
         menu.addItem(pause)
@@ -211,6 +227,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hint.isEnabled = false
         menu.addItem(hint)
         menu.addItem(item("Выйти", #selector(quit)))
+    }
+
+    private func submenu(_ title: String, _ names: [String], selected: Int, action: Selector) -> NSMenuItem {
+        let sub = NSMenu()
+        for (i, n) in names.enumerated() {
+            let it = item(n, action)
+            it.tag = i
+            it.state = i == selected ? .on : .off
+            sub.addItem(it)
+        }
+        let m = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        m.submenu = sub
+        return m
+    }
+
+    func applyAppearance() {
+        let pos = TickerPosition(rawValue: defaults.integer(forKey: "position")) ?? .underMenuBar
+        let size = TickerSize.all[min(max(defaults.integer(forKey: "size"), 0), TickerSize.all.count - 1)]
+        let theme = TickerTheme.all[min(max(defaults.integer(forKey: "theme"), 0), TickerTheme.all.count - 1)]
+        panel.position = pos
+        panel.size = size
+        panel.ticker.theme = theme
+        panel.place()
+    }
+
+    @objc func setPosition(_ sender: NSMenuItem) {
+        defaults.set(sender.tag, forKey: "position")
+        applyAppearance()
+    }
+
+    @objc func setSize(_ sender: NSMenuItem) {
+        defaults.set(sender.tag, forKey: "size")
+        applyAppearance()
+    }
+
+    @objc func setTheme(_ sender: NSMenuItem) {
+        defaults.set(sender.tag, forKey: "theme")
+        applyAppearance()
     }
 
     private func item(_ title: String, _ action: Selector) -> NSMenuItem {
