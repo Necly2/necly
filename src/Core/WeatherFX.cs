@@ -128,7 +128,13 @@ public partial class Engine
                                 X = d.X, Y = sy - 1, Vx = ((float)Rnd.NextDouble() * 180 - 90) * S,
                                 Vy = -(70 + (float)Rnd.NextDouble() * 120) * S, Life = 0.22f + (float)Rnd.NextDouble() * 0.16f,
                             });
-                    if (s.Heights[c] > 0) s.Heights[c] = Math.Max(0, s.Heights[c] - 0.15f * S);   // дождь подъедает снег
+                    // Капля размывает снег: ямка в месте попадания и немного по краям
+                    foreach (var (k, amt) in new[] { (c, 1.3f), (c - 1, 0.6f), (c + 1, 0.6f) })
+                    {
+                        if (k < 0 || k >= s.Heights.Length) continue;
+                        s.Heights[k] = Math.Max(0, s.Heights[k] - amt * S);
+                        if (k < s.Heap.Length) s.Heap[k] = Math.Max(0, s.Heap[k] - amt * 0.5f * S);
+                    }
                     break;
                 }
             }
