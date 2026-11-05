@@ -79,12 +79,22 @@ final class SnowEngine {
     var dockEnabled = true
 
     private(set) var flakes: [Flake] = []
+
+    // Состояние режима «Сюрприз» (Surprise.swift)
+    var word: [WordFlake] = []
+    var wordPoints: [CGPoint] = []
+    var puffs: [Puff] = []
+    var surpriseStart: Double = -1
+    var impactTime: Double = -1
+    var rocketFrom = CGPoint.zero
+    var rocketTo = CGPoint.zero
+    var dockSurface: Surface? { dock }
     private var surfaces: [Int: Surface] = [:]
     private var windowOrder: [Surface] = []
     private(set) var order: [Surface] = []     // спереди назад, Dock первым
     private var dock: Surface?
 
-    private var t: Double = 0
+    private(set) var t: Double = 0
     private var dockAcc: Double = 10
     private var frameDt: CGFloat = 1.0 / 60
     /// Насколько вперёд «предсказывать» положение движущегося окна (компенсация задержки).
@@ -128,6 +138,7 @@ final class SnowEngine {
         moveFlakes(dt)
         relax()
         brush()
+        updateSurprise(dt)
     }
 
     // MARK: - Окна
@@ -457,6 +468,14 @@ final class SnowEngine {
         }
     }
 
+    func shakeSurface(_ s: Surface, velocity: CGVector, spread: CGFloat) {
+        shed(s, fraction: 0.9, frame: s.frame, velocity: velocity, spread: spread, ignore: true)
+    }
+
+    func addLoose(x: CGFloat, y: CGFloat, vx: CGFloat, vy: CGFloat, r: CGFloat) {
+        flakes.append(Flake(x: x, y: y, vx: vx, vy: vy, r: r, phase: 0, loose: true, alpha: 1))
+    }
+
     /// Стряхнуть весь снег со всех окон и Dock.
     func shakeAll() {
         for s in order {
@@ -494,6 +513,8 @@ final class SnowEngine {
             ctx.setFillColor(CGColor(gray: 1, alpha: f.alpha))
             ctx.fillEllipse(in: CGRect(x: f.x - f.r, y: f.y - f.r, width: f.r * 2, height: f.r * 2))
         }
+
+        drawSurprise(in: ctx, region: region)
     }
 
     private func addPile(_ s: Surface, to path: CGMutablePath, lumps: CGMutablePath) {

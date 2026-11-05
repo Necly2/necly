@@ -109,6 +109,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
+        menu.addItem(item("Сюрприз 🚀", #selector(surprise)))
+
+        menu.addItem(.separator())
         let fast = item("Быстрые сугробы", #selector(toggleFast))
         fast.state = engine.fastPiles ? .on : .off
         menu.addItem(fast)
@@ -157,6 +160,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func shake() { engine.shakeAll() }
+
+    @objc func surprise() {
+        if paused { togglePause() }
+        engine.launchSurprise()
+    }
 
     @objc func togglePause() {
         paused.toggle()
