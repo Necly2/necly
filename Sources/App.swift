@@ -37,7 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         "rbc.ru": "РБК", "kommersant.ru": "Коммерсантъ", "interfax.ru": "Интерфакс",
         "lenta.ru": "Lenta.ru", "habr.com": "Хабр",
     ]
-    let speeds: [(String, CGFloat)] = [("Медленно", 35), ("Обычно", 60), ("Быстро", 95)]
+    let speeds: [(String, CGFloat)] = [("Медленно", 30), ("Обычно", 51), ("Быстро", 81)]   // на 15% медленнее прежних 35/60/95
 
     var sourceURL: String {
         get { defaults.string(forKey: "source") ?? "https://www.rbc.ru" }

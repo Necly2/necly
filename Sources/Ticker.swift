@@ -17,9 +17,12 @@ final class TickerView: NSView {
     var onOpen: ((URL) -> Void)?
 
     private var tracking: NSTrackingArea?
-    private let font = NSFont.systemFont(ofSize: 13, weight: .medium)
-    private let timeFont = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-    private let sourceFont = NSFont.systemFont(ofSize: 13, weight: .bold)
+    private let font = NSFont.systemFont(ofSize: 14, weight: .medium)
+    private let timeFont = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+    private let sourceFont = NSFont.systemFont(ofSize: 14, weight: .heavy)
+
+    /// Фирменный синий ТАСС.
+    static let tassBlue = NSColor(srgbRed: 22 / 255, green: 32 / 255, blue: 138 / 255, alpha: 1)
 
     override var isFlipped: Bool { true }
 
@@ -31,7 +34,7 @@ final class TickerView: NSView {
         var segs: [Segment] = []
 
         let src = NSAttributedString(string: "  \(source)  ", attributes: [
-            .font: sourceFont, .foregroundColor: NSColor.systemOrange,
+            .font: sourceFont, .foregroundColor: NSColor.white,
         ])
         segs.append(Segment(text: src, width: ceil(src.size().width), link: nil))
 
@@ -39,7 +42,7 @@ final class TickerView: NSView {
             let s = NSMutableAttributedString()
             if let d = h.date {
                 s.append(NSAttributedString(string: df.string(from: d) + "  ", attributes: [
-                    .font: timeFont, .foregroundColor: NSColor.white.withAlphaComponent(0.55),
+                    .font: timeFont, .foregroundColor: NSColor.white.withAlphaComponent(0.72),
                 ]))
             }
             s.append(NSAttributedString(string: h.title, attributes: [
@@ -47,7 +50,7 @@ final class TickerView: NSView {
             ]))
             let sep = i == items.count - 1 ? "      " : "    •    "
             s.append(NSAttributedString(string: sep, attributes: [
-                .font: font, .foregroundColor: NSColor.white.withAlphaComponent(0.4),
+                .font: font, .foregroundColor: NSColor.white.withAlphaComponent(0.55),
             ]))
             segs.append(Segment(text: s, width: ceil(s.size().width), link: h.link))
         }
@@ -77,6 +80,8 @@ final class TickerView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        TickerView.tassBlue.setFill()
+        bounds.fill()
         guard !segments.isEmpty else { return }
         let y = (bounds.height - font.ascender + font.descender) / 2 - 0.5
         if totalWidth <= 0 {
@@ -139,13 +144,13 @@ final class TickerView: NSView {
 final class TickerPanel {
     let window: NSPanel
     let ticker: TickerView
-    static let height: CGFloat = 24
+    static let height: CGFloat = 27
 
     init() {
         window = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
                          backing: .buffered, defer: false)
-        window.isOpaque = false
-        window.backgroundColor = .clear
+        window.isOpaque = true
+        window.backgroundColor = TickerView.tassBlue
         window.hasShadow = false
         window.level = .statusBar
         window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
@@ -153,16 +158,10 @@ final class TickerPanel {
         window.hidesOnDeactivate = false
         window.becomesKeyOnlyIfNeeded = true
 
-        let blur = NSVisualEffectView()
-        blur.material = .hudWindow
-        blur.blendingMode = .behindWindow
-        blur.state = .active
-        blur.appearance = NSAppearance(named: .darkAqua)
-
+        // Сплошной синий фон ТАСС с белым текстом — максимально читаемо.
         ticker = TickerView()
         ticker.autoresizingMask = [.width, .height]
-        blur.addSubview(ticker)
-        window.contentView = blur
+        window.contentView = ticker
         place()
     }
 
