@@ -23,14 +23,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let defaults = UserDefaults.standard
     let updater = Updater(appName: "Sugrob", title: "Сугроб", tag: "sugrob-latest", zipName: "Sugrob.zip")
 
-    let levels: [(String, CGFloat)] = [("Лёгкий снег", 2), ("Снегопад", 4.5), ("Метель", 10)]
+    let levels: [(String, CGFloat)] = [("Почти не идёт", 0.25), ("Редкие снежинки", 0.8), ("Лёгкий снег", 2),
+                                       ("Снегопад", 4.5), ("Метель", 10)]
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        defaults.register(defaults: ["level": 1, "fastPiles": false, "dock": true, "snowing": true,
+        defaults.register(defaults: ["level": 3, "fastPiles": false, "dock": true, "snowing": true,
                                      "garland": true, "gDock": true, "gMenu": true, "gWin": false,
-                                     "gMode": 0, "gPalette": 0, "gBright": 0.9, "fps": 1,
+                                     "gMode": 0, "gPalette": 0, "gBright": 0.9, "fps": 1, "frameRate": 2,
                                      "weatherMode": 0, "city": "Москва", "cityLat": 55.75, "cityLon": 37.62,
                                      "snowman": true, "snowmanLife": 0, "snowmanStyle": 0, "snowmanMax": 1])
+        if defaults.object(forKey: "frameRateSet") == nil {      // перенос старой настройки «30/60»
+            defaults.set(defaults.integer(forKey: "fps") == 0 ? 1 : 2, forKey: "frameRate")
+            defaults.set(true, forKey: "frameRateSet")
+        }
+        if defaults.object(forKey: "levelV2") == nil {           // добавились два уровня слабее — сдвигаем старый выбор
+            defaults.set(defaults.integer(forKey: "level") + 2, forKey: "level")
+            defaults.set(true, forKey: "levelV2")
+        }
         engine.snowing = defaults.bool(forKey: "snowing")
         loadGarland()
         let level = min(max(defaults.integer(forKey: "level"), 0), levels.count - 1)
@@ -128,16 +137,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             displayLink = nil
             if let view = overlays.first?.contentView {
                 let link = view.displayLink(target: self, selector: #selector(frameTick(_:)))
-                // Ограничение кадров: 30 или 60 в секунду, даже на экранах 120 Гц — меньше нагрев
-                let fps: Float = defaults.integer(forKey: "fps") == 0 ? 30 : 60
-                link.preferredFrameRateRange = CAFrameRateRange(minimum: fps / 2, maximum: fps, preferred: fps)
+                // Частота кадров из настроек (до частоты экрана: 120/144/165/240 Гц)
+                let fps = FrameRates.fps(defaults.integer(forKey: "frameRate"))
+                link.preferredFrameRateRange = CAFrameRateRange(minimum: min(30, fps), maximum: fps, preferred: fps)
                 link.isPaused = paused
                 link.add(to: .main, forMode: .common)
                 displayLink = link
                 return
             }
         }
-        let t = Timer(timeInterval: defaults.integer(forKey: "fps") == 0 ? 1.0 / 30 : 1.0 / 60,
+        let t = Timer(timeInterval: 1.0 / Double(FrameRates.fps(defaults.integer(forKey: "frameRate"))),
                       target: self, selector: #selector(tick), userInfo: nil, repeats: true)
         RunLoop.main.add(t, forMode: .common)
         timer = t
@@ -305,10 +314,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         w.section("Производительность")
-        w.popup("Плавность:", ["30 кадров/с (меньше нагрев)", "60 кадров/с"], selected: defaults.integer(forKey: "fps")) { [weak self] i in
-            self?.defaults.set(i, forKey: "fps")
+        w.popup("Частота кадров:", FrameRates.titles, selected: defaults.integer(forKey: "frameRate")) { [weak self] i in
+            self?.defaults.set(i, forKey: "frameRate")
             self?.startClock()
         }
+        w.note("Ваш экран: до \(FrameRates.screenMax) Гц. Больше кадров — плавнее снег, но выше нагрузка и нагрев; 30–60 — экономно.")
 
         if !AXIsProcessTrusted() {
             w.section("Dock")

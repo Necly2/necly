@@ -193,3 +193,25 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
     }
 }
+
+/// Частота кадров: «как у экрана» или фиксированная. Выше частота — плавнее, но больше нагрузка.
+enum FrameRates {
+    static let values = [0, 30, 60, 90, 120, 144, 165, 240]
+
+    /// Максимальная частота среди подключённых экранов (ProMotion — 120 Гц, внешние мониторы — 144/165/240).
+    @MainActor static var screenMax: Int {
+        let m = NSScreen.screens.map { $0.maximumFramesPerSecond }.max() ?? 60
+        return m > 0 ? m : 60
+    }
+
+    @MainActor static var titles: [String] {
+        values.map { $0 == 0 ? "Как у экрана (\(screenMax) Гц)" : "\($0) кадров/с" }
+    }
+
+    /// Итоговая частота для выбранного пункта (не выше, чем умеет экран).
+    @MainActor static func fps(_ index: Int) -> Float {
+        let v = values[min(max(index, 0), values.count - 1)]
+        let m = screenMax
+        return Float(v == 0 ? m : min(v, m))
+    }
+}
