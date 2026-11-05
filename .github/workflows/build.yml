@@ -1,0 +1,50 @@
+name: Build Sugrob for Windows
+
+on:
+  push:
+    branches: [sugrob-windows]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish single-file exe
+        run: |
+          dotnet publish src/Sugrob.csproj -c Release -r win-x64 --self-contained true \
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:EnableCompressionInSingleFile=true -o out
+          ls -la out
+
+      - name: Package
+        run: |
+          7z a Sugrob-Windows.zip ./out/Sugrob.exe
+          ls -la Sugrob-Windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Sugrob-Windows
+          path: Sugrob-Windows.zip
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="sugrob-windows-latest"
+          gh release delete "$TAG" --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
+          gh release create "$TAG" Sugrob-Windows.zip -R "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Сугроб ❄️ для Windows" \
+            --notes "Скачайте Sugrob-Windows.zip, распакуйте и запустите Sugrob.exe. Если Windows покажет «Windows защитила ваш компьютер» — «Подробнее» → «Выполнить в любом случае»."
