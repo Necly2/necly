@@ -112,8 +112,6 @@ public struct Flake
     public double IgnoreUntil;
 }
 
-public struct WordFlake { public float X, Y, Vx, Vy, Tx, Ty, R, Delay; }
-public struct Puff { public float X, Y, R, Life, MaxLife; }
 
 public class GarlandSettings
 {
@@ -197,7 +195,6 @@ public partial class Engine
         Brush();
         UpdateWeatherEffects(dt);
         UpdateSnowmen(dt);
-        UpdateSurprise(dt);
     }
 
     // MARK: Окна
@@ -540,103 +537,4 @@ public partial class Engine
 
     static float Len(PointF p) => MathF.Sqrt(p.X * p.X + p.Y * p.Y);
     static PointF Mul(PointF p, float k) => new(p.X * k, p.Y * k);
-
-    // MARK: Сюрприз — ракета в панель задач, снег собирается в слово
-
-    public List<WordFlake> Word = new();
-    public List<PointF> WordPoints = new();
-    public List<Puff> Puffs = new();
-    public double SurpriseStart = -1, ImpactTime = -1;
-    public PointF RocketFrom, RocketTo;
-    public const double RocketDuration = 1.3;
-    const float WordHold = 5.8f;
-
-    /// textPoints — точки букв относительно центра надписи (готовит Renderer).
-    public void LaunchSurprise(List<PointF> textPoints)
-    {
-        var sc = desk.Screens.FirstOrDefault();
-        if (sc.IsEmpty) return;
-        var impact = TaskbarSurface != null
-            ? new PointF(TaskbarSurface.Frame.Left + TaskbarSurface.Frame.Width / 2, TaskbarSurface.Top)
-            : new PointF(sc.Left + sc.Width / 2, sc.Bottom - 4 * S);
-        RocketFrom = new PointF(sc.Left + sc.Width / 2, sc.Top - 90 * S);
-        RocketTo = impact;
-        SurpriseStart = T; ImpactTime = -1;
-        Word.Clear();
-        WordPoints = textPoints.Select(p => new PointF(sc.Left + sc.Width / 2 + p.X, sc.Top + sc.Height * 0.38f + p.Y)).ToList();
-    }
-
-    public PointF RocketPos()
-    {
-        float p = (float)Math.Min(1, (T - SurpriseStart) / RocketDuration), e = p * p;
-        return new PointF(RocketFrom.X + (RocketTo.X - RocketFrom.X) * e, RocketFrom.Y + (RocketTo.Y - RocketFrom.Y) * e);
-    }
-
-    void UpdateSurprise(float dt)
-    {
-        for (int i = 0; i < Puffs.Count; i++)
-        {
-            var p = Puffs[i]; p.Life -= dt; p.R += 16 * S * dt; p.Y -= 12 * S * dt; Puffs[i] = p;
-        }
-        Puffs.RemoveAll(p => p.Life <= 0);
-        if (SurpriseStart < 0) return;
-        if (ImpactTime < 0)
-        {
-            if (T - SurpriseStart < RocketDuration)
-            {
-                var p = RocketPos();
-                Puffs.Add(new Puff { X = p.X + ((float)Rnd.NextDouble() * 10 - 5) * S, Y = p.Y - 80 * S, R = (4 + (float)Rnd.NextDouble() * 4) * S, Life = 0.9f, MaxLife = 0.9f });
-            }
-            else Explode();
-            return;
-        }
-        float it = (float)(T - ImpactTime);
-        for (int i = 0; i < Word.Count; i++)
-        {
-            var w = Word[i];
-            float local = it - w.Delay;
-            if (local < 0.55f)
-            {
-                w.Vy += 500 * S * dt; w.Vx *= 1 - 1.2f * dt; w.Vy *= 1 - 1.2f * dt;
-                w.X += w.Vx * dt; w.Y += w.Vy * dt;
-            }
-            else
-            {
-                float k = Math.Min(9, 2 + (local - 0.55f) * 6), a = Math.Min(1, k * dt);
-                w.X += (w.Tx - w.X) * a; w.Y += (w.Ty - w.Y) * a;
-            }
-            Word[i] = w;
-        }
-        if (it > WordHold) ReleaseWord();
-    }
-
-    void Explode()
-    {
-        ImpactTime = T;
-        var c = RocketTo;
-        if (TaskbarSurface != null) Shed(TaskbarSurface, 0.9f, TaskbarSurface.Frame, new PointF(0, -500 * S), 300 * S, true);
-        Word = WordPoints.Select(p =>
-        {
-            double ang = Math.PI * (1.05 + Rnd.NextDouble() * 0.9);
-            float sp = (400 + (float)Rnd.NextDouble() * 700) * S;
-            return new WordFlake
-            {
-                X = c.X, Y = c.Y - 4, Vx = (float)Math.Cos(ang) * sp, Vy = (float)Math.Sin(ang) * sp,
-                Tx = p.X, Ty = p.Y, R = (1.8f + (float)Rnd.NextDouble() * 1.2f) * S, Delay = (float)Rnd.NextDouble() * 0.35f,
-            };
-        }).ToList();
-        for (int k = 0; k < 350; k++)
-        {
-            double ang = Math.PI * (1 + Rnd.NextDouble());
-            float sp = (200 + (float)Rnd.NextDouble() * 700) * S;
-            AddLoose(c.X, c.Y - 4, (float)Math.Cos(ang) * sp, (float)Math.Sin(ang) * sp, (1.2f + (float)Rnd.NextDouble() * 1.4f) * S);
-        }
-    }
-
-    void ReleaseWord()
-    {
-        foreach (var w in Word) AddLoose(w.X, w.Y, ((float)Rnd.NextDouble() * 50 - 25) * S, (float)Rnd.NextDouble() * 40 * S, w.R * 0.8f);
-        Word.Clear();
-        SurpriseStart = -1; ImpactTime = -1;
-    }
 }

@@ -34,7 +34,6 @@ public class Renderer
         DrawRain(g, region);
         DrawFlakes(g, region);
         DrawGarland(g, region);
-        DrawSurprise(g, region);
     }
 
     // MARK: Сугробы
@@ -231,80 +230,6 @@ public class Renderer
         return bmp;
     }
 
-    // MARK: Сюрприз
-
-    void DrawSurprise(Graphics g, RectangleF region)
-    {
-        foreach (var p in e.Puffs)
-        {
-            using var b = new SolidBrush(Color.FromArgb((int)(128 * p.Life / p.MaxLife), 217, 217, 217));
-            g.FillEllipse(b, p.X - p.R, p.Y - p.R, p.R * 2, p.R * 2);
-        }
-        if (e.SurpriseStart >= 0 && e.ImpactTime < 0)
-        {
-            var p = e.RocketPos();
-            if (Inflated(region, 40 * S, 120 * S).Contains(p)) DrawRocket(g, p);
-        }
-        if (e.ImpactTime >= 0)
-        {
-            float k = (float)(e.T - e.ImpactTime);
-            if (k < 0.4f)
-            {
-                float rr = (30 + k * 520) * S;
-                using var fb = new SolidBrush(Color.FromArgb((int)(204 * (1 - k / 0.4f)), 255, 242, 191));
-                g.FillEllipse(fb, e.RocketTo.X - rr, e.RocketTo.Y - rr, rr * 2, rr * 2);
-            }
-        }
-        float time = (float)e.T;
-        using var white = new SolidBrush(Color.White);
-        for (int i = 0; i < e.Word.Count; i++)
-        {
-            var w = e.Word[i];
-            float x = w.X + MathF.Sin(time * 3 + i) * 0.6f * S, y = w.Y + MathF.Cos(time * 2.6f + i * 1.7f) * 0.6f * S;
-            if (!region.Contains(x, y)) continue;
-            float rr = w.R + 0.7f * S;
-            g.FillEllipse(halo, x - rr, y - rr, rr * 2, rr * 2);
-            g.FillEllipse(white, x - w.R, y - w.R, w.R * 2, w.R * 2);
-        }
-    }
-
-    /// Ракета носом вниз; tip — кончик носа.
-    void DrawRocket(Graphics g, PointF tip)
-    {
-        float x = tip.X, y = tip.Y, s = S;
-        float fl = (20 + (float)e.Rnd.NextDouble() * 14) * s;
-        using (var b = new SolidBrush(Color.FromArgb(230, 255, 115, 25)))
-            g.FillPolygon(b, new[] { new PointF(x - 9 * s, y - 62 * s), new PointF(x + 9 * s, y - 62 * s), new PointF(x, y - 62 * s - fl) });
-        using (var b = new SolidBrush(Color.FromArgb(255, 255, 230, 77)))
-            g.FillPolygon(b, new[] { new PointF(x - 5 * s, y - 62 * s), new PointF(x + 5 * s, y - 62 * s), new PointF(x, y - 62 * s - fl * 0.55f) });
-        using var red = new SolidBrush(Color.FromArgb(255, 217, 31, 38));
-        g.FillPolygon(red, new[] { new PointF(x - 11 * s, y - 38 * s), new PointF(x - 21 * s, y - 64 * s), new PointF(x - 11 * s, y - 58 * s) });
-        g.FillPolygon(red, new[] { new PointF(x + 11 * s, y - 38 * s), new PointF(x + 21 * s, y - 64 * s), new PointF(x + 11 * s, y - 58 * s) });
-        using (var body = RoundRect(new RectangleF(x - 11 * s, y - 62 * s, 22 * s, 50 * s), 6 * s))
-        {
-            using var bb = new SolidBrush(Color.FromArgb(255, 242, 242, 242));
-            g.FillPath(bb, body);
-            using var pen = new Pen(Color.FromArgb(255, 77, 77, 77), 1 * s);
-            g.DrawPath(pen, body);
-            using var win = new SolidBrush(Color.FromArgb(255, 77, 153, 242));
-            g.FillEllipse(win, x - 5 * s, y - 43 * s, 10 * s, 10 * s);
-            g.DrawEllipse(pen, x - 5 * s, y - 43 * s, 10 * s, 10 * s);
-        }
-        g.FillPolygon(red, new[] { new PointF(x - 11 * s, y - 14 * s), new PointF(x + 11 * s, y - 14 * s), new PointF(x, y) });
-    }
-
-    static GraphicsPath RoundRect(RectangleF r, float rad)
-    {
-        var p = new GraphicsPath();
-        float d = rad * 2;
-        p.AddArc(r.Left, r.Top, d, d, 180, 90);
-        p.AddArc(r.Right - d, r.Top, d, d, 270, 90);
-        p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
-        p.AddArc(r.Left, r.Bottom - d, d, d, 90, 90);
-        p.CloseFigure();
-        return p;
-    }
-
     // MARK: Дождь
 
     readonly Pen rainShadow = new(Color.FromArgb(30, 0, 0, 0), 2.4f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
@@ -470,36 +395,5 @@ public class Renderer
                 break;
         }
         g.Restore(saved);
-    }
-
-    /// Точки внутри букв (относительно центра надписи), примерно target штук.
-    public static List<PointF> TextPoints(string text, float fontPx, int target)
-    {
-        var res = new List<PointF>();
-        using var font = new Font("Segoe UI Black", fontPx, FontStyle.Regular, GraphicsUnit.Pixel);
-        SizeF sz;
-        using (var tmp = new Bitmap(1, 1)) using (var tg = Graphics.FromImage(tmp)) sz = tg.MeasureString(text, font);
-        int w = (int)sz.Width + 20, h = (int)sz.Height + 20;
-        using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
-        using (var g = Graphics.FromImage(bmp))
-        {
-            g.Clear(Color.Black);
-            g.TextRenderingHint = TextRenderingHint.AntiAlias;
-            g.DrawString(text, font, Brushes.White, 10, 10);
-        }
-        var data = bmp.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-        var buf = new byte[data.Stride * h];
-        System.Runtime.InteropServices.Marshal.Copy(data.Scan0, buf, 0, buf.Length);
-        bmp.UnlockBits(data);
-        bool On(int x, int y) => buf[y * data.Stride + x * 4 + 1] > 128;
-        int on = 0;
-        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) if (On(x, y)) on++;
-        if (on == 0) return res;
-        int step = Math.Max(3, (int)Math.Round(Math.Sqrt(on / (double)target)));
-        var rnd = new Random();
-        for (int y = 0; y < h; y += step)
-            for (int x = 0; x < w; x += step)
-                if (On(x, y)) res.Add(new PointF(x - w / 2f + (float)rnd.NextDouble() - 0.5f, y - h / 2f + (float)rnd.NextDouble() - 0.5f));
-        return res;
     }
 }

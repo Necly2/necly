@@ -26,8 +26,9 @@ public class AppSettings
     public int GMode { get; set; }
     public int GPalette { get; set; }
     public int GBright { get; set; } = 90;
-    public string Word { get; set; } = "СЕРГЕЙ";
     public int Fps { get; set; } = 1;              // 0 — 30 кадров, 1 — 60 кадров
+    public bool AutoUpdate { get; set; } = true;
+    public int SkippedBuild { get; set; }
     public int WeatherMode { get; set; }
     public string City { get; set; } = "Москва";
     public double CityLat { get; set; } = 55.75;
@@ -75,6 +76,8 @@ public class TrayApp : ApplicationContext
     readonly Renderer renderer;
     readonly List<Overlay> overlays = new();
     readonly NotifyIcon tray = new();
+    Updater updater = null!;
+    Action? balloonAction;
     readonly System.Windows.Forms.Timer timer = new() { Interval = 15 };
     readonly System.Windows.Forms.Timer weatherTimer = new() { Interval = 15 * 60 * 1000 };
     string? weatherError;
@@ -99,6 +102,14 @@ public class TrayApp : ApplicationContext
         tray.Icon = MakeIcon();
         tray.Text = "Сугроб";
         tray.Visible = true;
+        updater = new Updater("Sugrob", "Сугроб", "sugrob-windows-latest", "Sugrob-Windows.zip",
+            () => s.SkippedBuild, b => { s.SkippedBuild = b; s.Save(); }, Quit)
+        {
+            AutoUpdate = () => s.AutoUpdate,
+            Notify = (text, action) => { balloonAction = action; tray.ShowBalloonTip(8000, "Сугроб", text, ToolTipIcon.Info); },
+        };
+        tray.BalloonTipClicked += (_, _) => balloonAction?.Invoke();
+        updater.Start();
         tray.ContextMenuStrip = new ContextMenuStrip();
         tray.ContextMenuStrip.Opening += (_, _) => BuildMenu();
         tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) OpenSettings(); };
@@ -216,20 +227,13 @@ public class TrayApp : ApplicationContext
             m.Items.Add(new ToolStripMenuItem(WeatherLine) { Enabled = false });
             m.Items.Add(new ToolStripSeparator());
         }
-        m.Items.Add("Сюрприз 🚀", null, (_, _) => Surprise());
         m.Items.Add("Стряхнуть весь снег", null, (_, _) => engine.ShakeAll());
         m.Items.Add(new ToolStripSeparator());
         m.Items.Add(paused ? "Продолжить" : "Пауза", null, (_, _) => TogglePause());
+        if (updater.Available is int b) m.Items.Add($"⬆ Обновить до сборки {b}…", null, (_, _) => updater.Offer(b));
+        m.Items.Add("Проверить обновления…", null, async (_, _) => await updater.Check(true));
         m.Items.Add("Настройки…", null, (_, _) => OpenSettings());
         m.Items.Add("Выйти", null, (_, _) => Quit());
-    }
-
-    void Surprise()
-    {
-        if (paused) TogglePause();
-        var sc = Screen.PrimaryScreen!.Bounds;
-        float fontPx = Math.Min(sc.Width * 0.14f, 230 * engine.S);
-        engine.LaunchSurprise(Renderer.TextPoints(string.IsNullOrWhiteSpace(s.Word) ? "СЕРГЕЙ" : s.Word.Trim(), fontPx, 2200));
     }
 
     void TogglePause()
@@ -288,13 +292,14 @@ public class TrayApp : ApplicationContext
         w.Popup("Цвета:", GarlandSettings.Palettes.Select(p => p.Name).ToArray(), s.GPalette, i => { s.GPalette = i; Save(); });
         w.Slider("Яркость:", s.GBright, 30, 100, v => { s.GBright = v; Save(); });
 
-        w.Section("Сюрприз");
-        w.TextField("Слово:", s.Word, "Сохранить", 200, v => { s.Word = v; Save(); });
-        w.Button("", "Запустить сюрприз 🚀", Surprise);
-
         w.Section("Прочее");
         w.Popup("Плавность:", new[] { "30 кадров/с (меньше нагрузка)", "60 кадров/с" }, s.Fps, i => { s.Fps = i; Save(); });
         w.Checkbox("", "Запускать вместе с Windows", AppSettings.Autostart, on => AppSettings.Autostart = on);
+
+        w.Section("Обновления");
+        w.Checkbox("", "Проверять обновления автоматически (раз в день)", s.AutoUpdate, on => { s.AutoUpdate = on; s.Save(); });
+        w.Button("", "Проверить сейчас", async () => await updater.Check(true));
+        w.Note($"Установлена сборка {Updater.CurrentBuild}. Новая версия скачивается с GitHub и ставится сама — с перезапуском.");
 
         settingsForm = w;
         w.Show();
