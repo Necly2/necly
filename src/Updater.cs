@@ -81,7 +81,7 @@ public class Updater
         if (latest > CurrentBuild)
         {
             Available = latest;
-            if (interactive) Offer(latest.Value);
+            if (interactive) await OfferAsync(latest.Value);
             else if (getSkipped() != latest)
                 Notify?.Invoke($"Доступна новая версия «{title}». Нажмите, чтобы обновить.", () => Offer(latest.Value));
         }
@@ -92,10 +92,51 @@ public class Updater
         }
     }
 
-    public void Offer(int build)
+    /// Ветка на GitHub, где лежит история изменений («sugrob-windows-latest» → «sugrob-windows»).
+    string Branch => tag.Replace("-latest", "");
+
+    /// Что изменилось между установленной и новой сборкой — из CHANGELOG.md, иначе из notes.txt.
+    async Task<string> ChangesSummary(int build)
     {
-        var r = MessageBox.Show($"Сборка {build} (у вас — {CurrentBuild}).\nПрограмма скачает её, заменит себя и перезапустится — переустанавливать вручную не нужно.",
-            $"Доступна новая версия «{title}»", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+        var parts = new System.Collections.Generic.List<string>();
+        try
+        {
+            var log = await http.GetStringAsync($"https://raw.githubusercontent.com/Necly2/necly/{Branch}/CHANGELOG.md?t={DateTime.UtcNow.Ticks}");
+            int num = -1;
+            var cur = new System.Text.StringBuilder();
+            void Flush() { if (num > CurrentBuild && num <= build && cur.Length > 0) parts.Add(cur.ToString().Trim()); cur.Clear(); }
+            foreach (var raw in log.Split('\n'))
+            {
+                var line = raw.TrimEnd('\r');
+                if (line.StartsWith("## "))
+                {
+                    Flush();
+                    var digits = new string(line.SkipWhile(c => !char.IsDigit(c)).TakeWhile(char.IsDigit).ToArray());
+                    num = int.TryParse(digits, out var n) ? n : 0;
+                }
+                else if (num >= 0 && line.Trim().Length > 0) cur.AppendLine(line);
+            }
+            Flush();
+        }
+        catch { }
+        if (parts.Count == 0)
+            try { parts.Add((await http.GetStringAsync(Base + tag + "/notes.txt")).Trim()); } catch { }
+        var text = string.Join("\n", parts).Replace("**", "").Replace("\r", "");
+        text = string.Join("\n", text.Split('\n').Select(l => l.StartsWith("- ") ? "• " + l[2..] : l));
+        var lines = text.Split('\n');
+        if (lines.Length > 14) text = string.Join("\n", lines.Take(14)) + "\n…и другие изменения — подробнее на GitHub.";
+        return text;
+    }
+
+    public void Offer(int build) => _ = OfferAsync(build);
+
+    async Task OfferAsync(int build)
+    {
+        var summary = await ChangesSummary(build);
+        var msg = $"Сборка {build} (у вас — {CurrentBuild}).";
+        if (summary.Length > 0) msg += "\n\nЧто нового:\n" + summary;
+        msg += "\n\nПрограмма скачает обновление, заменит себя и перезапустится — переустанавливать вручную не нужно.";
+        var r = MessageBox.Show(msg, $"Доступна новая версия «{title}»", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
         if (r == DialogResult.Yes) _ = Install();
         else setSkipped(build);
     }
