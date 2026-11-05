@@ -50,7 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                      "content": 2, "stocks": "SBER, GAZP, LKOH, YDEX, ROSN, VTBR",
                                      "index": true, "currencies": "USD,EUR,CNY",
                                      "urgentOn": true, "urgentSound": true, "urgentRules": UrgentRules.defaultText,
-                                     "newsInterval": 1, "quotesInterval": 1])
+                                     "newsInterval": 1, "quotesInterval": 1, "frameRate": 0])
 
         panel = TickerPanel()
         applyAppearance()
@@ -134,13 +134,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if #available(macOS 14.0, *) {
             (displayLink as? CADisplayLink)?.invalidate()
             let link = panel.ticker.displayLink(target: self, selector: #selector(frameTick(_:)))
-            // Не больше 60 кадров даже на экранах 120 Гц — меньше нагрев
-            link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+            // Частота кадров из настроек: «как у экрана» (120/144/165/240 Гц) или фиксированная
+            let fps = FrameRates.fps(defaults.integer(forKey: "frameRate"))
+            link.preferredFrameRateRange = CAFrameRateRange(minimum: min(30, fps), maximum: fps, preferred: fps)
             link.add(to: .main, forMode: .common)
             displayLink = link
             return
         }
-        let t = Timer(timeInterval: 1.0 / 60, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
+        let t = Timer(timeInterval: 1.0 / Double(FrameRates.fps(defaults.integer(forKey: "frameRate"))),
+                      target: self, selector: #selector(tick), userInfo: nil, repeats: true)
         RunLoop.main.add(t, forMode: .common)
         timer = t
     }
@@ -163,7 +165,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    @objc func screensChanged() { panel.place() }
+    @objc func screensChanged() {
+        panel.place()
+        startClock()      // другой экран — другая частота
+    }
 
     // MARK: Загрузка
 
@@ -364,6 +369,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         w.popup("Цвета:", TickerTheme.all.map { $0.name }, selected: defaults.integer(forKey: "theme")) { [weak self] i in
             self?.defaults.set(i, forKey: "theme")
             self?.applyAppearance()
+        }
+        w.popup("Частота кадров:", FrameRates.titles, selected: defaults.integer(forKey: "frameRate")) { [weak self] i in
+            self?.defaults.set(i, forKey: "frameRate")
+            self?.startClock()
         }
         w.popup("Скорость:", speeds.map { $0.0 }, selected: defaults.integer(forKey: "speed")) { [weak self] i in
             guard let self else { return }
