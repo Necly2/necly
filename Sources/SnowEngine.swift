@@ -71,8 +71,12 @@ final class Surface {
 
     /// Предельная высота колонки: к краям сугроб скругляется.
     func cap(_ i: Int) -> CGFloat {
-        let n = heights.count
-        let edge = 2 + CGFloat(min(i, n - 1 - i)) * 1.5
+        // Расстояние от ближайшего края окна; в зоне скругления угла снега нет.
+        let x = colX(i)
+        let dx = min(x - frame.minX, frame.maxX - x)
+        let start = cornerR * 0.7 + 2
+        if dx <= start { return 0 }
+        let edge = 1 + (dx - start) * 0.9
         let shape = i < profile.count ? profile[i] : 1
         return min(edge, maxHeight * (0.35 + 0.65 * shape))
     }
@@ -94,6 +98,7 @@ final class SnowEngine {
     var intensity: CGFloat = 4.5      // снежинок в секунду на 100 точек ширины экранов
     var fastPiles = false
     var dockEnabled = true
+    var snowBehindWindows = false     // false — снег падает поверх окон
 
     private(set) var flakes: [Flake] = []
 
@@ -475,6 +480,7 @@ final class SnowEngine {
                     else { s.heights[i] += m; s.heights[i + 1] -= m }
                 }
             }
+            for i in 0..<n where s.heights[i] > s.cap(i) { s.heights[i] = s.cap(i) }
         }
     }
 
@@ -568,7 +574,7 @@ final class SnowEngine {
     func draw(in ctx: CGContext, region: CGRect) {
         // Сугробы
         ctx.saveGState()
-        ctx.setShadow(offset: .zero, blur: 3, color: CGColor(gray: 0, alpha: 0.35))
+        ctx.setShadow(offset: .zero, blur: 2, color: CGColor(gray: 0, alpha: 0.28))
         ctx.setFillColor(CGColor(red: 0.97, green: 0.98, blue: 1, alpha: 1))
         // Прозрачный слой: тень ложится на сугроб целиком, а не под каждый комок отдельно.
         ctx.beginTransparencyLayer(auxiliaryInfo: nil)
@@ -588,7 +594,7 @@ final class SnowEngine {
         // Снежинки: тонкая тёмная подложка, чтобы их было видно на белых окнах.
         let area = region.insetBy(dx: -4, dy: -4)
         // Снег идёт «за» окнами программ: над окнами снежинки не рисуем.
-        let windowRects = windowOrder.map(\.frame).filter { $0.intersects(area) }
+        let windowRects = snowBehindWindows ? windowOrder.map(\.frame).filter { $0.intersects(area) } : []
         for f in flakes where area.contains(CGPoint(x: f.x, y: f.y)) {
             if windowRects.contains(where: { $0.contains(CGPoint(x: f.x, y: f.y)) }) { continue }
             let rr = f.r + 0.6
@@ -614,23 +620,30 @@ final class SnowEngine {
         while i < n {
             if !s.visible[i] || s.heights[i] < 0.3 { i += 1; continue }
             // Собираем непрерывный участок и рисуем его плавной кривой.
+            // Все точки держим строго внутри окна (и не залезаем на окна спереди).
+            let minX = s.frame.minX + 1.5 + ox, maxX = s.frame.maxX - 1.5 + ox
             var pts: [CGPoint] = []
             var bases: [CGPoint] = []
-            while i < n && s.visible[i] && s.heights[i] >= 0.3 {
-                let h = s.heights[i]
-                let b = top + s.base(i)
-                pts.append(CGPoint(x: s.colX(i) + ox, y: b - h))
-                bases.append(CGPoint(x: s.colX(i) + ox, y: b + 1))
-                // Комки на верхушке: каждая вторая колонка, размер зависит от высоты.
-                if i % 2 == 0, h > 3, s.lumps[i] > 0.3 {
-                    let r = min(h * 0.35, 1.3 + s.lumps[i] * 2.8)
-                    let cx = s.colX(i) + ox + (s.lumps[i] - 0.5) * 2
+            let segStart = i
+            while i < n && s.visible[i] && s.heights[i] >= 0.3 { i += 1 }
+            let segEnd = i - 1
+            for k in segStart...segEnd {
+                let h = s.heights[k]
+                let b = top + s.base(k)
+                let x = min(maxX, max(minX, s.colX(k) + ox))
+                pts.append(CGPoint(x: x, y: b - h))
+                bases.append(CGPoint(x: x, y: b + 0.5))
+                // Комки: только если рядом нет края участка, чтобы не вылезали за границы.
+                if k % 2 == 0, h > 3, s.lumps[k] > 0.3, k - segStart >= 2, segEnd - k >= 2 {
+                    let r = min(h * 0.35, 1.3 + s.lumps[k] * 2.8)
+                    let cx = s.colX(k) + ox + (s.lumps[k] - 0.5) * 2
                     let cy = b - h + r * 0.55
-                    lumps.addEllipse(in: CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2))
+                    if cx - r >= minX && cx + r <= maxX {
+                        lumps.addEllipse(in: CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2))
+                    }
                 }
-                i += 1
             }
-            path.move(to: CGPoint(x: pts[0].x - colW / 2, y: bases[0].y))
+            path.move(to: bases[0])
             path.addLine(to: pts[0])
             if pts.count > 1 {
                 for j in 1..<pts.count {
@@ -639,7 +652,6 @@ final class SnowEngine {
                 }
             }
             path.addLine(to: pts[pts.count - 1])
-            path.addLine(to: CGPoint(x: pts[pts.count - 1].x + colW / 2, y: bases[bases.count - 1].y))
             // Низ сугроба повторяет кромку окна, включая скруглённые углы.
             for b in bases.reversed() { path.addLine(to: b) }
             path.closeSubpath()

@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         engine.intensity = levels[level].1
         engine.fastPiles = defaults.bool(forKey: "fastPiles")
         engine.dockEnabled = defaults.bool(forKey: "dock")
+        engine.snowBehindWindows = defaults.bool(forKey: "behind")
 
         buildOverlays()
         NotificationCenter.default.addObserver(self, selector: #selector(screensChanged),
@@ -124,6 +125,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(item("   Точнее определять Dock…", #selector(askAccessibility)))
         }
 
+        let behind = item("Снег за окнами", #selector(toggleBehind))
+        behind.state = engine.snowBehindWindows ? .on : .off
+        menu.addItem(behind)
+
         menu.addItem(item("Стряхнуть весь снег", #selector(shake)))
         menu.addItem(.separator())
         menu.addItem(item(paused ? "Продолжить" : "Пауза", #selector(togglePause)))
@@ -160,6 +165,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func shake() { engine.shakeAll() }
+
+    @objc func toggleBehind() {
+        engine.snowBehindWindows.toggle()
+        defaults.set(engine.snowBehindWindows, forKey: "behind")
+    }
 
     @objc func surprise() {
         if paused { togglePause() }
