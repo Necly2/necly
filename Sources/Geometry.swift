@@ -20,6 +20,54 @@ enum Geo {
 
 /// Положение Dock через Accessibility API (нужно разрешение «Универсальный доступ»).
 enum DockInfo {
+    /// Лучшее доступное положение Dock: точное через Accessibility, иначе — оценка.
+    @MainActor
+    static func bestFrame() -> CGRect? {
+        if let r = frame() { return r }
+        return estimatedFrame()
+    }
+
+    /// Оценка положения Dock без каких-либо разрешений:
+    /// высота — из разницы между рамкой экрана и его рабочей областью,
+    /// ширина — по числу иконок из настроек Dock и запущенным приложениям.
+    @MainActor
+    static func estimatedFrame() -> CGRect? {
+        let d = UserDefaults(suiteName: "com.apple.dock")
+        if let o = d?.string(forKey: "orientation"), o != "bottom" { return nil }
+
+        // Экран, у которого снизу занято место под Dock.
+        guard let screen = NSScreen.screens.first(where: { $0.visibleFrame.minY - $0.frame.minY > 20 })
+        else { return nil }   // Dock скрыт или сбоку
+        let gap = screen.visibleFrame.minY - screen.frame.minY
+        let sr = Geo.globalRect(of: screen)
+
+        var tile = CGFloat(d?.double(forKey: "tilesize") ?? 0)
+        if tile < 16 { tile = max(16, gap - 16) }
+
+        let persistent = (d?.array(forKey: "persistent-apps") as? [[String: Any]]) ?? []
+        var pinned = Set<String>()
+        for item in persistent {
+            if let td = item["tile-data"] as? [String: Any], let id = td["bundle-identifier"] as? String {
+                pinned.insert(id)
+            }
+        }
+        let others = (d?.array(forKey: "persistent-others"))?.count ?? 0
+        let showRecents = (d?.object(forKey: "show-recents") as? Bool) ?? true
+        let running = NSWorkspace.shared.runningApplications.filter {
+            $0.activationPolicy == .regular &&
+            $0.bundleIdentifier != "com.apple.finder" &&
+            !pinned.contains($0.bundleIdentifier ?? "")
+        }.count
+        let recents = showRecents ? min(3, (d?.array(forKey: "recent-apps"))?.count ?? 0) : 0
+
+        let slots = CGFloat(1 + persistent.count + running + recents + others + 1)   // Finder … Корзина
+        let separators: CGFloat = (running + recents > 0 ? 1 : 0) + 1
+        let width = min(sr.width - 8, slots * tile + separators * tile * 0.4 + 16)
+        let top = Geo.primaryHeight - screen.visibleFrame.minY + 2
+        let height = max(10, sr.maxY - top - 4)
+        return CGRect(x: sr.midX - width / 2, y: top, width: width, height: height)
+    }
+
     static func frame() -> CGRect? {
         guard AXIsProcessTrusted(),
               let dockApp = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dock").first

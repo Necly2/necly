@@ -116,12 +116,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         fast.state = engine.fastPiles ? .on : .off
         menu.addItem(fast)
 
-        if AXIsProcessTrusted() {
-            let d = item("Снег на Dock", #selector(toggleDock))
-            d.state = engine.dockEnabled ? .on : .off
-            menu.addItem(d)
-        } else {
-            menu.addItem(item("Снег на Dock: дать доступ…", #selector(askAccessibility)))
+        let d = item("Снег на Dock", #selector(toggleDock))
+        d.state = engine.dockEnabled ? .on : .off
+        menu.addItem(d)
+        if !AXIsProcessTrusted() {
+            // Без доступа Dock определяется приблизительно; с доступом — точно.
+            menu.addItem(item("   Точнее определять Dock…", #selector(askAccessibility)))
         }
 
         menu.addItem(item("Стряхнуть весь снег", #selector(shake)))

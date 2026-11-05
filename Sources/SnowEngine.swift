@@ -250,7 +250,7 @@ final class SnowEngine {
 
     private func pollDock() {
         var rect: CGRect? = nil
-        if dockEnabled, let r = DockInfo.frame(), r.minY < bounds.maxY - 2, r.intersects(bounds) {
+        if dockEnabled, let r = DockInfo.bestFrame(), r.minY < bounds.maxY - 2, r.intersects(bounds) {
             rect = r
         }
         guard let r = rect else {
@@ -261,7 +261,8 @@ final class SnowEngine {
             return
         }
         if let d = dock {
-            if d.frame != r { remap(d, to: r, edgeVelocity: .zero) }
+            let moved = abs(d.frame.minX - r.minX) + abs(d.frame.minY - r.minY) + abs(d.frame.width - r.width)
+            if moved > 1.5 { remap(d, to: r, edgeVelocity: .zero) }
         } else {
             dock = Surface(id: -1, frame: r, isDock: true)
         }
@@ -415,7 +416,7 @@ final class SnowEngine {
         guard hasMouse, hypot(mouseV.dx, mouseV.dy) > 60 else { return }
         let R: CGFloat = 16
         for s in order {
-            let below: CGFloat = s.isDock ? s.frame.height : 8
+            let below: CGFloat = s.isDock ? 14 : 8
             guard mouse.y <= s.top + below,
                   mouse.y >= s.top - s.maxHeight - 12,
                   mouse.x >= s.frame.minX - R,
