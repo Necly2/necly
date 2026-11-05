@@ -7,35 +7,80 @@ final class ActionTarget: NSObject {
     @objc func fire(_ sender: Any?) { fn(sender) }
 }
 
-/// Простое окно настроек: подпись слева, элемент справа, разделы.
+/// Документ, который растёт сверху вниз (для прокрутки).
+final class FlippedView: NSView {
+    override var isFlipped: Bool { true }
+}
+
+/// Окно настроек: колонки с разделами (подпись слева, элемент справа).
+/// Окно можно растягивать; если всё не помещается — появляется прокрутка.
 @MainActor
 final class SettingsWindow: NSObject, NSWindowDelegate {
     let window: NSWindow
-    private let grid = NSGridView(numberOfColumns: 2, rows: 0)
+    private var grid: NSGridView
+    private let columns = NSStackView()
+    private let doc = FlippedView()
     private var targets: [ActionTarget] = []
     var onClose: (() -> Void)?
 
+    private static func makeGrid() -> NSGridView {
+        let g = NSGridView(numberOfColumns: 2, rows: 0)
+        g.rowSpacing = 9
+        g.columnSpacing = 12
+        g.column(at: 0).xPlacement = .trailing
+        g.rowAlignment = .firstBaseline
+        return g
+    }
+
     init(title: String) {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 400),
-                          styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 480),
+                          styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
+        grid = SettingsWindow.makeGrid()
         super.init()
         window.title = title
         window.isReleasedWhenClosed = false
         window.delegate = self
-        grid.rowSpacing = 9
-        grid.columnSpacing = 12
-        grid.column(at: 0).xPlacement = .trailing
-        grid.rowAlignment = .firstBaseline
-        grid.translatesAutoresizingMaskIntoConstraints = false
-        let content = NSView()
-        content.addSubview(grid)
+        window.contentMinSize = NSSize(width: 420, height: 260)
+
+        columns.orientation = .horizontal
+        columns.alignment = .top
+        columns.spacing = 32
+        columns.translatesAutoresizingMaskIntoConstraints = false
+        columns.addArrangedSubview(grid)
+
+        doc.translatesAutoresizingMaskIntoConstraints = false
+        doc.addSubview(columns)
         NSLayoutConstraint.activate([
-            grid.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
-            grid.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -20),
-            grid.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24),
-            grid.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
+            columns.topAnchor.constraint(equalTo: doc.topAnchor, constant: 18),
+            columns.bottomAnchor.constraint(equalTo: doc.bottomAnchor, constant: -18),
+            columns.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 22),
+            columns.trailingAnchor.constraint(lessThanOrEqualTo: doc.trailingAnchor, constant: -22),
         ])
-        window.contentView = content
+
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.hasHorizontalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.drawsBackground = false
+        scroll.documentView = doc
+        let clip = scroll.contentView
+        NSLayoutConstraint.activate([
+            doc.topAnchor.constraint(equalTo: clip.topAnchor),
+            doc.leadingAnchor.constraint(equalTo: clip.leadingAnchor),
+            doc.widthAnchor.constraint(greaterThanOrEqualTo: clip.widthAnchor),
+        ])
+        window.contentView = scroll
+    }
+
+    /// Начать новую колонку справа.
+    func column() {
+        let sep = NSBox()
+        sep.boxType = .separator
+        sep.translatesAutoresizingMaskIntoConstraints = false
+        columns.addArrangedSubview(sep)
+        sep.heightAnchor.constraint(equalTo: columns.heightAnchor, constant: -8).isActive = true
+        grid = SettingsWindow.makeGrid()
+        columns.addArrangedSubview(grid)
     }
 
     func windowWillClose(_ notification: Notification) { onClose?() }
@@ -138,8 +183,11 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     }
 
     func show() {
-        window.contentView?.layoutSubtreeIfNeeded()
-        if let size = window.contentView?.fittingSize { window.setContentSize(size) }
+        doc.layoutSubtreeIfNeeded()
+        let fit = doc.fittingSize
+        let vis = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame.size ?? NSSize(width: 1200, height: 800)
+        let size = NSSize(width: min(fit.width + 2, vis.width * 0.92), height: min(fit.height + 2, vis.height * 0.88))
+        window.setContentSize(size)
         window.center()
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)

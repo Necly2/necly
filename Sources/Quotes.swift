@@ -32,7 +32,7 @@ enum QuoteLoader {
         guard let u = URL(string: url) else { return nil }
         var req = URLRequest(url: u, timeoutInterval: 15)
         req.setValue("Lenta/0.2 (macOS)", forHTTPHeaderField: "User-Agent")
-        guard let (data, _) = try? await URLSession.shared.data(for: req) else { return nil }
+        guard let (data, _) = try? await lightSession.data(for: req) else { return nil }
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     }
 

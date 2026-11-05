@@ -24,6 +24,15 @@ enum FeedError: LocalizedError {
     var errorDescription: String? { "Не удалось найти заголовки на этом сайте" }
 }
 
+/// Сессия без кэша — меньше памяти.
+let lightSession: URLSession = {
+    let c = URLSessionConfiguration.ephemeral
+    c.urlCache = nil
+    c.requestCachePolicy = .reloadIgnoringLocalCacheData
+    c.httpMaximumConnectionsPerHost = 2
+    return URLSession(configuration: c)
+}()
+
 enum FeedLoader {
     /// Известные RSS-ленты сайтов, которые не указывают их на главной странице.
     static let knownFeeds: [(String, String)] = [
@@ -82,7 +91,7 @@ enum FeedLoader {
                      forHTTPHeaderField: "User-Agent")
         req.setValue("text/html,application/xhtml+xml,application/rss+xml,application/xml;q=0.9,*/*;q=0.8",
                      forHTTPHeaderField: "Accept")
-        let (data, resp) = try await URLSession.shared.data(for: req)
+        let (data, resp) = try await lightSession.data(for: req)
         if let http = resp as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw URLError(.badServerResponse)
         }

@@ -48,7 +48,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         defaults.register(defaults: ["speed": 1, "visible": true, "position": 0, "size": 1, "theme": 0,
                                      "content": 2, "stocks": "SBER, GAZP, LKOH, YDEX, ROSN, VTBR",
                                      "index": true, "currencies": "USD,EUR,CNY",
-                                     "urgentOn": true, "urgentSound": true, "urgentRules": UrgentRules.defaultText])
+                                     "urgentOn": true, "urgentSound": true, "urgentRules": UrgentRules.defaultText,
+                                     "newsInterval": 1, "quotesInterval": 1])
 
         panel = TickerPanel()
         applyAppearance()
@@ -69,15 +70,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                                name: NSApplication.didChangeScreenParametersNotification, object: nil)
         startClock()
         refresh()
-        // Каждые 2 минуты — чтобы срочные новости появлялись быстро.
-        let r = Timer(timeInterval: 120, target: self, selector: #selector(refresh), userInfo: nil, repeats: true)
+        refreshQuotes()
+        restartTimers()
+    }
+
+    // MARK: Частота обновления
+
+    let newsIntervals: [(String, TimeInterval)] = [("1 мин", 60), ("2 мин", 120), ("5 мин", 300), ("10 мин", 600),
+                                                   ("15 мин", 900), ("30 мин", 1800)]
+    let quoteIntervals: [(String, TimeInterval)] = [("30 сек", 30), ("1 мин", 60), ("2 мин", 120), ("5 мин", 300),
+                                                    ("15 мин", 900)]
+
+    func restartTimers() {
+        refreshTimer?.invalidate()
+        quotesTimer?.invalidate()
+        let n = newsIntervals[min(max(defaults.integer(forKey: "newsInterval"), 0), newsIntervals.count - 1)].1
+        let q = quoteIntervals[min(max(defaults.integer(forKey: "quotesInterval"), 0), quoteIntervals.count - 1)].1
+        let r = Timer(timeInterval: n, target: self, selector: #selector(refresh), userInfo: nil, repeats: true)
+        r.tolerance = n * 0.1          // macOS может объединять пробуждения — экономия энергии
         RunLoop.main.add(r, forMode: .common)
         refreshTimer = r
-
-        refreshQuotes()
-        let q = Timer(timeInterval: 60, target: self, selector: #selector(refreshQuotes), userInfo: nil, repeats: true)
-        RunLoop.main.add(q, forMode: .common)
-        quotesTimer = q
+        let qt = Timer(timeInterval: q, target: self, selector: #selector(refreshQuotes), userInfo: nil, repeats: true)
+        qt.tolerance = q * 0.1
+        RunLoop.main.add(qt, forMode: .common)
+        quotesTimer = qt
     }
 
     // MARK: Котировки
@@ -116,6 +132,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if #available(macOS 14.0, *) {
             (displayLink as? CADisplayLink)?.invalidate()
             let link = panel.ticker.displayLink(target: self, selector: #selector(frameTick(_:)))
+            // Не больше 60 кадров даже на экранах 120 Гц — меньше нагрев
+            link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
             link.add(to: .main, forMode: .common)
             displayLink = link
             return
@@ -137,7 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.ticker.advance(dt)
         // Dock меняет ширину, когда запускаются приложения, — подстраиваемся раз в 2 секунды.
         placeAcc += dt
-        if placeAcc > 2 {
+        if placeAcc > 5 {
             placeAcc = 0
             if panel.position.followsDock { panel.place() }
         }
@@ -295,6 +313,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.triggerAlert(h.title)
         }
 
+        w.column()      // вторая колонка — окно получается широким, а не высоким
         w.section("Котировки")
         w.textField("Акции (тикеры):", value: defaults.string(forKey: "stocks") ?? "",
                     placeholder: "SBER, GAZP, LKOH", button: "Применить") { [weak self] v in
@@ -314,7 +333,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.defaults.set(allCur.filter { set.contains($0) }.joined(separator: ","), forKey: "currencies")
             self.refreshQuotes()
         }
-        w.note("Акции и индекс — Московская биржа, обновление раз в минуту. Валюты — официальный курс ЦБ на сегодня.")
+        w.note("Акции и индекс — Московская биржа. Валюты — официальный курс ЦБ на сегодня.")
+
+        w.section("Обновление")
+        w.popup("Новости:", newsIntervals.map { "каждые " + $0.0 }, selected: defaults.integer(forKey: "newsInterval")) { [weak self] i in
+            self?.defaults.set(i, forKey: "newsInterval")
+            self?.restartTimers()
+        }
+        w.popup("Котировки:", quoteIntervals.map { "каждые " + $0.0 }, selected: defaults.integer(forKey: "quotesInterval")) { [weak self] i in
+            self?.defaults.set(i, forKey: "quotesInterval")
+            self?.restartTimers()
+        }
 
         w.section("Вид")
         w.popup("Расположение:", TickerPosition.allCases.map { $0.title },

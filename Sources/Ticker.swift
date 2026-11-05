@@ -85,7 +85,11 @@ final class TickerView: NSView {
             }
             x += seg.width
         }
-        needsDisplay = true
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        track.frame.origin.x = -offset
+        CATransaction.commit()
+        updateFlash()
     }
 
     var segments: [Segment] = []
@@ -96,11 +100,118 @@ final class TickerView: NSView {
     var paused = false
     var onOpen: ((URL) -> Void)?
 
-    var theme = TickerTheme.all[0] { didSet { rebuild() } }
+    var theme = TickerTheme.all[0] { didSet { layer?.backgroundColor = theme.background.cgColor; rebuild() } }
     var fontSize: CGFloat = 14 { didSet { rebuild() } }
-    var cornerRadius: CGFloat = 0 { didSet { needsDisplay = true } }
+    var cornerRadius: CGFloat = 0 { didSet { layer?.cornerRadius = cornerRadius; rebuild() } }
     /// Вырез под Dock (в координатах полосы): там фона и текста нет.
-    var cutout: NSRect? { didSet { needsDisplay = true } }
+    var cutout: NSRect? { didSet { updateMask() } }
+
+    // Слои: строка рисуется в картинки один раз, а каждый кадр только сдвигается — это делает видеокарта.
+    private let track = CALayer()
+    private let flashLayer = CALayer()
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .never
+        let root = layer!
+        root.masksToBounds = true
+        root.backgroundColor = theme.background.cgColor
+        flashLayer.backgroundColor = TickerView.alertRed.cgColor
+        flashLayer.opacity = 0
+        root.addSublayer(flashLayer)
+        root.addSublayer(track)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func layout() {
+        super.layout()
+        flashLayer.frame = bounds
+        updateMask()
+        renderLayers()
+    }
+
+    private func updateMask() {
+        guard let root = layer else { return }
+        if let c = cutout {
+            let m = CAShapeLayer()
+            let path = CGMutablePath()
+            path.addRect(bounds)
+            path.addRoundedRect(in: c, cornerWidth: 12, cornerHeight: 12)
+            m.path = path
+            m.fillRule = .evenOdd
+            root.mask = m
+        } else {
+            root.mask = nil
+        }
+    }
+
+    /// Картинка одного куска строки (текст по центру по высоте).
+    private func image(_ text: NSAttributedString, width: CGFloat, height: CGFloat, scale: CGFloat) -> CGImage? {
+        let w = Int((width * scale).rounded(.up)), h = Int((height * scale).rounded(.up))
+        guard w > 0, h > 0,
+              let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.scaleBy(x: scale, y: scale)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: false)
+        let f = font
+        text.draw(at: NSPoint(x: 0, y: (height - (f.ascender - f.descender)) / 2 + 0.5))
+        NSGraphicsContext.restoreGraphicsState()
+        return ctx.makeImage()
+    }
+
+    /// Пересобрать слои строки (только когда меняется содержимое или размер).
+    private func renderLayers() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        track.sublayers?.forEach { $0.removeFromSuperlayer() }
+        let h = max(bounds.height, 1)
+        guard !segments.isEmpty, bounds.width > 0 else { return }
+        let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+
+        if totalWidth <= 0 {
+            let seg = segments[0]
+            let l = CALayer()
+            l.frame = CGRect(x: cornerRadius * 0.6, y: 0, width: seg.width, height: h)
+            l.contents = image(seg.text, width: seg.width, height: h, scale: scale)
+            l.contentsScale = scale
+            track.addSublayer(l)
+            track.frame = bounds
+            return
+        }
+        let images = segments.map { image($0.text, width: $0.width, height: h, scale: scale) }
+        let copies = max(2, Int((bounds.width / totalWidth).rounded(.up)) + 1)
+        for k in 0..<copies {
+            let c = CALayer()
+            c.frame = CGRect(x: CGFloat(k) * totalWidth, y: 0, width: totalWidth, height: h)
+            var x: CGFloat = 0
+            for (i, seg) in segments.enumerated() {
+                let l = CALayer()
+                l.frame = CGRect(x: x, y: 0, width: seg.width, height: h)
+                l.contents = images[i]          // одна картинка на все копии
+                l.contentsScale = scale
+                c.addSublayer(l)
+                x += seg.width
+            }
+            track.addSublayer(c)
+        }
+        track.frame = CGRect(x: -offset, y: 0, width: CGFloat(copies) * totalWidth, height: h)
+    }
+
+    private func updateFlash() {
+        let e = CACurrentMediaTime() - flashStart
+        let k: Float = e < 3.2 ? Float((0.5 + 0.5 * sin(e * 11)) * (max(0, 1 - e / 3.2) * 0.6 + 0.4)) * 0.9 : 0
+        if flashLayer.opacity != k {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            flashLayer.opacity = k
+            CATransaction.commit()
+        }
+    }
 
     private var tracking: NSTrackingArea?
     private var lastItems: [Headline] = []
@@ -172,7 +283,7 @@ final class TickerView: NSView {
             segments = [Segment(text: s, width: max(bounds.width, 1) + 1, link: nil)]
             totalWidth = 0          // сообщение не прокручиваем
             offset = 0
-            needsDisplay = true
+            renderLayers()
             return
         }
 
@@ -183,7 +294,7 @@ final class TickerView: NSView {
             segments = segs
             totalWidth = segs.reduce(0) { $0 + $1.width }
             if offset > totalWidth { offset = 0 }
-            needsDisplay = true
+            renderLayers()
             return
         }
         let src = NSAttributedString(string: "  \(lastSource)  ", attributes: [
@@ -220,55 +331,20 @@ final class TickerView: NSView {
         segments = segs
         totalWidth = segs.reduce(0) { $0 + $1.width }
         if offset > totalWidth { offset = 0 }
-        needsDisplay = true
+        renderLayers()
     }
 
     // MARK: Анимация
 
     func advance(_ dt: CGFloat) {
-        if isFlashing { needsDisplay = true }
+        updateFlash()
         guard totalWidth > 0, !paused, !hovering else { return }
         offset += speed * dt
         if offset >= totalWidth { offset -= totalWidth }
-        needsDisplay = true
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        theme.background.setFill()
-        let bg = NSBezierPath(roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius)
-        if let c = cutout {
-            bg.append(NSBezierPath(roundedRect: c, xRadius: 12, yRadius: 12))
-            bg.windingRule = .evenOdd
-        }
-        bg.fill()
-        guard !segments.isEmpty else { return }
-
-        NSGraphicsContext.saveGraphicsState()
-        bg.addClip()
-        if isFlashing {
-            // Красная пульсация фона во время тревоги
-            let e = CACurrentMediaTime() - flashStart
-            let k = CGFloat(0.5 + 0.5 * sin(e * 11)) * CGFloat(max(0, 1 - e / 3.2) * 0.6 + 0.4)
-            TickerView.alertRed.withAlphaComponent(0.9 * k).setFill()
-            bounds.fill()
-        }
-        let f = font
-        let y = (bounds.height - (f.ascender - f.descender)) / 2 - 0.5
-        let pad = cornerRadius * 0.6
-        if totalWidth <= 0 {
-            segments[0].text.draw(at: NSPoint(x: pad, y: y))
-        } else {
-            var x = -offset
-            var i = 0
-            while x < bounds.width {
-                let seg = segments[i % segments.count]
-                if x + seg.width > 0 { seg.text.draw(at: NSPoint(x: x, y: y)) }
-                x += seg.width
-                i += 1
-                if i > 10_000 { break }
-            }
-        }
-        NSGraphicsContext.restoreGraphicsState()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        track.frame.origin.x = -offset
+        CATransaction.commit()
     }
 
     // MARK: Мышь
