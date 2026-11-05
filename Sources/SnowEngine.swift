@@ -117,7 +117,7 @@ final class SnowEngine {
     var frostCache: [Int: [FrostSpike]] = [:]
 
     // Снеговики (Snowman.swift)
-    var snowmanEnabled = true
+    var snowmanEnabled = false
     var snowmanLifetime = 0      // 0 до весны, 1 тает в оттепель, 2 час, 3 до выхода
     var snowmanStyle = 0         // 0 цилиндр, 1 ведро, 2 шапка с помпоном, 3 без шапки
     var maxSnowmen = 3

@@ -28,10 +28,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         defaults.register(defaults: ["level": 3, "fastPiles": false, "dock": true, "snowing": true,
-                                     "garland": true, "gDock": true, "gMenu": true, "gWin": false,
+                                     "garland": false, "gDock": true, "gMenu": true, "gWin": false,
                                      "gMode": 0, "gPalette": 0, "gBright": 0.9, "fps": 1, "frameRate": 2,
                                      "weatherMode": 0, "city": "Москва", "cityLat": 55.75, "cityLon": 37.62,
-                                     "snowman": true, "snowmanLife": 0, "snowmanStyle": 0, "snowmanMax": 1])
+                                     "snowman": false, "snowmanLife": 0, "snowmanStyle": 0, "snowmanMax": 1])
         if defaults.object(forKey: "frameRateSet") == nil {      // перенос старой настройки «30/60»
             defaults.set(defaults.integer(forKey: "fps") == 0 ? 1 : 2, forKey: "frameRate")
             defaults.set(true, forKey: "frameRateSet")
