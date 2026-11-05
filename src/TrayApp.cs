@@ -15,25 +15,27 @@ namespace Sugrob;
 public class AppSettings
 {
     public bool Snowing { get; set; } = true;
-    public int Level { get; set; } = 1;
+    public int Level { get; set; } = 1;            // старая шкала из 3 уровней
+    public int SnowLevel { get; set; } = -1;       // новая шкала из 5 уровней
     public bool FastPiles { get; set; }
     public bool Taskbar { get; set; } = true;
     public bool Behind { get; set; }
-    public bool Garland { get; set; } = true;
+    public bool Garland { get; set; }
     public bool GTaskbar { get; set; } = true;
     public bool GTop { get; set; }
     public bool GWindows { get; set; }
     public int GMode { get; set; }
     public int GPalette { get; set; }
     public int GBright { get; set; } = 90;
-    public int Fps { get; set; } = 1;              // 0 — 30 кадров, 1 — 60 кадров
+    public int Fps { get; set; } = 1;              // старая настройка 30/60
+    public int FrameRate { get; set; } = -1;       // индекс в FrameClock.Values
     public bool AutoUpdate { get; set; } = true;
     public int SkippedBuild { get; set; }
     public int WeatherMode { get; set; }
     public string City { get; set; } = "Москва";
     public double CityLat { get; set; } = 55.75;
     public double CityLon { get; set; } = 37.62;
-    public bool Snowman { get; set; } = true;
+    public bool Snowman { get; set; }
     public int SnowmanLife { get; set; }
     public int SnowmanStyle { get; set; }
     public int SnowmanMax { get; set; } = 1;
@@ -78,19 +80,22 @@ public class TrayApp : ApplicationContext
     readonly NotifyIcon tray = new();
     Updater updater = null!;
     Action? balloonAction;
-    readonly System.Windows.Forms.Timer timer = new() { Interval = 15 };
+    FrameClock clock = null!;
+    readonly Control marshal = new();
     readonly System.Windows.Forms.Timer weatherTimer = new() { Interval = 15 * 60 * 1000 };
     string? weatherError;
-    readonly Stopwatch clock = Stopwatch.StartNew();
-    double last, frameAcc;
-    int topAcc;
+    double topAcc;
     bool paused;
     SettingsForm? settingsForm;
 
-    static readonly (string Name, float Value)[] Levels = { ("Лёгкий снег", 2), ("Снегопад", 4.5f), ("Метель", 10) };
+    static readonly (string Name, float Value)[] Levels =
+        { ("Почти не идёт", 0.25f), ("Редкие снежинки", 0.8f), ("Лёгкий снег", 2), ("Снегопад", 4.5f), ("Метель", 10) };
 
     public TrayApp()
     {
+        // Перенос старых настроек: было 3 уровня снега и «30/60 кадров»
+        if (s.SnowLevel < 0) s.SnowLevel = Math.Clamp(s.Level + 2, 0, 4);
+        if (s.FrameRate < 0) s.FrameRate = s.Fps == 0 ? 1 : 2;
         float scale = W.GetDpiForSystem() / 96f;
         bool win11 = Environment.OSVersion.Version.Build >= 22000;
         engine = new Engine(desk, scale, win11 ? 8 * scale : 0);
@@ -122,8 +127,9 @@ public class TrayApp : ApplicationContext
         engine.OnSnowmenChanged = SaveSnowmen;
 
         W.timeBeginPeriod(1);
-        timer.Tick += (_, _) => Tick();
-        timer.Start();
+        marshal.CreateControl();
+        clock = new FrameClock(marshal, Tick) { TargetFps = FrameClock.Fps(s.FrameRate) };
+        clock.Start();
         weatherTimer.Tick += (_, _) => RefreshWeather();
         weatherTimer.Start();
         RefreshWeather();
@@ -167,7 +173,8 @@ public class TrayApp : ApplicationContext
     void Apply()
     {
         engine.Snowing = s.Snowing;
-        engine.Intensity = Levels[Math.Clamp(s.Level, 0, Levels.Length - 1)].Value;
+        engine.Intensity = Levels[Math.Clamp(s.SnowLevel, 0, Levels.Length - 1)].Value;
+        if (clock != null) clock.TargetFps = FrameClock.Fps(s.FrameRate);
         engine.FastPiles = s.FastPiles;
         engine.TaskbarEnabled = s.Taskbar;
         engine.SnowBehindWindows = s.Behind;
@@ -197,17 +204,9 @@ public class TrayApp : ApplicationContext
         engine.ScreensChanged();
     }
 
-    void Tick()
+    void Tick(double dt)
     {
-        double now = clock.Elapsed.TotalSeconds;
-        frameAcc += now - last;
-        last = now;
-        // 30 кадров — копим время и рисуем реже
-        if (s.Fps == 0 && frameAcc < 1 / 31.0) return;
-        double dt = frameAcc;
-        frameAcc = 0;
         if (paused) return;
-
         engine.Step(dt);
         foreach (var o in overlays)
         {
@@ -215,7 +214,8 @@ public class TrayApp : ApplicationContext
             o.Render(renderer.Draw);
         }
         // Раз в 2 секунды снова поднимаемся над панелью задач
-        if (++topAcc > 120) { topAcc = 0; foreach (var o in overlays) o.BringToTop(); }
+        topAcc += dt;
+        if (topAcc > 2) { topAcc = 0; foreach (var o in overlays) o.BringToTop(); }
     }
 
     void BuildMenu()
@@ -240,12 +240,11 @@ public class TrayApp : ApplicationContext
     {
         paused = !paused;
         if (paused) foreach (var o in overlays) o.Render((_, _) => { });
-        last = clock.Elapsed.TotalSeconds;
     }
 
     void Quit()
     {
-        timer.Stop();
+        clock.Dispose();
         tray.Visible = false;
         foreach (var o in overlays) o.Close();
         W.timeEndPeriod(1);
@@ -261,7 +260,7 @@ public class TrayApp : ApplicationContext
 
         w.Section("Снег");
         w.Checkbox("", "Снег идёт", s.Snowing, on => { s.Snowing = on; Save(); });
-        w.Popup("Интенсивность:", Levels.Select(l => l.Name).ToArray(), s.Level, i => { s.Level = i; Save(); });
+        w.Popup("Интенсивность:", Levels.Select(l => l.Name).ToArray(), s.SnowLevel, i => { s.SnowLevel = i; Save(); });
         w.Checkbox("", "Быстрые сугробы (копятся в 5 раз быстрее)", s.FastPiles, on => { s.FastPiles = on; Save(); });
         w.Checkbox("", "Снег на панели задач", s.Taskbar, on => { s.Taskbar = on; Save(); });
         w.Checkbox("", "Снег за окнами (падает только над рабочим столом)", s.Behind, on => { s.Behind = on; Save(); });
@@ -293,7 +292,8 @@ public class TrayApp : ApplicationContext
         w.Slider("Яркость:", s.GBright, 30, 100, v => { s.GBright = v; Save(); });
 
         w.Section("Прочее");
-        w.Popup("Плавность:", new[] { "30 кадров/с (меньше нагрузка)", "60 кадров/с" }, s.Fps, i => { s.Fps = i; Save(); });
+        w.Popup("Частота кадров:", FrameClock.Titles, s.FrameRate, i => { s.FrameRate = i; Save(); });
+        w.Note($"Ваш экран: до {FrameClock.ScreenMax} Гц. Больше кадров — плавнее снег, но выше нагрузка; 30–60 — экономно.");
         w.Checkbox("", "Запускать вместе с Windows", AppSettings.Autostart, on => AppSettings.Autostart = on);
 
         w.Section("Обновления");

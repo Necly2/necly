@@ -115,7 +115,7 @@ public struct Flake
 
 public class GarlandSettings
 {
-    public bool Enabled = true, OnTaskbar = true, OnTop = false, OnWindows = false;
+    public bool Enabled = false, OnTaskbar = true, OnTop = false, OnWindows = false;
     public int Mode, Palette;
     public float Brightness = 0.9f;
     public static readonly string[] Modes = { "Плавное мерцание", "Бегущие огни", "Случайное мигание", "Горит постоянно" };
@@ -390,6 +390,11 @@ public partial class Engine
         {
             var f = Flakes[i];
             float prevY = f.Y;
+            if (Gust)
+            {
+                if (f.Loose) f.Vx += gustDir * 1800 * S * dt;
+                else f.X += gustDir * 600 * S * dt;
+            }
             if (f.Loose)
             {
                 f.Vy += 1100 * S * dt;
@@ -412,7 +417,7 @@ public partial class Engine
                 }
             }
             bool landed = false;
-            if (!f.Loose || f.Vy > 0)
+            if ((!f.Loose || f.Vy > 0) && !(Gust && f.Loose))
                 foreach (var s in Order)
                 {
                     if (f.Loose && f.IgnoreId == s.Id && T < f.IgnoreUntil) continue;
@@ -530,10 +535,22 @@ public partial class Engine
     public void AddLoose(float x, float y, float vx, float vy, float r) =>
         Flakes.Add(new Flake { X = x, Y = y, Vx = vx, Vy = vy, R = r, Loose = true, Alpha = 1, IgnoreId = long.MinValue });
 
+    /// «Стряхнуть весь снег» — порыв ветра влево или вправо (случайно) сдувает снег за край экрана.
     public void ShakeAll()
     {
-        foreach (var s in Order) Shed(s, 1, s.Frame, new PointF(0, -120 * S), 140 * S, true);
+        gustDir = Rnd.Next(2) == 0 ? -1 : 1;
+        gustUntil = T + 2.5;
+        foreach (var s in Order)
+        {
+            for (int i = 0; i < s.Heap.Length; i++)
+                if (s.Heap[i] > 0.4f) { Emit(s.ColX(i), s.Top - s.Heights[i], s.Heap[i], new PointF(gustDir * 700 * S, -150 * S), 160 * S, s.Id); s.Heap[i] = 0; }
+            Shed(s, 1, s.Frame, new PointF(gustDir * (500 + (float)Rnd.NextDouble() * 400) * S, -120 * S), 160 * S, true);
+        }
     }
+
+    float gustDir;
+    double gustUntil = -1;
+    bool Gust => T < gustUntil;
 
     static float Len(PointF p) => MathF.Sqrt(p.X * p.X + p.Y * p.Y);
     static PointF Mul(PointF p, float k) => new(p.X * k, p.Y * k);

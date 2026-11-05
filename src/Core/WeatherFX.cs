@@ -35,7 +35,7 @@ public partial class Engine
     public float FrostLevel;
     readonly Dictionary<long, FrostSpike[]> frostCache = new();
 
-    public bool SnowmanEnabled = true;
+    public bool SnowmanEnabled;
     public int SnowmanLifetime, SnowmanStyle;
     public int MaxSnowmen = 3;
     public List<Snowman> Snowmen = new();
