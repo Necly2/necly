@@ -105,6 +105,9 @@ final class SnowEngine {
     var dockEnabled = true
     var snowBehindWindows = false     // false — снег падает поверх окон
     var garland = GarlandSettings()
+    private var gustDir: CGFloat = 1
+    private var gustUntil: Double = -1
+    private var gust: Bool { t < gustUntil }
 
     // Погода (Weather.swift / WeatherFX.swift)
     /// 0 — снег всегда, 1 — по реальной погоде, 2 — дождь (проверка), 3 — иней (проверка)
@@ -443,6 +446,9 @@ final class SnowEngine {
             var f = flakes[i]
             let prevY = f.y
 
+            if gust {
+                if f.loose { f.vx += gustDir * 1800 * dt } else { f.x += gustDir * 600 * dt }
+            }
             if f.loose {
                 f.vy += 1100 * dt
                 f.vx *= (1 - 0.8 * dt)
@@ -468,7 +474,7 @@ final class SnowEngine {
 
             // Приземление на окно или Dock.
             var landed = false
-            if !f.loose || f.vy > 0 {
+            if (!f.loose || f.vy > 0) && !(gust && f.loose) {
                 for s in order {
                     if f.loose && f.ignoreID == s.id && t < f.ignoreUntil { continue }
                     if frozen && !s.isDock { continue }
@@ -599,10 +605,18 @@ final class SnowEngine {
         flakes.append(Flake(x: x, y: y, vx: vx, vy: vy, r: r, phase: 0, loose: true, alpha: 1))
     }
 
-    /// Стряхнуть весь снег со всех окон и Dock.
+    /// «Стряхнуть весь снег» — порыв ветра влево или вправо (случайно) сдувает снег за край экрана.
     func shakeAll() {
+        gustDir = Bool.random() ? 1 : -1
+        gustUntil = t + 2.5
         for s in order {
-            shed(s, fraction: 1, frame: s.frame, velocity: CGVector(dx: 0, dy: -120), spread: 140, ignore: true)
+            for i in 0..<s.heap.count where s.heap[i] > 0.4 {
+                emit(x: s.colX(i), top: s.top - s.heights[i], amount: s.heap[i],
+                     velocity: CGVector(dx: gustDir * 700, dy: -150), spread: 160, ignoreID: s.id)
+                s.heap[i] = 0
+            }
+            shed(s, fraction: 1, frame: s.frame,
+                 velocity: CGVector(dx: gustDir * CGFloat.random(in: 500...900), dy: -120), spread: 160, ignore: true)
         }
     }
 
