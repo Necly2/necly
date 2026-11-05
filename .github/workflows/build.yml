@@ -1,0 +1,42 @@
+name: Build Lenta
+
+on:
+  push:
+    branches: [lenta]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build app
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Package
+        run: |
+          ditto -c -k --keepParent build/Lenta.app Lenta.zip
+          ls -la Lenta.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lenta
+          path: Lenta.zip
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="lenta-latest"
+          gh release delete "$TAG" --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
+          gh release create "$TAG" Lenta.zip -R "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Лента 📰" \
+            --notes "Скачайте Lenta.zip, распакуйте и перетащите Lenta.app в «Программы». Первый запуск: Системные настройки → Конфиденциальность и безопасность → «Открыть всё равно»."
