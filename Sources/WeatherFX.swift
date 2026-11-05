@@ -105,7 +105,12 @@ extension SnowEngine {
                                                    vy: -CGFloat.random(in: 70...190), life: CGFloat.random(in: 0.22...0.38)))
                         }
                     }
-                    if s.heights[c] > 0 { s.heights[c] = max(0, s.heights[c] - 0.15) }   // дождь подъедает снег
+                    // Капля размывает снег: ямка в месте попадания и немного по краям
+                    let n = s.heights.count
+                    for (k, amt) in [(c, 1.3), (c - 1, 0.6), (c + 1, 0.6)] as [(Int, CGFloat)] where k >= 0 && k < n {
+                        s.heights[k] = max(0, s.heights[k] - amt)
+                        if k < s.heap.count { s.heap[k] = max(0, s.heap[k] - amt * 0.5) }
+                    }
                     break
                 }
             }
