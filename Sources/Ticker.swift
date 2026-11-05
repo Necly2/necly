@@ -32,7 +32,7 @@ struct TickerSize {
 }
 
 enum TickerPosition: Int, CaseIterable {
-    case underMenuBar, aboveDock, leftOfDock, rightOfDock, bottomFull
+    case underMenuBar, aboveDock, leftOfDock, rightOfDock, bottomFull, besideDock
 
     var title: String {
         switch self {
@@ -41,12 +41,13 @@ enum TickerPosition: Int, CaseIterable {
         case .leftOfDock: return "Слева от Dock"
         case .rightOfDock: return "Справа от Dock"
         case .bottomFull: return "Внизу на всю ширину (поверх Dock)"
+        case .besideDock: return "По бокам от Dock (строка проходит за Dock)"
         }
     }
 
     /// Полоса во всю ширину экрана — без скруглений.
-    var isFullWidth: Bool { self == .underMenuBar || self == .bottomFull }
-    var followsDock: Bool { self == .aboveDock || self == .leftOfDock || self == .rightOfDock }
+    var isFullWidth: Bool { self != .aboveDock }
+    var followsDock: Bool { self == .aboveDock || self == .leftOfDock || self == .rightOfDock || self == .besideDock }
 }
 
 // MARK: - Бегущая строка
@@ -69,6 +70,8 @@ final class TickerView: NSView {
     var theme = TickerTheme.all[0] { didSet { rebuild() } }
     var fontSize: CGFloat = 14 { didSet { rebuild() } }
     var cornerRadius: CGFloat = 0 { didSet { needsDisplay = true } }
+    /// Вырез под Dock (в координатах полосы): там фона и текста нет.
+    var cutout: NSRect? { didSet { needsDisplay = true } }
 
     private var tracking: NSTrackingArea?
     private var lastItems: [Headline] = []
@@ -150,6 +153,10 @@ final class TickerView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         theme.background.setFill()
         let bg = NSBezierPath(roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius)
+        if let c = cutout {
+            bg.append(NSBezierPath(roundedRect: c, xRadius: 12, yRadius: 12))
+            bg.windingRule = .evenOdd
+        }
         bg.fill()
         guard !segments.isEmpty else { return }
 
@@ -222,6 +229,8 @@ final class TickerPanel {
     let ticker: TickerView
     var position: TickerPosition = .underMenuBar
     var size: TickerSize = TickerSize.all[1]
+    /// Вырез под Dock в экранных координатах — там клики всегда уходят в Dock.
+    var cutoutInScreen: NSRect?
 
     init() {
         window = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
@@ -266,31 +275,48 @@ final class TickerPanel {
                 rect = NSRect(x: f.midX - w / 2, y: vf.minY + margin, width: w, height: h)
             }
         case .leftOfDock:
+            // От левого края экрана до Dock, на всю высоту Dock.
             if let d = dock {
-                let x = f.minX + margin
-                rect = NSRect(x: x, y: d.midY - h / 2, width: max(160, d.minX - margin - x), height: h)
+                let dh = max(h, d.maxY - f.minY)
+                rect = NSRect(x: f.minX, y: f.minY, width: max(160, d.minX - margin - f.minX), height: dh)
             } else {
-                rect = NSRect(x: f.minX + margin, y: vf.minY + margin, width: f.width * 0.3, height: h)
+                rect = NSRect(x: f.minX, y: f.minY, width: f.width * 0.3, height: h)
             }
         case .rightOfDock:
             if let d = dock {
+                let dh = max(h, d.maxY - f.minY)
                 let x = d.maxX + margin
-                rect = NSRect(x: x, y: d.midY - h / 2, width: max(160, f.maxX - margin - x), height: h)
+                rect = NSRect(x: x, y: f.minY, width: max(160, f.maxX - x), height: dh)
             } else {
                 let w = f.width * 0.3
-                rect = NSRect(x: f.maxX - margin - w, y: vf.minY + margin, width: w, height: h)
+                rect = NSRect(x: f.maxX - w, y: f.minY, width: w, height: h)
+            }
+        case .besideDock:
+            // Во всю ширину на уровне Dock; сам Dock — вырез, строка проходит «за» ним.
+            if let d = dock {
+                rect = NSRect(x: f.minX, y: f.minY, width: f.width, height: max(h, d.maxY - f.minY))
+            } else {
+                rect = NSRect(x: f.minX, y: f.minY, width: f.width, height: h)
             }
         }
         rect = rect.integral
         if window.frame != rect { window.setFrame(rect, display: true) }
         ticker.frame = NSRect(origin: .zero, size: rect.size)
         ticker.cornerRadius = position.isFullWidth ? 0 : min(10, h * 0.35)
+        if position == .besideDock, let d = dock {
+            ticker.cutout = NSRect(x: d.minX - margin - rect.minX, y: -20,
+                                   width: d.width + margin * 2, height: rect.height + 40)
+        } else {
+            ticker.cutout = nil
+        }
+        cutoutInScreen = ticker.cutout.map { NSRect(x: $0.minX + rect.minX, y: rect.minY, width: $0.width, height: rect.height) }
         if ticker.fontSize != size.fontSize { ticker.fontSize = size.fontSize }
     }
 
     /// Клики проходят насквозь, пока не зажат ⌥ — так полоса не мешает окнам под ней.
     func updateClickThrough() {
-        let option = NSEvent.modifierFlags.contains(.option)
+        var option = NSEvent.modifierFlags.contains(.option)
+        if let c = cutoutInScreen, c.contains(NSEvent.mouseLocation) { option = false }
         if window.ignoresMouseEvents == option { window.ignoresMouseEvents = !option }
         if !option && ticker.hovering { ticker.hovering = false; NSCursor.arrow.set() }
     }

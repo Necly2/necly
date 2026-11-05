@@ -215,6 +215,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(submenu("Цвета", TickerTheme.all.map { $0.name },
                              selected: defaults.integer(forKey: "theme"), action: #selector(setTheme(_:))))
 
+        if !AXIsProcessTrusted() {
+            menu.addItem(item("   Точнее определять Dock…", #selector(askAccessibility)))
+        }
+
         let pause = item("Пауза", #selector(togglePause))
         pause.state = panel.ticker.paused ? .on : .off
         menu.addItem(pause)
@@ -307,6 +311,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func togglePause() { panel.ticker.paused.toggle() }
+
+    @objc func askAccessibility() {
+        let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
+    }
 
     @objc func toggleVisible() {
         let v = !defaults.bool(forKey: "visible")
