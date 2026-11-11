@@ -243,7 +243,7 @@ async function run(files, ctx) {
   }
   writeJson(journalPath(outDir), j);
 
-  const reason = stoppedByUser ? 'остановлено вручную' : blockedGaveUp ? 'Ozon ограничил запросы — часть адресов не проверена, нажмите «Проверить» позже' : 'проверка завершена';
+  const reason = stoppedByUser ? 'остановлено вручную' : blockedGaveUp ? 'Ozon ограничил запросы — часть адресов не проверена, нажмите «Продолжить проверку»' : 'проверка завершена';
   return { ok: true, reason, saved, errors, stats, manual, odd, files: data.length, addresses: total };
 }
 

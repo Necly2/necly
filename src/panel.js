@@ -351,7 +351,7 @@ async function loadResults() {
   $('rZone').innerHTML = '<option value="">все зоны</option>' + zones.map(z => `<option${z === cur ? ' selected' : ''}>${esc(z)}</option>`).join('');
   if (!R.map) {
     R.map = L.map('rMap', { zoomControl: true, attributionControl: true }).setView([55.75, 37.62], 10);
-    const tiles = () => L.tileLayer(`https://{s}.basemaps.cartocdn.com/${document.documentElement.dataset.theme === 'light' ? 'light_all' : 'dark_all'}/{z}/{x}/{y}{r}.png`, { attribution: '© OpenStreetMap © CARTO', subdomains: 'abcd', maxZoom: 19 });
+    const tiles = () => L.tileLayer('https://tile{s}.maps.2gis.com/tiles?x={x}&y={y}&z={z}&v=1', { attribution: '© 2ГИС', subdomains: '0123', maxZoom: 18 });
     R.tiles = tiles().addTo(R.map);
     window.addEventListener('pvz-theme', () => { R.map.removeLayer(R.tiles); R.tiles = tiles().addTo(R.map); });
     R.layer = L.layerGroup().addTo(R.map);

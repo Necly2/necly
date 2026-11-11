@@ -491,3 +491,6 @@ details.fold .chk-list li,details.fold .save-row{background:var(--card2)}
 .wz-step .lead{margin-bottom:14px}
 .scen-inline{display:flex;align-items:center;gap:10px;margin-bottom:4px}
 .scen-inline select{width:auto;min-width:220px}
+
+/* карта: тёмная тема — инверсия светлых тайлов 2ГИС */
+html[data-theme="dark"] .leaflet-tile-pane{filter:invert(.92) hue-rotate(180deg) brightness(.92) contrast(.88) saturate(.6)}
