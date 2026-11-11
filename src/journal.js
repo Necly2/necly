@@ -15,6 +15,7 @@ function addHistory(entry) {
     const h = readHistory();
     h.unshift(Object.assign({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), time: new Date().toISOString() }, entry));
     fs.writeFileSync(histPath(), JSON.stringify(h.slice(0, MAX_HIST), null, 1));
+    try { require('./trace').log('итог', `${entry.type || ''} ${entry.site || ''} ${entry.title || ''} — ${entry.ok === false ? 'ОШИБКА ' : ''}${entry.reason || ''}${entry.total != null ? ', объявлений ' + entry.total : ''}`); } catch {}
   } catch (e) { logError('история', e); }
 }
 
@@ -22,6 +23,7 @@ function logError(where, err) {
   try {
     const msg = err && err.stack ? err.stack : String(err && err.message || err);
     const line = `${new Date().toISOString()} [${where}] ${msg}\n`;
+    try { require('./trace').log('ОШИБКА ' + where, msg); } catch {}
     let old = ''; try { old = fs.readFileSync(errPath(), 'utf8'); } catch {}
     let all = old + line;
     if (all.length > MAX_LOG) all = all.slice(all.length - MAX_LOG / 2);

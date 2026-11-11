@@ -136,12 +136,20 @@ async function run(files, ctx) {
     status(`Открываю карту Ozon… (адресов к проверке: ${todo.length}${total > todo.length ? `, из кэша: ${total - todo.length}` : ''})`, { done: 0, total: todo.length });
     await wc.loadURL(OZON_URL).catch(() => {});
     await sleep(4000);
-    const test = async () => { try { return await J(`fetch(${JSON.stringify(TEST)}, {headers:{Accept:'application/json'}}).then(r => r.status).catch(() => 0)`); } catch { return 0; } };
+    const lg = ctx.log || (() => {});
+    const test = async () => {
+      try {
+        const r = await J(`fetch(${JSON.stringify(TEST)}, {headers:{Accept:'application/json'}}).then(async r => ({ s: r.status, b: r.status === 200 ? '' : (await r.text()).slice(0, 400) })).catch(e => ({ s: 0, b: String(e) }))`);
+        lg(`проверка доступа к API: ${r.s}${r.b ? ' ответ: ' + r.b.replace(/\s+/g, ' ') : ''}`);
+        return r.s;
+      } catch (e) { lg('проверка доступа: ' + e.message); return 0; }
+    };
     let st = await test();
     let waits = 0;
     const waitMin = Math.max(1, cfg.ozonWait || 25), tries = Math.max(1, cfg.ozonTries || 3);
     const waitBlock = async () => {
       waits++;
+      lg(`Ozon ограничил запросы — ожидание ${waitMin} мин, попытка ${waits} из ${tries}`);
       if (waits > tries) return false;
       while (true) {
         const until = new Date(Date.now() + waitMin * 60e3);
@@ -188,6 +196,7 @@ async function run(files, ctx) {
         status(`Проверено ${done} из ${todo.length}` + (eta !== null ? ` · осталось ~${eta} мин` : '') + (p.failed ? ` · без ответа ${p.failed}` : ''), { done, total: todo.length });
         if (Date.now() - lastSave > 30000) { await merge(); lastSave = Date.now(); }
         if (p.stopped && p.blocked) {
+          lg(`страница остановила очередь: подряд без ответа (вероятно, 404) — проверено ${done} из ${todo.length}, без ответа ${p.failed || 0}`);
           await merge();
           if (await waitBlock()) { await J(`__delay(${Math.max(pauseMs, 2500)}); __resume(1); 1`); continue; }
           if (isStopped()) stoppedByUser = true; else blockedGaveUp = true;

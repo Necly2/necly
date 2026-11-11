@@ -6,6 +6,7 @@
   "author": "Necly2",
   "license": "UNLICENSED",
   "dependencies": {
+    "adm-zip": "^0.5.18",
     "exceljs": "^4.4.0",
     "leaflet": "^1.9.4",
     "pngjs": "^7.0.0",

@@ -1,5 +1,6 @@
 // PVZ Master — слева панель управления, справа окно сайта (Winner, Циан, Авито) и скрытые вкладки карт Ozon и WB.
 const { app, BrowserWindow, WebContentsView, ipcMain, dialog, shell, Menu, net, clipboard } = require('electron');
+const trace = require('./trace');
 const IS_MAC = process.platform === 'darwin';
 const path = require('path');
 const fs = require('fs');
@@ -12,6 +13,7 @@ const platforms = require('./platforms');
 const journal = require('./journal');
 const results = require('./results');
 const scheduler = require('./scheduler');
+app.on('before-quit', () => trace.flush());
 process.on('uncaughtException', e => journal.logError('программа', e));
 process.on('unhandledRejection', e => journal.logError('программа (promise)', e));
 
@@ -87,6 +89,8 @@ function createWindow() {
   wbView = new WebContentsView({ webPreferences: { partition: 'persist:wb', contextIsolation: true, backgroundThrottling: false } });
   win.contentView.addChildView(wbView); wbView.setVisible(false);
   wbView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  trace.cleanup(); trace.log('программа', `запуск, сборка ${updater.currentBuild()}, ${process.platform} ${process.arch}`);
+  trace.watch('persist:avito', 'сайт'); trace.watch('persist:ozon', 'Ozon'); trace.watch('persist:wb', 'WB');
   layout();
   win.on('resize', layout);
   // ссылки «в новой вкладке» открываем в том же окне
@@ -95,7 +99,11 @@ function createWindow() {
   view.webContents.on('did-navigate-in-page', (_e, url) => send('url', url));
 }
 
-const send = (ch, data) => win && !win.isDestroyed() && win.webContents.send(ch, data);
+const send = (ch, data) => {
+  if (ch === 'status') trace.status(currentSite || 'выгрузка', data);
+  else if (ch === 'ozonStatus' && data && data.text) trace.status('проверка', data.text);
+  return win && !win.isDestroyed() && win.webContents.send(ch, data);
+};
 
 function nextIndex(dir, dd) {
   let max = 0;
@@ -300,9 +308,9 @@ async function pumpOzon() {
         const status = (text, extra) => send('ozonStatus', Object.assign({ text, running: true }, extra || {}));
         if (p.key === 'ozon') {
           results.push(Object.assign({ kind: 'ozon', label: 'Ozon' }, await ozon.run(files, {
-            wc: ozonView.webContents, cfg, cachePath: path.join(app.getPath('userData'), 'ozon_cache.json'), status, isStopped: () => ozonStop, takeSkip: () => { const v = ozonSkip; ozonSkip = false; return v; } })));
+            wc: ozonView.webContents, cfg, log: m => trace.log('Ozon', m), cachePath: path.join(app.getPath('userData'), 'ozon_cache.json'), status, isStopped: () => ozonStop, takeSkip: () => { const v = ozonSkip; ozonSkip = false; return v; } })));
         } else {
-          let fetchFn = u => net.fetch(u);
+          let fetchFn = trace.wrapFetch(u => net.fetch(u), p.key === 'wb' ? 'WB' : 'Яндекс');
           if (p.key === 'wb') {
             status('Wildberries: открываю карту map.wb.ru…');
             if (!(await ensureWb())) { results.push({ kind: 'wb', label: 'Wildberries', reason: 'карта WB не ответила — откройте вкладку позже и повторите', saved: [], errors: [], stats: {}, main: 0, excluded: 0, unchecked: 0, manual: [], files: files.length, addresses: 0 }); continue; }
@@ -351,7 +359,16 @@ ipcMain.handle('ozonStart', (_e, paths, opts) => {
   enqueueOzon(paths); return { ok: true };
 });
 ipcMain.handle('ozonStop', () => { ozonStop = true; return true; });
-ipcMain.handle('ozonNow', () => { ozonSkip = true; return true; });
+ipcMain.handle('ozonNow', () => { ozonSkip = true; trace.log('проверка', 'нажато «Попробовать сейчас»'); return true; });
+ipcMain.handle('openLogs', () => { fs.mkdirSync(trace.dir(), { recursive: true }); return shell.openPath(trace.dir()); });
+ipcMain.handle('makeReport', async () => {
+  const d = new Date(), name = `PVZ-Master-отчёт-${d.toISOString().slice(0, 10)}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}.zip`;
+  const r = await dialog.showSaveDialog(win, { title: 'Сохранить отчёт для разбора', defaultPath: path.join(app.getPath('desktop'), name), filters: [{ name: 'ZIP', extensions: ['zip'] }] });
+  if (r.canceled || !r.filePath) return null;
+  trace.makeReport(r.filePath, journal.report(updater.currentBuild()));
+  shell.showItemInFolder(r.filePath);
+  return r.filePath;
+});
 ipcMain.handle('ozonClearCache', () => {
   const p = path.join(app.getPath('userData'), 'ozon_cache.json');
   let n = 0; try { n = Object.keys(JSON.parse(fs.readFileSync(p, 'utf8'))).length; fs.unlinkSync(p); } catch {}

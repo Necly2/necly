@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('pvz', {
   errors: () => ipcRenderer.invoke('errors'),
   clearErrors: () => ipcRenderer.invoke('clearErrors'),
   copyReport: () => ipcRenderer.invoke('copyReport'),
+  makeReport: () => ipcRenderer.invoke('makeReport'),
+  openLogs: () => ipcRenderer.invoke('openLogs'),
   logError: (w, m) => ipcRenderer.invoke('logError', w, m),
   openFile: p => ipcRenderer.invoke('openFile', p),
   showFile: p => ipcRenderer.invoke('showFile', p),

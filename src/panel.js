@@ -437,6 +437,8 @@ async function loadHistory() {
 $('hList').addEventListener('click', e => { const a = e.target.closest('a[data-file]'); if (a) pvz.showFile(a.dataset.file); });
 $('hReload').onclick = () => loadHistory();
 $('eCopy').onclick = async () => { await pvz.copyReport(); $('eMsg').textContent = 'Скопировано — вставьте в чат с Claude (Ctrl+V).'; };
+$('eZip').onclick = async () => { const f = await pvz.makeReport(); if (f) $('eMsg').textContent = 'Архив сохранён: ' + f; };
+$('eLogs').onclick = () => pvz.openLogs();
 $('eClear').onclick = async () => { await pvz.clearErrors(); loadHistory(); };
 
 // ---------- Расписание ----------
