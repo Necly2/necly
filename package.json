@@ -1,0 +1,16 @@
+{
+  "name": "pvz-avito",
+  "version": "1.0.0",
+  "description": "PVZ Avito — выгрузка объявлений Авито в Excel для проекта PVZ",
+  "main": "src/main.js",
+  "author": "Necly2",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^45.3.0"
+  },
+  "productName": "PVZ Avito"
+}
