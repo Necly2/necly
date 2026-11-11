@@ -514,3 +514,10 @@ html[data-theme="dark"] .leaflet-tile-pane{filter:invert(.92) hue-rotate(180deg)
 .r-table tr.marked{background:color-mix(in srgb,var(--accent) 9%,transparent)}
 .r-table tr.marked td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 .r-table tbody tr.marked:hover{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+
+.r-table th,.r-table td{padding-left:8px;padding-right:8px}
+.r-table th.num-c,.r-table td.num-c{width:30px;text-align:right;color:var(--muted);padding-right:4px;font-variant-numeric:tabular-nums}
+.r-table .addr{max-width:none;min-width:150px}
+.r-table small.pay{display:block;color:var(--muted);font-size:11px}
+.r-table a.open{font-size:12px}
+.r-table-wrap{overflow-x:hidden;overflow-y:auto}

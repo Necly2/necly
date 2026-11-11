@@ -390,11 +390,11 @@ function renderResults(fit) {
   const shown = list.slice(0, 1000);
   $('rCount').textContent = `${fmtNum(list.length)} из ${fmtNum(R.rows.length)}`;
   const area = x => x.areaMin == null ? '' : (x.areaMax && x.areaMax !== x.areaMin ? `${fmtNum(x.areaMin)}–${fmtNum(x.areaMax)}` : fmtNum(x.areaMin)) + ' м²';
-  $('rRows').innerHTML = shown.map(x => `<tr data-id="${x.id}"${x.mark ? ' class="marked"' : ''}>
-    <td>${esc(x.platform)}</td>
+  $('rRows').innerHTML = shown.map((x, i) => `<tr data-id="${x.id}"${x.mark ? ' class="marked"' : ''}>
+    <td class="num-c">${i + 1}</td><td>${esc(x.platform)}</td>
     <td><span class="zb"><i style="background:${zoneColor(x)}"></i>${esc(x.zone)}</span></td>
     <td class="addr">${esc(x.address)}${x.metro ? `<small>${esc(x.metro)}</small>` : ''}${x.note ? `<small>${esc(x.note)}</small>` : ''}</td>
-    <td class="n">${area(x)}</td><td class="n">${x.price != null ? fmtNum(x.price) + ' ₽' : ''}</td><td class="n">${x.money ? fmtNum(x.money) + ' ₽' : ''}</td>
+    <td class="n">${area(x)}</td><td class="n">${x.price != null ? fmtNum(x.price) + ' ₽' : ''}${x.money ? `<small class="pay">выплата ${fmtNum(x.money)} ₽</small>` : ''}</td>
     <td>${fmtTime(x.checked)}</td><td>${x.url ? '<a class="open" href="#">Открыть ↗</a>' : ''}</td><td class="mk"><label class="mbox"><input type="checkbox"${x.mark ? ' checked' : ''}><span></span></label></td></tr>`).join('');
   $('rMore').textContent = list.length > shown.length ? `Показаны первые ${fmtNum(shown.length)} — уточните фильтры.` : (list.length ? '' : 'Ничего не найдено — измените фильтры или день.');
   R.layer.clearLayers(); R.markers.clear();
