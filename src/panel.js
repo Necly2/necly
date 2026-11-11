@@ -1,19 +1,25 @@
 const $ = id => document.getElementById(id);
 const F = ['pages', 'delay', 'days', 'part'];
-let lastDir = '';
+const lastDirs = {};
 
 async function init() {
   const c = await pvz.getCfg();
   F.forEach(k => ($(k).value = c[k]));
   $('root').textContent = c.root;
+  $('cianRoot').textContent = c.cianRoot;
+  $('cianOnlyNew').checked = c.cianOnlyNew !== false;
 }
 init();
 
 $('back').onclick = () => pvz.nav('back');
-$('home').onclick = () => pvz.nav('home');
+$('avito').onclick = () => pvz.nav('avito');
+$('cian').onclick = () => pvz.nav('cian');
 $('reload').onclick = () => pvz.nav('reload');
-$('pick').onclick = async () => { const c = await pvz.pickFolder(); $('root').textContent = c.root; };
-$('open').onclick = () => pvz.openFolder(lastDir || undefined);
+$('pick').onclick = async () => { const c = await pvz.pickFolder('avito'); $('root').textContent = c.root; };
+$('pickC').onclick = async () => { const c = await pvz.pickFolder('cian'); $('cianRoot').textContent = c.cianRoot; };
+$('open').onclick = () => pvz.openFolder(lastDirs.avito || $('root').textContent);
+$('openC').onclick = () => pvz.openFolder(lastDirs.cian || $('cianRoot').textContent);
+$('cianOnlyNew').onchange = () => pvz.setCfg({ cianOnlyNew: $('cianOnlyNew').checked });
 pvz.onUrl(u => ($('url').textContent = u));
 pvz.onStatus(s => ($('status').textContent = s));
 
@@ -30,8 +36,9 @@ $('go').onclick = async () => {
   const r = await pvz.start(c);
   $('go').disabled = false; $('stop').style.display = 'none';
   if (!r.ok) { $('status').innerHTML = '<span class="warn">Ошибка: ' + r.error.replace(/</g, '&lt;') + '</span>'; return; }
-  lastDir = r.dir;
-  let t = `Готово: ${r.reason}.\nОбъявлений: ${r.total}, с координатами: ${r.withCoords}.`;
+  if (r.dir) lastDirs[r.site] = r.dir;
+  let t = `${r.site === 'cian' ? 'Циан' : 'Авито'} — готово: ${r.reason}.\nОбъявлений: ${r.total}, с координатами: ${r.withCoords}.`;
+  if (r.extra) t += '\n' + r.extra;
   t += r.saved.length ? `\nСохранено файлов: ${r.saved.length}\n` + r.saved.map(f => f.split(/[\\/]/).pop()).join('\n') : '\nНичего не сохранено.';
   if (r.total && r.withCoords < r.total * 0.8) t += '\n⚠ Координаты не у всех объявлений — сообщите Claude.';
   $('status').textContent = t;

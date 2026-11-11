@@ -2,7 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('pvz', {
   getCfg: () => ipcRenderer.invoke('getCfg'),
   setCfg: c => ipcRenderer.invoke('setCfg', c),
-  pickFolder: () => ipcRenderer.invoke('pickFolder'),
+  pickFolder: w => ipcRenderer.invoke('pickFolder', w),
   openFolder: p => ipcRenderer.invoke('openFolder', p),
   nav: w => ipcRenderer.invoke('nav', w),
   start: c => ipcRenderer.invoke('start', c),
