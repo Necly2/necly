@@ -408,7 +408,44 @@ function renderResults(fit) {
   }
   if (fit && pts.length) R.map.fitBounds(pts, { padding: [30, 30], maxZoom: 14 });
 }
+// ---- карта Ozon по выбранному объявлению ----
+// что искать на карте Ozon: адрес, с которым сверялись при проверке (если Ozon уточнил его), иначе адрес объявления
+function ozQuery(x) {
+  const n = x.note || '';
+  let m = n.match(/\(Ozon: ([^)]+)\)/);
+  if (m) return m[1].trim();
+  m = n.match(/проверить вручную: ([^;]+)/);
+  if (m && !/нет номера дома|не нашёл дом|зелён|слой|контур/.test(m[1]) && /\d/.test(m[1])) return m[1].trim();
+  const a = x.address.trim();
+  return /москв|московск|область|г\.|город/i.test(a) ? a : 'Москва, ' + a;
+}
+const ozRect = () => { const b = $('rOzHost').getBoundingClientRect(); return { x: b.left, y: b.top, width: b.width, height: b.height }; };
+function setMapMode(m) {
+  R.ozon = m === 'ozon';
+  $('rMapMode').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
+  $('rMap').style.display = R.ozon ? 'none' : ''; $('rOzHost').style.display = R.ozon ? 'block' : 'none';
+  $('rOzReload').style.display = R.ozon ? '' : 'none';
+  if (!R.ozon) { pvz.ozonMapRect(null); $('rOzQ').textContent = ''; setTimeout(() => R.map && R.map.invalidateSize(), 30); return; }
+  const x = R.sel != null ? R.rows[R.sel] : null;
+  if (!x) { pvz.ozonMapRect(null); $('rOzQ').textContent = 'Выберите объявление в таблице'; return; }
+  showOnOzon(x);
+}
+async function showOnOzon(x) {
+  const q = ozQuery(x);
+  $('rOzQ').textContent = 'Ищу: ' + q;
+  await new Promise(r => requestAnimationFrame(r));
+  const res = await pvz.ozonMapShow(ozRect(), q);
+  if (!R.ozon || R.rows[R.sel] !== x) return;
+  if (res && res.ok) $('rOzQ').textContent = q + (res.how === 'enter' ? ' (подсказка не появилась — нажат Enter)' : '');
+  else { $('rOzQ').textContent = 'Не удалось ввести адрес (' + ((res && res.why) || 'ошибка') + ') — он скопирован, вставьте в поиск Ctrl+V'; navigator.clipboard && navigator.clipboard.writeText(q).catch(() => {}); }
+}
+$('rMapMode').querySelectorAll('button').forEach(b => (b.onclick = () => setMapMode(b.dataset.m)));
+$('rOzReload').onclick = async () => { await pvz.ozonMapReload(); const x = R.rows[R.sel]; if (x) setTimeout(() => showOnOzon(x), 1500); };
+new ResizeObserver(() => { if (R.ozon && document.body.dataset.mode === 'results' && R.sel != null) pvz.ozonMapRect(ozRect()); }).observe($('rOzHost'));
+new MutationObserver(() => { if (document.body.dataset.mode !== 'results' && R.ozon) setMapMode('res'); }).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
 function selectRow(id, fly) {
+  R.sel = id;
+  if (R.ozon) showOnOzon(R.rows[id]);
   document.querySelectorAll('#rRows tr.sel').forEach(t => t.classList.remove('sel'));
   const tr = document.querySelector(`#rRows tr[data-id="${id}"]`);
   if (tr) { tr.classList.add('sel'); if (!fly) tr.scrollIntoView({ block: 'nearest' }); }

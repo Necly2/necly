@@ -71,7 +71,12 @@
     <div class="r-table-wrap"><table class="r-table"><thead><tr>
       <th class="num-c">№</th><th data-k="platform">Площадка</th><th data-k="zone">Зона</th><th data-k="address">Адрес</th><th data-k="areaMin" class="n">Площадь</th><th data-k="price" class="n">Цена</th><th data-k="checked">Проверено</th><th></th><th class="mk" data-k="mark" title="Отмеченные — щёлкните, чтобы отсортировать">✓</th>
     </tr></thead><tbody id="rRows"></tbody></table><div class="hint" id="rMore"></div></div>
-    <div class="r-map" id="rMap"></div>
+    <div class="r-mapcol">
+      <div class="r-maptools"><div class="o-seg" id="rMapMode"><button data-m="res" class="on">Карта результатов</button><button data-m="ozon">Карта Ozon</button></div>
+        <span class="hint grow" id="rOzQ"></span><button class="ghost sm" id="rOzReload" title="Перезагрузить карту Ozon" style="display:none">↻</button></div>
+      <div class="r-map" id="rMap"></div>
+      <div class="r-map oz-host" id="rOzHost"><div class="oz-wait">Загружаю карту Ozon…</div></div>
+    </div>
   </div>
 </section>
 

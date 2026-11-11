@@ -359,6 +359,79 @@ ipcMain.handle('ozonStart', (_e, paths, opts) => {
   enqueueOzon(paths); return { ok: true };
 });
 ipcMain.handle('ozonStop', () => { ozonStop = true; return true; });
+// ---------- карта Ozon для выбранного объявления (вкладка «Результаты») ----------
+let mapView = null, mapReady = null, mapSeq = 0;
+function ensureMapView() {
+  if (mapView) return;
+  mapView = new WebContentsView({ webPreferences: { partition: 'persist:ozon', contextIsolation: true, backgroundThrottling: false } });
+  win.contentView.addChildView(mapView); mapView.setVisible(false);
+  mapView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mapReady = mapView.webContents.loadURL(ozon.OZON_URL).catch(() => {});
+}
+const FIND_INPUT = `(async () => {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const vis = e => { const r = e.getBoundingClientRect(); return r.width > 40 && r.height > 10 && r.bottom > 0 && getComputedStyle(e).visibility !== 'hidden'; };
+  let inp = null, all = [];
+  for (let i = 0; i < 40 && !inp; i++) {
+    all = [...document.querySelectorAll('input:not([type=hidden]):not([type=checkbox]):not([type=radio]),textarea')].filter(vis);
+    inp = all.find(e => /адрес|поиск|найти|search|город|улиц/i.test((e.placeholder || '') + ' ' + (e.getAttribute('aria-label') || '') + ' ' + (e.name || ''))) || all[0];
+    if (!inp) await sleep(500);
+  }
+  if (!inp) return { ok: false, why: 'на странице нет поля поиска', title: document.title, url: location.href };
+  inp.scrollIntoView({ block: 'center' }); inp.focus(); inp.select && inp.select();
+  const r = inp.getBoundingClientRect();
+  return { ok: true, x: r.left + r.width / 2, y: r.top + r.height / 2, ph: inp.placeholder || inp.getAttribute('aria-label') || '', n: all.length };
+})()`;
+const FIND_OPTION = q => `(async () => {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const vis = e => { const r = e.getBoundingClientRect(); return r.width > 40 && r.height > 12 && r.bottom > 0 && r.top < innerHeight && getComputedStyle(e).visibility !== 'hidden'; };
+  const inp = document.activeElement;
+  for (let i = 0; i < 20; i++) {
+    await sleep(400);
+    const ok = e => vis(e) && e !== inp && !(inp && inp.contains(e)) && e.textContent.trim().length > 3 && e.children.length < 12;
+    let c = [...document.querySelectorAll('[class*=listItem], [class*=list-item], [role=option]')].filter(ok);
+    if (!c.length) c = [...document.querySelectorAll('[role=listbox] > *, [class*=uggest] li, [class*=uggest] [class*=tem], [class*=listContent] > *')].filter(ok);
+    if (c.length) { const e = c[0], r = e.getBoundingClientRect(); return { ok: true, x: r.left + Math.min(r.width / 2, 120), y: r.top + r.height / 2, text: e.textContent.trim().slice(0, 140), n: c.length }; }
+  }
+  return { ok: false };
+})()`;
+function clickAt(wc, x, y) {
+  for (const type of ['mouseMove', 'mouseDown', 'mouseUp']) wc.sendInputEvent({ type, x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 });
+}
+ipcMain.handle('ozonMapRect', (_e, rect) => {
+  if (!mapView) return;
+  if (rect && rect.width > 50) { mapView.setBounds({ x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) }); mapView.setVisible(true); }
+  else mapView.setVisible(false);
+});
+ipcMain.handle('ozonMapShow', async (_e, rect, q) => {
+  const seq = ++mapSeq;
+  ensureMapView();
+  if (rect) { mapView.setBounds({ x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) }); mapView.setVisible(true); }
+  const wc = mapView.webContents;
+  trace.log('карта Ozon', 'поиск: ' + q);
+  try {
+    await mapReady;
+    if (/antibot|challenge/i.test(wc.getTitle()) || !/pvz-map\.ozon\.ru/.test(wc.getURL())) { await new Promise(r => setTimeout(r, 4000)); }
+    const f = await wc.executeJavaScript(FIND_INPUT, true);
+    if (seq !== mapSeq) return { ok: false, why: 'отменено' };
+    trace.log('карта Ozon', 'поле поиска: ' + JSON.stringify(f));
+    if (!f.ok) return { ok: false, why: f.why };
+    clickAt(wc, f.x, f.y);
+    await new Promise(r => setTimeout(r, 200));
+    await wc.executeJavaScript(`(() => { const e = document.activeElement; if (e && 'value' in e) { e.select && e.select(); } return 1; })()`, true);
+    wc.sendInputEvent({ type: 'keyDown', keyCode: 'A', modifiers: [process.platform === 'darwin' ? 'meta' : 'control'] });
+    wc.sendInputEvent({ type: 'keyUp', keyCode: 'A', modifiers: [process.platform === 'darwin' ? 'meta' : 'control'] });
+    wc.sendInputEvent({ type: 'keyDown', keyCode: 'Backspace' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Backspace' });
+    await wc.insertText(q);
+    const o = await wc.executeJavaScript(FIND_OPTION(q), true);
+    if (seq !== mapSeq) return { ok: false, why: 'отменено' };
+    trace.log('карта Ozon', 'подсказка: ' + JSON.stringify(o));
+    if (o.ok) { clickAt(wc, o.x, o.y); return { ok: true, how: 'suggest', text: o.text }; }
+    wc.sendInputEvent({ type: 'keyDown', keyCode: 'Return' }); wc.sendInputEvent({ type: 'char', keyCode: '\r' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Return' });
+    return { ok: true, how: 'enter' };
+  } catch (e) { trace.log('карта Ozon', 'ошибка: ' + e.message); return { ok: false, why: e.message }; }
+});
+ipcMain.handle('ozonMapReload', () => { if (mapView) { mapReady = mapView.webContents.loadURL(ozon.OZON_URL).catch(() => {}); } });
 ipcMain.handle('ozonNow', () => { ozonSkip = true; trace.log('проверка', 'нажато «Попробовать сейчас»'); return true; });
 ipcMain.handle('openLogs', () => { fs.mkdirSync(trace.dir(), { recursive: true }); return shell.openPath(trace.dir()); });
 ipcMain.handle('makeReport', async () => {
@@ -408,6 +481,13 @@ if (gotLock) app.whenReady().then(() => {
   scheduler.start(loadCfg, s => { journal.addHistory({ type: 'schedule', ok: true, title: s.name || s.preset || 'задание', reason: 'запуск по расписанию ' + s.time }); win.webContents.send('runSchedule', s); }); if (process.env.PVZ_DEBUG) console.log('PVZ main ready, exceljs', typeof require('exceljs').Workbook, 'build', updater.currentBuild());
   if (process.env.PVZ_SHOT) selfTest(process.env.PVZ_SHOT);
 });
+async function ozDump() {
+  const code = `(async()=>{const urls=new Set();performance.getEntriesByType('resource').filter(e=>/[.]js([?]|$)/.test(e.name)).forEach(e=>urls.add(e.name));[...document.scripts].forEach(s=>s.src&&urls.add(s.src));const out=[];for(const u of urls){try{out.push([u,await (await fetch(u)).text()])}catch(e){}}out.push(['html',document.documentElement.outerHTML]);return JSON.stringify(out)})()`;
+  const arr = JSON.parse(await mapView.webContents.executeJavaScript(code));
+  const d = process.env.PVZ_OZDUMP; fs.mkdirSync(d, { recursive: true });
+  arr.forEach(([u, t], k) => fs.writeFileSync(path.join(d, k + '_' + u.split('/').pop().replace(/[^\w.-]/g, '_').slice(0, 60) + '.txt'), u + '\n' + t));
+  console.log('SAVED', arr.length);
+}
 // самопроверка интерфейса (только для разработки): обходит экраны, пишет ошибки консоли и снимки окна
 async function selfTest(dir) {
   win.webContents.on('console-message', (_e, level, msg) => { if (level >= 2) console.log('RENDERER', msg); });
@@ -428,7 +508,15 @@ async function selfTest(dir) {
   await J(`document.querySelector('#oList .on') && document.querySelector('#oList .on').click(); 1`); await W8(300);
   await J(`$('wzNext').click(); 1`); await W8(900); await J(`document.querySelectorAll('#wzStep details.fold').forEach(d=>d.open=true); 1`); await W8(400); await shot('07-center');
   for (const page of ['results', 'history', 'schedule']) { await J(`openPage('${page}'); 1`); await W8(1800); await shot('08-' + page); }
-  if (process.env.PVZ_FAKE) { await J(`openPage('results'); 1`); await W8(1500); await J(`(()=>{const z=['голубой','синий','зелёный'];R.rows=Array.from({length:14},(_,i)=>({id:i,platform:'Ozon',zone:z[i%3],address:'Москва, ул. Тестовая, '+(i+1),metro:'м. Пример',note:'',areaMin:30+i,price:50000+i*5000,checked:Date.now()-Math.floor(i/3)*864e5,url:'https://x/'+i,lat:55.7+i*0.01,lon:37.5+i*0.01,mark:i%4===0?1:0}));renderDays();renderResults(true);})(); 1`); await W8(1500); await shot('09-results-fake'); }
+  if (process.env.PVZ_FAKE) {
+    await J(`openPage('results'); 1`); await W8(1500);
+    await J(`(()=>{const z=['голубой','синий','зелёный'];R.rows=Array.from({length:14},(_,i)=>({id:i,platform:'Ozon',zone:z[i%3],address:'Москва, ул. Тестовая, '+(i+1),metro:'м. Пример',note:'',areaMin:30+i,price:50000+i*5000,checked:Date.now()-Math.floor(i/3)*864e5,url:'https://x/'+i,lat:55.7+i*0.01,lon:37.5+i*0.01,mark:i%4===0?1:0}));renderDays();renderResults(true);})(); 1`);
+    await W8(1500); await shot('09-results-fake');
+    if (process.env.PVZ_OZMAP) {
+      await J(`selectRow(3,true); setMapMode('ozon'); 1`); await W8(30000); await shot('10-ozon-map');
+      if (mapView) { fs.writeFileSync(path.join(dir, '11-ozon-view.png'), (await mapView.webContents.capturePage()).toPNG()); if (process.env.PVZ_OZDUMP) await ozDump(); }
+    }
+  }
   console.log('SELFTEST DONE'); app.exit(0);
 }
 app.on('window-all-closed', () => { if (scheduler.isQuitting() || !loadCfg().tray) app.quit(); });
