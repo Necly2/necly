@@ -1,5 +1,6 @@
 // PVZ Avito — отдельное приложение: слева панель управления, справа окно Авито.
-const { app, BrowserWindow, WebContentsView, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, dialog, shell, Menu } = require('electron');
+const IS_MAC = process.platform === 'darwin';
 const path = require('path');
 const fs = require('fs');
 const XLSX = require('xlsx');
@@ -18,8 +19,10 @@ const START_URL = 'https://www.avito.ru/moskva/kommercheskaya_nedvizhimost/sdam-
 const WINNER_URL = 'https://w7.baza-winner.ru/';
 const CIAN_URL = 'https://www.cian.ru/cat.php?deal_type=rent&engine_version=2&offer_type=offices&office_type[0]=2&office_type[1]=4&office_type[2]=5&office_type[3]=12&region=1&minarea=24&maxarea=130&minfloor=1&maxfloor=1&minfloorn=3&sort=creation_date_desc';
 const MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
-const DEF_ROOT = path.join(app.getPath('home'), 'OneDrive', 'Desktop', 'PVZ', 'АДРЕСА');
-const DEF_CIAN = path.join(app.getPath('home'), 'OneDrive', 'Desktop', 'PVZ', 'АДРЕСА ЦИАН');
+// папка проекта: Windows — OneDrive\Desktop\PVZ, Mac — ~/Desktop/PVZ (можно выбрать в панели)
+const PVZ_BASE = IS_MAC ? path.join(app.getPath('home'), 'Desktop', 'PVZ') : path.join(app.getPath('home'), 'OneDrive', 'Desktop', 'PVZ');
+const DEF_ROOT = path.join(PVZ_BASE, 'АДРЕСА');
+const DEF_CIAN = path.join(PVZ_BASE, 'АДРЕСА ЦИАН');
 
 let win, view, running = false, stopFlag = false;
 const cfgPath = () => path.join(app.getPath('userData'), 'config.json');
@@ -41,7 +44,10 @@ function createWindow() {
     width: 1400, height: 900, minWidth: 980, minHeight: 640, title: 'PVZ', backgroundColor: '#0d0f13',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
   });
-  win.removeMenu();
+  if (IS_MAC) {
+    // на Mac меню нужно для ⌘C / ⌘V / ⌘Q
+    Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' }]));
+  } else win.removeMenu();
   win.loadFile(path.join(__dirname, 'panel.html'));
   win.setTitle(`PVZ · поиск помещений — сборка ${updater.currentBuild()}`);
   win.on('page-title-updated', e => e.preventDefault());
