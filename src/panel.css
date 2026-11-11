@@ -6,6 +6,7 @@
 body[data-site="winner"]{--accent:#F97316}
 body[data-site="cian"]{--accent:#14B8A6}
 body[data-site="avito"]{--accent:#3B82F6}
+body[data-site="ozon"]{--accent:#8B5CF6}
 
 *{box-sizing:border-box}
 html,body{height:100%}
@@ -27,15 +28,16 @@ body[data-mode="welcome"] #welcome{display:flex;align-items:center;justify-conte
 body[data-mode="work"] #work{display:flex}
 
 /* ---------- приветствие ---------- */
-.w-wrap{width:min(1080px,92vw);padding:48px 0;animation:rise .45s ease}
+.w-wrap{width:min(1240px,94vw);padding:48px 0;animation:rise .45s ease}
 @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 .w-head{display:flex;gap:20px;align-items:center;margin-bottom:36px}
 .logo{width:64px;height:64px;border-radius:18px;display:grid;place-items:center;font-weight:800;font-size:20px;letter-spacing:.5px;
   background:linear-gradient(135deg,#F97316,#14B8A6 55%,#3B82F6);color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.4)}
 h1{margin:0 0 6px;font-size:30px;font-weight:700;letter-spacing:-.3px}
 .w-head p{margin:0;font-size:14.5px;max-width:640px;line-height:1.5}
-.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-@media (max-width:900px){.cards{grid-template-columns:1fr}}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+@media (max-width:1250px){.cards{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:700px){.cards{grid-template-columns:1fr}}
 .card{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:12px;padding:24px;border-radius:20px;
   background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);position:relative;overflow:hidden;
   transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
@@ -64,7 +66,7 @@ h1{margin:0 0 6px;font-size:30px;font-weight:700;letter-spacing:-.3px}
 .seg{flex:1;display:flex;background:#0e1116;border:1px solid var(--line);border-radius:11px;padding:3px;gap:3px}
 .seg button{flex:1;border:0;background:transparent;border-radius:8px;color:var(--muted);font-weight:600;font-size:12.5px;transition:.15s}
 .seg button:hover{color:var(--text)}
-body[data-site="winner"] .seg [data-go="winner"],body[data-site="cian"] .seg [data-go="cian"],body[data-site="avito"] .seg [data-go="avito"]{
+body[data-site="winner"] .seg [data-go="winner"],body[data-site="cian"] .seg [data-go="cian"],body[data-site="avito"] .seg [data-go="avito"],body[data-site="ozon"] .seg [data-go="ozon"]{
   background:color-mix(in srgb,var(--accent) 22%,transparent);color:#fff;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 50%,transparent)}
 
 .scroll{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:10px}
@@ -98,7 +100,9 @@ input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,va
 .switch input:checked + span::after{left:18px;background:#fff}
 
 /* показывать блоки только для своего сайта */
-.only-avito,.only-cian,.only-winner{display:none !important}
+.only-avito,.only-cian,.only-winner,.only-ozon{display:none !important}
+body[data-site="ozon"] .only-ozon{display:flex !important}
+body[data-site="ozon"] .not-ozon{display:none !important}
 body[data-site="avito"] .only-avito,body[data-site="cian"] .only-cian,body[data-site="winner"] .only-winner{display:flex !important}
 body[data-site="avito"] details.only-avito,body[data-site="cian"] details.only-cian{display:block !important}
 p.hint.only-avito,p.hint.only-cian,p.hint.only-winner{display:none !important}
@@ -122,3 +126,13 @@ body[data-site="avito"] p.hint.only-avito,body[data-site="cian"] p.hint.only-cia
 .danger:hover{background:color-mix(in srgb,var(--danger) 12%,transparent)}
 .running .danger{display:block}
 .foot{text-align:center;font-size:11.5px;color:var(--muted)}
+
+.seg button{font-size:12px}
+.mini{display:none;margin:8px 12px 0;padding:7px 10px;border-radius:10px;font-size:12px;background:color-mix(in srgb,#8B5CF6 14%,transparent);border:1px solid color-mix(in srgb,#8B5CF6 40%,transparent);color:#ddd6fe;cursor:pointer}
+.mini.on{display:block}
+.files{display:flex;flex-direction:column;gap:4px;max-height:220px;overflow:auto}
+.file{display:flex;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:8px;background:#0e1116;border:1px solid var(--line);font-size:12px}
+.file b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file span{color:var(--muted);white-space:nowrap}
+.file.partial{border-color:color-mix(in srgb,#f59e0b 50%,var(--line))}
+.cnt{float:right;color:var(--accent);text-transform:none;letter-spacing:0}

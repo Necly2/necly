@@ -13,7 +13,7 @@
       <div class="logo">PVZ</div>
       <div>
         <h1>Поиск помещений под ПВЗ</h1>
-        <p class="muted">Выберите сайт — объявления выгрузятся в Excel в формате Baza Winner, с координатами, прямо в папки проекта.</p>
+        <p class="muted">Выберите сайт — объявления выгрузятся в Excel в формате Baza Winner, с координатами, прямо в папки проекта. Затем «Проверка Ozon» отметит подходящие зоны.</p>
       </div>
     </header>
 
@@ -48,6 +48,16 @@
         <ul class="chips"><li>свежесть в днях</li><li>цена → ₽/мес</li><li>по 300 строк</li></ul>
         <div class="card-foot"><span class="path">АДРЕСА / Месяц / Адреса ДД AVITO</span><span class="cta">Открыть →</span></div>
       </button>
+      <button class="card" data-go="ozon" style="--accent:#8B5CF6">
+        <div class="card-top">
+          <span class="ico"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></span>
+          <span class="badge">новое</span>
+        </div>
+        <h2>Проверка Ozon</h2>
+        <p>Новые выгрузки проверяются на карте ПВЗ Ozon — подходящие помещения в отдельные файлы с цветами зон.</p>
+        <ul class="chips"><li>зелёный ≥ 49 м²</li><li>синий · голубой</li><li>после выгрузки</li></ul>
+        <div class="card-foot"><span class="path">ПРОВЕРКА OZON / Месяц</span><span class="cta">Открыть →</span></div>
+      </button>
     </div>
 
     <footer class="w-foot">
@@ -66,13 +76,15 @@
       <button data-go="winner">Winner</button>
       <button data-go="cian">Циан</button>
       <button data-go="avito">Авито</button>
+      <button data-go="ozon">Ozon</button>
     </div>
   </div>
 
+  <div class="mini" id="ozonMini"></div>
   <div class="scroll">
     <div class="site-title"><span class="dot"></span><span id="siteName">—</span></div>
 
-    <div class="box">
+    <div class="box not-ozon">
       <div class="row2">
         <button class="ghost" id="back"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>Назад</button>
         <button class="ghost" id="reload"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>Обновить</button>
@@ -120,6 +132,28 @@
       <div class="path-line" id="cianRoot"></div>
       <div class="row2"><button class="ghost" id="pickC">Выбрать…</button><button class="ghost" id="openC">Открыть</button></div>
     </div>
+    <!-- Ozon -->
+    <div class="box only-ozon">
+      <div class="box-h">Новые выгрузки <span class="cnt" id="ozCount"></span></div>
+      <div class="files" id="ozFiles"><div class="hint">Ищу…</div></div>
+      <button class="ghost" id="ozRescan"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>Обновить список</button>
+      <p class="hint">Файлы export_excel… и avito… из папок АДРЕСА и АДРЕСА ЦИАН, которые ещё не проверялись. Справа — карта Ozon (проверка идёт и когда вы на других вкладках).</p>
+    </div>
+    <div class="box only-ozon">
+      <label class="switch"><input type="checkbox" id="ozonAuto"><span></span>Проверять сразу после выгрузки</label>
+      <div class="grid">
+        <label class="field">Файлы не старше, дн.<input id="ozonDays" type="number" min="1" max="60"></label>
+        <label class="field">Потоков<input id="ozonThreads" type="number" min="1" max="4"></label>
+        <label class="field">Пауза, с<input id="ozonPause" type="number" min="1" max="10"></label>
+      </div>
+      <p class="hint">Ozon ограничивает частые запросы: при блокировке программа сама подождёт 25 мин и продолжит.</p>
+    </div>
+    <div class="box only-ozon">
+      <div class="box-h">Папка результатов</div>
+      <div class="path-line" id="ozonOut"></div>
+      <div class="row2"><button class="ghost" id="pickO">Выбрать…</button><button class="ghost" id="openO">Открыть</button></div>
+      <p class="hint">Файлы: Месяц / OZON &lt;имя выгрузки&gt;.xlsx — только подходящие зоны, с цветами.</p>
+    </div>
   </div>
 
   <div class="bottom">
@@ -127,7 +161,7 @@
       <div class="bar"><i id="barFill"></i></div>
       <div id="status">Готово к работе.</div>
     </div>
-    <button class="primary" id="go"><svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>Выгрузить</button>
+    <button class="primary" id="go"><svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg><span id="goText">Выгрузить</span></button>
     <button class="danger" id="stop">Остановить и сохранить</button>
     <div class="foot">Сборка <b class="ver">?</b> · <a href="#" class="upd">Обновления</a></div>
   </div>

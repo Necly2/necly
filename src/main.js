@@ -7,6 +7,7 @@ const XLSX = require('xlsx');
 const { collector, cianCollector } = require('./collector');
 const updater = require('./updater');
 const winner = require('./winner');
+const ozon = require('./ozon');
 
 // убираем из User-Agent пометки Electron/приложения — остаётся обычная строка Chromium
 app.userAgentFallback = app.userAgentFallback
@@ -23,20 +24,27 @@ const MONTHS = ['Январь','Февраль','Март','Апрель','Ма�
 const PVZ_BASE = IS_MAC ? path.join(app.getPath('home'), 'Desktop', 'PVZ') : path.join(app.getPath('home'), 'OneDrive', 'Desktop', 'PVZ');
 const DEF_ROOT = path.join(PVZ_BASE, 'АДРЕСА');
 const DEF_CIAN = path.join(PVZ_BASE, 'АДРЕСА ЦИАН');
+const DEF_OZON = path.join(PVZ_BASE, 'ПРОВЕРКА OZON');
 
-let win, view, running = false, stopFlag = false;
+let win, view, ozonView, running = false, stopFlag = false;
+let currentSite = null, ozonRunning = false, ozonStop = false;
+const ozonQueue = [];
 const cfgPath = () => path.join(app.getPath('userData'), 'config.json');
 function loadCfg() {
-  const d = { root: DEF_ROOT, cianRoot: DEF_CIAN, pages: 40, delay: 4, days: 7, part: 300, cianOnlyNew: true };
+  const d = { root: DEF_ROOT, cianRoot: DEF_CIAN, ozonOut: DEF_OZON, ozonDays: 3, ozonThreads: 2, ozonPause: 2, ozonAuto: true,
+    pages: 40, delay: 4, days: 7, part: 300, cianOnlyNew: true };
   try { return Object.assign(d, JSON.parse(fs.readFileSync(cfgPath(), 'utf8'))); } catch { return d; }
 }
 function saveCfg(c) { fs.mkdirSync(path.dirname(cfgPath()), { recursive: true }); fs.writeFileSync(cfgPath(), JSON.stringify(c, null, 2)); }
 
 function layout() {
   const [w, h] = win.getContentSize();
-  if (mode === 'welcome') { view.setVisible(false); return; }
-  view.setVisible(true);
-  view.setBounds({ x: PANEL_W, y: 0, width: Math.max(100, w - PANEL_W), height: h });
+  const b = { x: PANEL_W, y: 0, width: Math.max(100, w - PANEL_W), height: h };
+  const showOzon = mode === 'work' && currentSite === 'ozon';
+  const showView = mode === 'work' && !showOzon;
+  view.setVisible(showView); ozonView.setVisible(showOzon);
+  if (showView) view.setBounds(b);
+  if (showOzon) ozonView.setBounds(b);
 }
 
 function createWindow() {
@@ -54,6 +62,10 @@ function createWindow() {
 
   view = new WebContentsView({ webPreferences: { partition: 'persist:avito', contextIsolation: true } });
   win.contentView.addChildView(view);
+  // отдельная вкладка карты Ozon: работает в фоне, пока вы выгружаете с других сайтов
+  ozonView = new WebContentsView({ webPreferences: { partition: 'persist:ozon', contextIsolation: true, backgroundThrottling: false } });
+  win.contentView.addChildView(ozonView);
+  ozonView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   layout();
   win.on('resize', layout);
   // ссылки «в новой вкладке» открываем в том же окне
@@ -111,8 +123,9 @@ function addSeen(cfg, ids) {
 ipcMain.handle('getCfg', () => loadCfg());
 ipcMain.handle('setCfg', (_e, c) => { const cur = Object.assign(loadCfg(), c); saveCfg(cur); return cur; });
 ipcMain.handle('pickFolder', async (_e, which) => {
-  const key = which === 'cian' ? 'cianRoot' : 'root';
-  const r = await dialog.showOpenDialog(win, { title: which === 'cian' ? 'Папка АДРЕСА ЦИАН' : 'Папка АДРЕСА проекта PVZ', properties: ['openDirectory', 'createDirectory'] });
+  const key = which === 'cian' ? 'cianRoot' : which === 'ozon' ? 'ozonOut' : 'root';
+  const title = which === 'cian' ? 'Папка АДРЕСА ЦИАН' : which === 'ozon' ? 'Папка для результатов проверки Ozon' : 'Папка АДРЕСА проекта PVZ';
+  const r = await dialog.showOpenDialog(win, { title, properties: ['openDirectory', 'createDirectory'] });
   if (r.canceled || !r.filePaths[0]) return loadCfg();
   const c = Object.assign(loadCfg(), { [key]: r.filePaths[0] }); saveCfg(c); return c;
 });
@@ -122,8 +135,13 @@ const SITE_RE = { avito: /avito\.ru/, cian: /cian\.ru/, winner: /baza-winner\.ru
 ipcMain.handle('nav', (_e, what) => {
   const wc = view.webContents;
   if (what === 'welcome') { mode = 'welcome'; layout(); return; }
+  if (what === 'ozon') {
+    mode = 'work'; currentSite = 'ozon'; layout();
+    if (!ozonView.webContents.getURL()) ozonView.webContents.loadURL(ozon.OZON_URL);
+    return;
+  }
   if (SITE_URL[what]) {
-    mode = 'work'; layout();
+    mode = 'work'; currentSite = what; layout();
     // на тот же сайт заново не грузим — остаёмся на текущей странице (например, в открытом заказе)
     if (!SITE_RE[what].test(wc.getURL())) wc.loadURL(SITE_URL[what]);
     else send('url', wc.getURL());
@@ -156,7 +174,8 @@ ipcMain.handle('start', async (_e, c) => {
       const m = url.match(/\/search\/([0-9a-f-]{36})/i);
       if (m && c.bw) { cfg.bwOrders = Object.assign({}, cfg.bwOrders, { [m[1]]: { tag: c.bw.tag, hide: c.bw.hide } }); saveCfg(cfg); }
       const r = await winner.run(view.webContents, cfg, c.bw || {}, st => send('status', st), () => stopFlag);
-      return Object.assign({ site, withCoords: r.total }, r);
+      const q = autoOzon(cfg, r.saved);
+      return Object.assign({ site, withCoords: r.total, ozonQueued: q }, r);
     } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
     finally { running = false; }
   }
@@ -178,12 +197,54 @@ ipcMain.handle('start', async (_e, c) => {
       out = saveRows(res.rows, cfg, site);
       if (site === 'cian' && res.ids) addSeen(cfg, res.ids);
     }
-    return { ok: true, site, reason: res.reason, extra: res.extra || '', total: res.rows.length, withCoords: res.withCoords, ...out };
+    const q = autoOzon(cfg, out.saved);
+    return { ok: true, site, reason: res.reason, extra: res.extra || '', total: res.rows.length, withCoords: res.withCoords, ozonQueued: q, ...out };
   } catch (e) {
     clearInterval(timer);
     return { ok: false, error: String(e && e.message || e) };
   } finally { running = false; }
 });
+
+// ---------- проверка Ozon ----------
+function autoOzon(cfg, files) {
+  if (!cfg.ozonAuto || !files || !files.length) return 0;
+  enqueueOzon(files); return files.length;
+}
+function enqueueOzon(paths) {
+  for (const p of paths) if (!ozonQueue.includes(p)) ozonQueue.push(p);
+  pumpOzon();
+}
+async function pumpOzon() {
+  if (ozonRunning) { send('ozonStatus', { text: `В очереди ещё файлов: ${ozonQueue.length}`, running: true, queued: ozonQueue.length }); return; }
+  ozonRunning = true; ozonStop = false;
+  try {
+    while (ozonQueue.length && !ozonStop) {
+      const cfg = loadCfg();
+      const files = ozonQueue.splice(0).map(p => { try { return { path: p, size: fs.statSync(p).size }; } catch { return null; } }).filter(Boolean);
+      if (!files.length) continue;
+      send('ozonStatus', { text: `Проверка Ozon: файлов ${files.length}…`, running: true });
+      const r = await ozon.run(files, {
+        wc: ozonView.webContents, cfg, cachePath: path.join(app.getPath('userData'), 'ozon_cache.json'),
+        status: (text, extra) => send('ozonStatus', Object.assign({ text, running: true }, extra || {})),
+        isStopped: () => ozonStop
+      });
+      send('ozonDone', r);
+    }
+  } catch (e) {
+    send('ozonDone', { ok: false, error: String(e && e.message || e) });
+  } finally { ozonRunning = false; ozonQueue.length = ozonStop ? 0 : ozonQueue.length; }
+}
+ipcMain.handle('ozonScan', () => {
+  const cfg = loadCfg();
+  const files = ozon.scan([cfg.root, cfg.cianRoot], cfg.ozonOut, cfg.ozonDays);
+  return { running: ozonRunning, files: files.map(f => ({ path: f.path, name: path.basename(f.path), folder: path.basename(path.dirname(f.path)), partial: f.partial })) };
+});
+ipcMain.handle('ozonStart', (_e, paths) => {
+  if (!paths || !paths.length) return { ok: false, error: 'Нет файлов для проверки' };
+  enqueueOzon(paths); return { ok: true };
+});
+ipcMain.handle('ozonStop', () => { ozonStop = true; return true; });
+ipcMain.handle('ozonState', () => ({ running: ozonRunning, queued: ozonQueue.length }));
 
 ipcMain.handle('checkUpdate', () => updater.check(win, { manual: true }));
 ipcMain.handle('version', () => updater.currentBuild());
