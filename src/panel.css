@@ -1,0 +1,124 @@
+:root{
+  --bg:#0d0f13; --panel:#12151b; --card:#171b22; --card2:#1c212a; --line:#262c37; --line2:#313846;
+  --text:#e8eaef; --muted:#8b93a3; --accent:#3B82F6; --danger:#ef4444; --ok:#22c55e;
+  --r:14px;
+}
+body[data-site="winner"]{--accent:#F97316}
+body[data-site="cian"]{--accent:#14B8A6}
+body[data-site="avito"]{--accent:#3B82F6}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:13.5px "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden;user-select:none}
+button{font:inherit;color:inherit;cursor:pointer}
+svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+.muted{color:var(--muted)}
+::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:#2a303b;border-radius:8px}
+
+/* ---------- режимы ---------- */
+#welcome{display:none;height:100vh;overflow:auto;background:
+  radial-gradient(900px 500px at 15% -10%,rgba(249,115,22,.10),transparent 60%),
+  radial-gradient(800px 500px at 90% 0%,rgba(20,184,166,.10),transparent 60%),
+  radial-gradient(900px 600px at 50% 120%,rgba(59,130,246,.10),transparent 60%),var(--bg)}
+#work{display:none}
+body[data-mode="welcome"] #welcome{display:flex;align-items:center;justify-content:center}
+body[data-mode="work"] #work{display:flex}
+
+/* ---------- приветствие ---------- */
+.w-wrap{width:min(1080px,92vw);padding:48px 0;animation:rise .45s ease}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.w-head{display:flex;gap:20px;align-items:center;margin-bottom:36px}
+.logo{width:64px;height:64px;border-radius:18px;display:grid;place-items:center;font-weight:800;font-size:20px;letter-spacing:.5px;
+  background:linear-gradient(135deg,#F97316,#14B8A6 55%,#3B82F6);color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+h1{margin:0 0 6px;font-size:30px;font-weight:700;letter-spacing:-.3px}
+.w-head p{margin:0;font-size:14.5px;max-width:640px;line-height:1.5}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+@media (max-width:900px){.cards{grid-template-columns:1fr}}
+.card{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:12px;padding:24px;border-radius:20px;
+  background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);position:relative;overflow:hidden;
+  transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+.card::before{content:"";position:absolute;inset:0;background:radial-gradient(400px 160px at 0% 0%,color-mix(in srgb,var(--accent) 18%,transparent),transparent 70%);opacity:.7;pointer-events:none}
+.card:hover{transform:translateY(-4px);border-color:color-mix(in srgb,var(--accent) 60%,var(--line));box-shadow:0 18px 40px rgba(0,0,0,.35),0 0 0 1px color-mix(in srgb,var(--accent) 30%,transparent)}
+.card:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.card-top{display:flex;justify-content:space-between;align-items:center}
+.ico{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,transparent)}
+.ico svg{width:24px;height:24px}
+.badge{font-size:11px;padding:4px 9px;border-radius:999px;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent)}
+.card h2{margin:6px 0 0;font-size:21px;font-weight:700}
+.card p{margin:0;color:var(--muted);line-height:1.5;min-height:60px}
+.chips{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.chips li{font-size:11.5px;padding:4px 9px;border-radius:999px;background:#0f1218;border:1px solid var(--line);color:#c4c9d4}
+.card-foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.path{font-size:11.5px;color:var(--muted);font-family:Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cta{color:var(--accent);font-weight:600;white-space:nowrap;transition:transform .18s}
+.card:hover .cta{transform:translateX(3px)}
+.w-foot{display:flex;gap:18px;align-items:center;margin-top:30px;color:var(--muted);font-size:12.5px}
+
+/* ---------- рабочая панель ---------- */
+#work{width:340px;height:100vh;flex-direction:column;background:var(--panel);border-right:1px solid var(--line)}
+.topbar{display:flex;gap:8px;padding:12px;border-bottom:1px solid var(--line)}
+.icon-btn{width:38px;height:38px;border-radius:11px;border:1px solid var(--line);background:var(--card);display:grid;place-items:center;color:var(--muted);transition:.15s}
+.icon-btn:hover{color:var(--text);border-color:var(--line2)}
+.seg{flex:1;display:flex;background:#0e1116;border:1px solid var(--line);border-radius:11px;padding:3px;gap:3px}
+.seg button{flex:1;border:0;background:transparent;border-radius:8px;color:var(--muted);font-weight:600;font-size:12.5px;transition:.15s}
+.seg button:hover{color:var(--text)}
+body[data-site="winner"] .seg [data-go="winner"],body[data-site="cian"] .seg [data-go="cian"],body[data-site="avito"] .seg [data-go="avito"]{
+  background:color-mix(in srgb,var(--accent) 22%,transparent);color:#fff;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 50%,transparent)}
+
+.scroll{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:10px}
+.site-title{display:flex;align-items:center;gap:9px;font-size:18px;font-weight:700;padding:2px 4px 4px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 20%,transparent)}
+.box{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px;display:flex;flex-direction:column;gap:9px}
+details.box{display:block}
+details.box[open] > *:not(summary){margin-top:9px}
+.box-h{font-size:11.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:600}
+summary.box-h{cursor:pointer;list-style:none}
+summary.box-h::after{content:"▾";float:right;transition:.2s}
+details:not([open]) summary.box-h::after{transform:rotate(-90deg)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ghost{display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border-radius:10px;border:1px solid var(--line);background:#12161d;color:#d5d9e1;transition:.15s}
+.ghost:hover{border-color:var(--line2);background:#161b23}
+.ghost svg{width:16px;height:16px}
+.url{font-size:11px;color:var(--muted);font-family:Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;text-align:left;user-select:text}
+.hint{margin:0;font-size:12px;color:var(--muted);line-height:1.45}
+.order{font-weight:600;font-size:14px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.field{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted)}
+input[type=number],input[type=text]{width:100%;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:#0e1116;color:var(--text);font:inherit;outline:none;transition:.15s;user-select:text}
+input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 20%,transparent)}
+.path-line{font-size:11.5px;font-family:Consolas,monospace;color:#c4c9d4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;text-align:left;user-select:text}
+
+.switch{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px}
+.switch input{display:none}
+.switch span{width:36px;height:20px;border-radius:999px;background:#2a303b;position:relative;flex:none;transition:.2s}
+.switch span::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#cfd4dc;transition:.2s}
+.switch input:checked + span{background:var(--accent)}
+.switch input:checked + span::after{left:18px;background:#fff}
+
+/* показывать блоки только для своего сайта */
+.only-avito,.only-cian,.only-winner{display:none !important}
+body[data-site="avito"] .only-avito,body[data-site="cian"] .only-cian,body[data-site="winner"] .only-winner{display:flex !important}
+body[data-site="avito"] details.only-avito,body[data-site="cian"] details.only-cian{display:block !important}
+p.hint.only-avito,p.hint.only-cian,p.hint.only-winner{display:none !important}
+body[data-site="avito"] p.hint.only-avito,body[data-site="cian"] p.hint.only-cian,body[data-site="winner"] p.hint.only-winner{display:block !important}
+
+.bottom{padding:12px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:9px;background:linear-gradient(0deg,var(--panel),#13161d)}
+.status{background:#0e1116;border:1px solid var(--line);border-radius:12px;padding:10px 11px;font-size:12.5px;line-height:1.5;max-height:190px;overflow:auto;user-select:text}
+#status{white-space:pre-line}
+.status.err{border-color:color-mix(in srgb,var(--danger) 60%,var(--line));color:#fecaca}
+.status.done{border-color:color-mix(in srgb,var(--ok) 50%,var(--line))}
+.bar{height:4px;border-radius:4px;background:#1f242d;overflow:hidden;margin-bottom:8px;display:none}
+.running .bar{display:block}
+.bar i{display:block;height:100%;width:30%;border-radius:4px;background:var(--accent)}
+.bar.ind i{animation:ind 1.3s ease-in-out infinite}
+@keyframes ind{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
+.primary{display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border:0;border-radius:12px;font-weight:700;font-size:14.5px;color:#fff;
+  background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 70%,#000));box-shadow:0 8px 22px color-mix(in srgb,var(--accent) 30%,transparent);transition:.15s}
+.primary:hover{filter:brightness(1.08);transform:translateY(-1px)}
+.primary:disabled{filter:grayscale(.7) brightness(.7);transform:none;cursor:default}
+.danger{display:none;padding:9px;border-radius:12px;border:1px solid color-mix(in srgb,var(--danger) 55%,transparent);background:transparent;color:#fca5a5}
+.danger:hover{background:color-mix(in srgb,var(--danger) 12%,transparent)}
+.running .danger{display:block}
+.foot{text-align:center;font-size:11.5px;color:var(--muted)}

@@ -12,7 +12,8 @@ app.userAgentFallback = app.userAgentFallback
   .replace(/\s?Electron\/\S+/i, '')
   .replace(/\s?pvz-avito\/\S+/i, '');
 
-const PANEL_W = 320;
+const PANEL_W = 340;
+let mode = 'welcome';
 const START_URL = 'https://www.avito.ru/moskva/kommercheskaya_nedvizhimost/sdam-ASgBAgICAUSwCNRW';
 const WINNER_URL = 'https://w7.baza-winner.ru/';
 const CIAN_URL = 'https://www.cian.ru/cat.php?deal_type=rent&engine_version=2&offer_type=offices&office_type[0]=2&office_type[1]=4&office_type[2]=5&office_type[3]=12&region=1&minarea=24&maxarea=130&minfloor=1&maxfloor=1&minfloorn=3&sort=creation_date_desc';
@@ -30,24 +31,25 @@ function saveCfg(c) { fs.mkdirSync(path.dirname(cfgPath()), { recursive: true })
 
 function layout() {
   const [w, h] = win.getContentSize();
+  if (mode === 'welcome') { view.setVisible(false); return; }
+  view.setVisible(true);
   view.setBounds({ x: PANEL_W, y: 0, width: Math.max(100, w - PANEL_W), height: h });
 }
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1400, height: 900, title: 'PVZ Avito',
+    width: 1400, height: 900, minWidth: 980, minHeight: 640, title: 'PVZ', backgroundColor: '#0d0f13',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
   });
   win.removeMenu();
   win.loadFile(path.join(__dirname, 'panel.html'));
-  win.setTitle(`PVZ Avito + Циан — сборка ${updater.currentBuild()}`);
+  win.setTitle(`PVZ · поиск помещений — сборка ${updater.currentBuild()}`);
   win.on('page-title-updated', e => e.preventDefault());
 
   view = new WebContentsView({ webPreferences: { partition: 'persist:avito', contextIsolation: true } });
   win.contentView.addChildView(view);
   layout();
   win.on('resize', layout);
-  view.webContents.loadURL(START_URL);
   // ссылки «в новой вкладке» открываем в том же окне
   view.webContents.setWindowOpenHandler(({ url }) => { view.webContents.loadURL(url); return { action: 'deny' }; });
   view.webContents.on('did-navigate', (_e, url) => send('url', url));
@@ -109,12 +111,19 @@ ipcMain.handle('pickFolder', async (_e, which) => {
   const c = Object.assign(loadCfg(), { [key]: r.filePaths[0] }); saveCfg(c); return c;
 });
 ipcMain.handle('openFolder', (_e, p) => shell.openPath(p || loadCfg().root));
+const SITE_URL = { avito: START_URL, cian: CIAN_URL, winner: WINNER_URL };
+const SITE_RE = { avito: /avito\.ru/, cian: /cian\.ru/, winner: /baza-winner\.ru/ };
 ipcMain.handle('nav', (_e, what) => {
   const wc = view.webContents;
+  if (what === 'welcome') { mode = 'welcome'; layout(); return; }
+  if (SITE_URL[what]) {
+    mode = 'work'; layout();
+    // на тот же сайт заново не грузим — остаёмся на текущей странице (например, в открытом заказе)
+    if (!SITE_RE[what].test(wc.getURL())) wc.loadURL(SITE_URL[what]);
+    else send('url', wc.getURL());
+    return;
+  }
   if (what === 'back' && wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack();
-  else if (what === 'home' || what === 'avito') wc.loadURL(START_URL);
-  else if (what === 'cian') wc.loadURL(CIAN_URL);
-  else if (what === 'winner') wc.loadURL(WINNER_URL);
   else if (what === 'reload') wc.reload();
 });
 ipcMain.handle('stop', () => { stopFlag = true; return view.webContents.executeJavaScript('window.__pvzStop = true').catch(() => {}); });
