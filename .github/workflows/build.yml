@@ -1,4 +1,4 @@
-name: Build PVZ Avito (Windows + Mac)
+name: Build PVZ Master (Windows + Mac)
 
 on:
   push:
@@ -29,18 +29,26 @@ jobs:
 
       - name: Package
         run: |
-          npx @electron/packager . "PVZ Avito" --platform=win32 --arch=x64 --asar --overwrite --out=dist \
-            --app-version=1.0.${{ github.run_number }} \
-            --ignore="^/\.github" --ignore="^/dist" --ignore="\.md$" --ignore="\.zip$"
-          cd dist && mv "PVZ Avito-win32-x64" "PVZ Avito" && 7z a ../PVZ-Avito-Windows.zip "PVZ Avito" && cd ..
-          cp "dist/PVZ Avito/resources/app.asar" app.asar
+          npx @electron/packager . "PVZ Master" --platform=win32 --arch=x64 --asar --overwrite --out=dist \
+            --app-version=1.0.${{ github.run_number }} --icon=build/icon.ico \
+            --ignore="^/\.github" --ignore="^/dist" --ignore="^/build" --ignore="\.md$" --ignore="\.zip$"
+          cd dist && mv "PVZ Master-win32-x64" "PVZ Master" && 7z a ../PVZ-Master-Windows.zip "PVZ Master" && cd ..
+          cp "dist/PVZ Master/resources/app.asar" app.asar
           echo "${{ github.run_number }}" > version.txt
-          ls -la PVZ-Avito-Windows.zip app.asar
+
+      - name: Installer (Setup.exe)
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          & $iscc "/DAppVersion=1.0.${{ github.run_number }}" build\installer.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-ChildItem PVZ-Master-Setup.exe, PVZ-Master-Windows.zip, app.asar | Format-Table Name, Length
 
       - uses: actions/upload-artifact@v4
         with:
-          name: PVZ-Avito-Windows
-          path: PVZ-Avito-Windows.zip
+          name: PVZ-Master-Windows
+          path: PVZ-Master-Setup.exe
 
       - name: Publish release
         env:
@@ -52,9 +60,9 @@ jobs:
           cp WHATSNEW.md notes.txt
           TAG="avito-windows-latest"
           gh release delete "$TAG" --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
-          gh release create "$TAG" PVZ-Avito-Windows.zip app.asar version.txt notes.txt -R "$GITHUB_REPOSITORY" \
+          gh release create "$TAG" PVZ-Master-Setup.exe PVZ-Master-Windows.zip app.asar version.txt notes.txt -R "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "PVZ Avito 🏢 для Windows" \
+            --title "PVZ Master 🏢 для Windows" \
             --notes-file release-notes.md
 
       - name: Update changelog
@@ -90,22 +98,22 @@ jobs:
       - name: Package (Apple Silicon + Intel)
         run: |
           for ARCH in arm64 x64; do
-            npx @electron/packager . "PVZ Avito" --platform=darwin --arch=$ARCH --asar --overwrite --out=dist \
-              --app-version=1.0.${{ github.run_number }} --app-bundle-id=ru.necly.pvzavito \
-              --ignore="^/\.github" --ignore="^/dist" --ignore="\.md$" --ignore="\.zip$"
-            APP="dist/PVZ Avito-darwin-$ARCH/PVZ Avito.app"
+            npx @electron/packager . "PVZ Master" --platform=darwin --arch=$ARCH --asar --overwrite --out=dist \
+              --app-version=1.0.${{ github.run_number }} --app-bundle-id=ru.necly.pvzavito --icon=build/icon.icns \
+              --ignore="^/\.github" --ignore="^/dist" --ignore="^/build" --ignore="\.md$" --ignore="\.zip$"
+            APP="dist/PVZ Master-darwin-$ARCH/PVZ Master.app"
             codesign --force --deep -s - "$APP"
             codesign --verify --deep "$APP"
-            ditto -c -k --keepParent "$APP" "PVZ-Avito-Mac-$ARCH.zip"
+            ditto -c -k --keepParent "$APP" "PVZ-Master-Mac-$ARCH.zip"
           done
-          cp "dist/PVZ Avito-darwin-arm64/PVZ Avito.app/Contents/Resources/app.asar" app.asar
+          cp "dist/PVZ Master-darwin-arm64/PVZ Master.app/Contents/Resources/app.asar" app.asar
           echo "${{ github.run_number }}" > version.txt
           ls -la *.zip app.asar
 
       - uses: actions/upload-artifact@v4
         with:
-          name: PVZ-Avito-Mac
-          path: PVZ-Avito-Mac-*.zip
+          name: PVZ-Master-Mac
+          path: PVZ-Master-Mac-*.zip
 
       - name: Publish release
         env:
@@ -117,7 +125,7 @@ jobs:
           cp WHATSNEW.md notes.txt
           TAG="avito-mac-latest"
           gh release delete "$TAG" --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
-          gh release create "$TAG" PVZ-Avito-Mac-arm64.zip PVZ-Avito-Mac-x64.zip app.asar version.txt notes.txt -R "$GITHUB_REPOSITORY" \
+          gh release create "$TAG" PVZ-Master-Mac-arm64.zip PVZ-Master-Mac-x64.zip app.asar version.txt notes.txt -R "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "PVZ Avito 🏢 для Mac" \
+            --title "PVZ Master 🏢 для Mac" \
             --notes-file release-notes.md

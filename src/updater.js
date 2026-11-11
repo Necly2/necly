@@ -36,7 +36,7 @@ async function check(win, { manual = false } = {}) {
   try { notes = await getText(BASE + 'notes.txt'); } catch {}
   const r = await dialog.showMessageBox(win, {
     type: 'info', buttons: ['Обновить сейчас', 'Позже'], defaultId: 0, cancelId: 1,
-    title: 'PVZ Avito — обновление',
+    title: 'PVZ Master — обновление',
     message: `Доступна новая сборка ${latest} (у вас ${cur}).`,
     detail: notes ? 'Что нового:\n' + notes.slice(0, 1500) : ''
   });

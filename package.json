@@ -1,18 +1,20 @@
 {
-  "name": "pvz-avito",
+  "name": "pvz-master",
   "version": "1.0.0",
-  "description": "PVZ Avito — выгрузка объявлений Авито в Excel для проекта PVZ",
+  "description": "PVZ Master — поиск помещений под ПВЗ: выгрузка Winner/Циан/Авито и проверка зон Ozon/Яндекс/WB",
   "main": "src/boot.js",
   "author": "Necly2",
   "license": "UNLICENSED",
   "dependencies": {
     "exceljs": "^4.4.0",
+    "leaflet": "^1.9.4",
     "pngjs": "^7.0.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",
-    "electron": "^45.3.0"
+    "electron": "^45.3.0",
+    "png2icons": "^2.0.1"
   },
-  "productName": "PVZ Avito"
+  "productName": "PVZ Master"
 }

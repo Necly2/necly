@@ -94,6 +94,7 @@ async function writeResult(outFile, items) {
     const vals = [null, ...EXPORT_HEAD.map(k => d[k] ?? null), zone, note || null];
     const row = ws.addRow(vals);
     if (d._url) { const c = row.getCell(14); c.value = { text: 'Открыть объявление', hyperlink: d._url }; c.font = { color: { argb: 'FF0563C1' }, underline: true }; }
+    const pc9 = row.getCell(9); if (typeof pc9.value === 'number') pc9.numFmt = '#,##0';   // «Цена, ₽» с разрядами
     const col = ZONE_COLOR[zone];
     if (col) for (let i = 1; i <= GEN_HEAD.length; i++) row.getCell(i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + col } };
   }

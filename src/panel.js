@@ -1,4 +1,19 @@
 const $ = id => document.getElementById(id);
+// ---------- числа с разделителями разрядов: 100000 → «100 000» ----------
+const fmtNum = n => (n === '' || n == null || isNaN(n)) ? '' : Number(n).toLocaleString('ru-RU').replace(/[  ]/g, ' ');
+const numOf = el => { const v = String(el.value).replace(/\D/g, ''); return v === '' ? '' : +v; };
+const setNum = (el, v) => { el.value = v === '' || v == null ? '' : fmtNum(v); };
+document.addEventListener('input', e => {
+  const el = e.target; if (!el.classList || !el.classList.contains('num')) return;
+  const pos = el.selectionStart, digitsBefore = el.value.slice(0, pos).replace(/\D/g, '').length;
+  const raw = el.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+  el.value = raw === '' ? '' : fmtNum(+raw);
+  let i = 0, seen = 0; while (i < el.value.length && seen < digitsBefore) { if (/\d/.test(el.value[i])) seen++; i++; }
+  el.setSelectionRange(i, i);
+});
+// числа в тексте статусов: «Проверено 1234 из 12000» → «1 234 из 12 000» (даты, координаты, имена файлов не трогаем)
+const prettyNums = t => String(t).replace(/(?<![\d.,:\/\-\w])(\d{4,})(?![\d.,:\/\-\w])/g, m => fmtNum(+m));
+
 function showPath(id, p) { $(id).textContent = p || ''; $(id).title = p || ''; }
 const F = ['pages', 'delay', 'days', 'part'];
 const NAMES = { avito: 'Авито', cian: 'Циан', winner: 'Baza Winner', ozon: 'Проверка зон' };
@@ -11,17 +26,16 @@ const exportStatus = { text: 'Готово к работе.', kind: '' }, ozonSt
 // ---------- старт ----------
 async function init() {
   const c = await pvz.getCfg();
-  F.forEach(k => ($(k).value = c[k]));
+  F.forEach(k => setNum($(k), c[k]));
   showPath('root', c.root);
   showPath('cianRoot', c.cianRoot);
   showPath('ozonOut', c.ozonOut);
   $('ozonAuto').checked = c.ozonAuto !== false;
   $('ozonCache').checked = c.ozonCache !== false;
   $('chkOzon').checked = c.chkOzon !== false; $('chkYandex').checked = !!c.chkYandex; $('chkWb').checked = !!c.chkWb;
-  $('ozonDays').value = c.ozonDays; $('ozonThreads').value = c.ozonThreads; $('ozonPause').value = c.ozonPause;
+  setNum($('ozonDays'), c.ozonDays); setNum($('ozonThreads'), c.ozonThreads); setNum($('ozonPause'), c.ozonPause);
   const st = await pvz.ozonState(); ozonBusy = st.running; refreshRunUI();
   $('cianOnlyNew').checked = c.cianOnlyNew !== false;
-  if (c.lastSite && NAMES[c.lastSite]) $('lastHint').textContent = '· в прошлый раз: ' + NAMES[c.lastSite];
 }
 init();
 pvz.version().then(v => document.querySelectorAll('.ver').forEach(e => (e.textContent = v)));
@@ -36,7 +50,7 @@ function setSite(site) {
 }
 function openSite(site) {
   if (running) return;
-  if (site === 'order') { openOrder(); return; }
+  if (site === 'order') { window.openWizard && window.openWizard(); return; }
   document.body.dataset.mode = 'work';
   setSite(site);
   pvz.nav(site);
@@ -45,10 +59,7 @@ function openSite(site) {
 document.querySelectorAll('[data-go]').forEach(b => (b.onclick = () => openSite(b.dataset.go)));
 $('home').onclick = () => { if (running) return; document.body.dataset.mode = 'welcome'; pvz.nav('welcome'); };
 $('ozonMini').onclick = () => openSite('ozon');
-document.addEventListener('keydown', e => {
-  if (document.body.dataset.mode !== 'welcome') return;
-  const k = { '1': 'winner', '2': 'order', '3': 'ozon' }[e.key]; if (k) openSite(k);
-});
+
 
 $('back').onclick = () => pvz.nav('back');
 $('reload').onclick = () => pvz.nav('reload');
@@ -65,7 +76,7 @@ $('ozonAuto').onchange = () => pvz.setCfg({ ozonAuto: $('ozonAuto').checked });
 $('ozonCache').onchange = () => pvz.setCfg({ ozonCache: $('ozonCache').checked });
 $('ozClear').onclick = async () => { const n = await pvz.ozonClearCache(); $('ozClearMsg').textContent = n ? `забыто адресов: ${n}` : 'память пуста'; };
 ['ozonDays', 'ozonThreads', 'ozonPause'].forEach(id => ($(id).onchange = () => {
-  const v = Math.max(1, parseInt($(id).value, 10) || 1); $(id).value = v; pvz.setCfg({ [id]: v }); if (id === 'ozonDays') rescan();
+  const v = Math.max(1, numOf($(id)) || 1); setNum($(id), v); pvz.setCfg({ [id]: v }); if (id === 'ozonDays') rescan();
 }));
 $('ozRescan').onclick = () => rescan();
 ['chkOzon', 'chkYandex', 'chkWb'].forEach(id => ($(id).onchange = () => { pvz.setCfg({ [id]: $(id).checked }); setTimeout(rescan, 100); }));
@@ -105,7 +116,7 @@ pvz.onUrl(u => {
 const box = $('statusBox'), fill = $('barFill');
 const isOzonSite = () => document.body.dataset.site === 'ozon';
 function paint(msg, prog) {
-  $('status').textContent = msg.text;
+  $('status').textContent = prettyNums(msg.text);
   box.classList.toggle('err', msg.kind === 'err');
   box.classList.toggle('done', msg.kind === 'done');
   const bar = fill.parentElement;
@@ -130,7 +141,7 @@ pvz.onStatus(s => running && setStatus(s));
 pvz.onOzonStatus(s => {
   ozonBusy = true;
   setOzon(s.text, '', s.total ? { done: s.done || 0, total: s.total } : null);
-  $('ozonMini').textContent = 'Проверка: ' + s.text.split('\n')[0];
+  $('ozonMini').textContent = 'Проверка: ' + prettyNums(s.text.split('\n')[0]);
   refreshRunUI();
 });
 function ozonText(r) {
@@ -188,11 +199,15 @@ $('go').onclick = async () => {
 async function runExport(extra) {
   await refreshBw();
   const c = {};
-  F.forEach(k => (c[k] = Math.max(0, parseInt($(k).value, 10) || 0)));
-  if (c.delay < 3) { c.delay = 3; $('delay').value = 3; }
+  F.forEach(k => (c[k] = Math.max(0, numOf($(k)) || 0)));
+  if (c.delay < 3) { c.delay = 3; setNum($('delay'), 3); }
   if (!c.pages) c.pages = 1;
   if (!c.part) c.part = 300;
-  if (bwGuid) c.bw = { tag: $('bwTag').value.trim(), hide: $('bwHide').checked };
+  if (bwGuid) {
+    const nm = ($('bwName').textContent || '').split(' · ')[0];
+    c.bw = { tag: $('bwTag').value.trim(), hide: $('bwHide').checked, name: nm };
+    c.title = nm;
+  }
   Object.assign(c, extra || {});
   running = true; refreshRunUI();
   setStatus('Запуск…');
@@ -222,89 +237,16 @@ const DEFAULT_PRESETS = {
   'Заказ #4 (Москва)': { cian: true, avito: true, region: 'msk', types: ['shop', 'psn', 'food', 'serv'], areaFrom: 24, areaTo: 130, priceFrom: '', priceTo: '', floor1: true, floorsFrom: 3, days: 7 },
   'Заказ #5 (Москва и МО, до 120 тыс.)': { cian: true, avito: true, region: 'msk_mo', types: ['shop', 'psn', 'food', 'serv'], areaFrom: 24, areaTo: 130, priceFrom: '', priceTo: 120000, floor1: true, floorsFrom: 3, days: 7 }
 };
-let presets = {}, curAvitoUrl = null;
-$('oTypes').innerHTML = TYPES.map(t => `<label><input type="checkbox" value="${t.k}"><span>${t.name}</span></label>`).join('');
-
-const val = id => { const v = $(id).value.trim(); return v === '' ? '' : Math.max(0, +v || 0); };
-function readForm() {
-  return {
-    cian: $('oCian').checked, avito: $('oAvito').checked,
-    region: $('oRegion').querySelector('.on').dataset.v,
-    types: [...$('oTypes').querySelectorAll('input:checked')].map(i => i.value),
-    areaFrom: val('oAreaFrom'), areaTo: val('oAreaTo'), priceFrom: val('oPriceFrom'), priceTo: val('oPriceTo'),
-    floor1: $('oFloor1').checked, floorsFrom: val('oFloorsFrom'), days: val('oDays'),
-    avitoUrl: curAvitoUrl || null
-  };
-}
-function fillForm(p) {
-  $('oCian').checked = p.cian !== false; $('oAvito').checked = p.avito !== false;
-  $('oRegion').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === (p.region || 'msk')));
-  $('oTypes').querySelectorAll('input').forEach(i => (i.checked = (p.types || []).includes(i.value)));
-  $('oAreaFrom').value = p.areaFrom ?? ''; $('oAreaTo').value = p.areaTo ?? '';
-  $('oPriceFrom').value = p.priceFrom ?? ''; $('oPriceTo').value = p.priceTo ?? '';
-  $('oFloor1').checked = !!p.floor1; $('oFloorsFrom').value = p.floorsFrom ?? ''; $('oDays').value = p.days ?? 7;
-  curAvitoUrl = p.avitoUrl || null;
-  renderNotice();
-}
-function fillSelect(sel) {
-  $('pSelect').innerHTML = '<option value="">— новый —</option>' + Object.keys(presets).map(n => `<option>${esc(n)}</option>`).join('');
-  $('pSelect').value = sel || '';
-}
-async function openOrder() {
-  const c = await pvz.getCfg();
-  presets = c.presets && Object.keys(c.presets).length ? c.presets : JSON.parse(JSON.stringify(DEFAULT_PRESETS));
-  const last = c.lastPreset && presets[c.lastPreset] ? c.lastPreset : Object.keys(presets)[0];
-  fillSelect(last); $('pName').value = last || '';
-  fillForm(last ? presets[last] : DEFAULT_PRESETS['Заказ #4 (Москва)']);
-  document.body.dataset.mode = 'order';
-  pvz.nav('welcome');
-}
-$('pSelect').onchange = () => { const n = $('pSelect').value; $('pName').value = n; if (n) fillForm(presets[n]); pvz.setCfg({ lastPreset: n }); };
-$('pSave').onclick = () => {
-  const n = $('pName').value.trim();
-  if (!n) { $('pMsg').textContent = 'введите название'; return; }
-  presets[n] = readForm(); pvz.setCfg({ presets, lastPreset: n }); fillSelect(n);
-  $('pMsg').textContent = 'сохранено ✓'; setTimeout(() => ($('pMsg').textContent = ''), 2500);
-};
-$('pDel').onclick = () => {
-  const n = $('pSelect').value; if (!n) return;
-  delete presets[n]; pvz.setCfg({ presets }); fillSelect(''); $('pName').value = ''; $('pMsg').textContent = 'удалено';
-};
-$('oRegion').querySelectorAll('button').forEach(b => (b.onclick = () => { $('oRegion').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); renderNotice(); }));
-document.querySelectorAll('#order input').forEach(i => i.addEventListener('change', renderNotice));
-['oBack', 'oCancel'].forEach(id => ($(id).onclick = () => { document.body.dataset.mode = 'welcome'; }));
+let presets = {};
 
 // что программа сделает сама, а что придётся ввести вручную
 function avitoManual(p) {
   const m = [];
   if (p.types.length) m.push('Вид объекта: ' + p.types.map(k => TYPES.find(t => t.k === k).name).join(', '));
-  if (p.areaFrom !== '' || p.areaTo !== '') m.push(`Площадь: ${p.areaFrom !== '' ? 'от ' + p.areaFrom : ''} ${p.areaTo !== '' ? 'до ' + p.areaTo : ''} м²`.replace(/\s+/g, ' '));
+  if (p.areaFrom !== '' || p.areaTo !== '') m.push(`Площадь: ${p.areaFrom !== '' ? 'от ' + fmtNum(p.areaFrom) : ''} ${p.areaTo !== '' ? 'до ' + fmtNum(p.areaTo) : ''} м²`.replace(/\s+/g, ' '));
+  if (p.floor1) m.push('Этаж: «Только первый», «Не подвал», «Не цоколь» (блок «Этаж» появляется после выбора вида объекта)');
   return m;
 }
-function renderNotice() {
-  const p = readForm(), warn = [], info = [];
-  if (!p.cian && !p.avito) warn.push('Не выбран ни один сайт.');
-  if (!p.types.length) warn.push('Не выбран вид помещения — будут все виды коммерческой аренды.');
-  if (p.avito) {
-    if (p.avitoUrl) info.push('Авито: используются фильтры, сохранённые в пресете (вид объекта, площадь). Если поменяли их в форме — нажмите «Забыть фильтры Авито» и выставьте заново.');
-    else {
-      const m = avitoManual(p);
-      if (m.length) warn.push('<b>Авито — нужно ввести вручную на сайте</b> (Авито не даёт задать это из программы):<ul>' + m.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>Регион, цену и сортировку по дате программа подставит сама. После ввода нажмите «Готово — выгружать». Если сохраните пресет — в следующий раз вводить не придётся.');
-    }
-    if (p.floor1 || p.floorsFrom !== '') info.push('Авито: в выдаче нет этажа и этажности дома — эти условия на Авито не применяются.');
-  }
-  if (p.cian) {
-    info.push('Циан: все параметры задаются автоматически' + (p.region === 'msk_mo' ? '; «Москва и МО» — два поиска подряд (Москва, затем область).' : '.'));
-  }
-  if (p.days !== '' && p.days > 0) info.push(`Свежесть: объявления старше ${p.days} дн. отбрасываются программой.`);
-  $('oNotice').innerHTML = warn.map(x => `<div class="note warn">${x}</div>`).join('') +
-    (info.length ? `<div class="note info"><b>К сведению</b><ul>${info.map(x => '<li>' + x + '</li>').join('')}</ul></div>` : '');
-  $('oAvitoState').innerHTML = p.avito ? (p.avitoUrl
-    ? '<span class="ok">✓ Фильтры Авито сохранены в пресете.</span> <a id="oForgetAvito">Забыть фильтры Авито</a>'
-    : 'Фильтры Авито (вид объекта, площадь) не сохранены — при запуске нужно будет выставить их на сайте один раз.') : '';
-  const fa = document.getElementById('oForgetAvito'); if (fa) fa.onclick = () => { curAvitoUrl = null; renderNotice(); };
-}
-
 function cianUrl(p, region) {
   const u = new URL('https://www.cian.ru/cat.php');
   const q = u.searchParams;
@@ -336,18 +278,15 @@ function waitManual(lines, hint) {
   });
 }
 
-$('oRun').onclick = async () => {
-  const p = readForm();
-  if (!p.cian && !p.avito) { renderNotice(); return; }
-  const presetName = $('pSelect').value || null;
-  const extra = { days: p.days === '' ? 0 : p.days };
+async function runOrder(p, presetName, opt = {}) {
+  const extra = { days: p.days === '' ? 0 : p.days, forceCheck: !!opt.forceCheck };
   const report = [];
   document.body.dataset.mode = 'work';
   if (p.cian) {
     for (const reg of (p.region === 'msk_mo' ? ['1', '4593'] : ['1'])) {
       setSite('cian'); setStatus(`Открываю Циан (${reg === '1' ? 'Москва' : 'Московская область'})…`);
       await pvz.navUrl('cian', cianUrl(p, reg));
-      const { r, text } = await runExport(extra);
+      const { r, text } = await runExport(Object.assign({ title: (presetName || 'Циан') + (reg === '1' ? ' · Москва' : ' · МО') }, extra));
       report.push(`Циан ${reg === '1' ? '(Москва)' : '(МО)'}: ` + (r.ok ? `${r.total} объявл., файлов ${r.saved.length}` : 'ошибка — ' + r.error));
       setStatus(text, r.ok ? 'done' : 'err');
       if (!r.ok || /остановлено вручную/.test(r.reason || '')) break;
@@ -358,7 +297,8 @@ $('oRun').onclick = async () => {
     await pvz.navUrl('avito', p.avitoUrl || avitoUrl(p));
     let go = true;
     const m = p.avitoUrl ? [] : avitoManual(p);
-    if (m.length) {
+    if (m.length && opt.unattended) { go = false; report.push('Авито: пропущено — фильтры (' + m.map(x => x.split(':')[0]).join(', ') + ') не сохранены в пресете'); }
+    else if (m.length) {
       setStatus('Ждём, пока вы выставите фильтры на Авито…');
       go = await waitManual(m, presetName ? `Фильтры запомнятся в пресете «${presetName}» — в следующий раз вводить не придётся.` : 'Сохраните пресет в форме, чтобы в следующий раз не вводить это заново.');
       if (go && presetName) {
@@ -367,11 +307,213 @@ $('oRun').onclick = async () => {
       }
     }
     if (go) {
-      const { r, text } = await runExport(extra);
+      const { r, text } = await runExport(Object.assign({ title: (presetName || 'Авито') }, extra));
       report.push('Авито: ' + (r.ok ? `${r.total} объявл., файлов ${r.saved.length}` : 'ошибка — ' + r.error));
       setStatus(text, r.ok ? 'done' : 'err');
-    } else report.push('Авито: пропущено');
+    } else if (!opt.unattended) report.push('Авито: пропущено');
   }
-  setStatus('Итог по заказу' + (presetName ? ` «${presetName}»` : '') + ':\n' + report.map(x => '• ' + x).join('\n') +
-    (exportStatus.text.includes('Ozon') ? '\n\n→ Новые файлы отправлены на проверку Ozon.' : ''), 'done');
+  const summary = 'Итог по заказу' + (presetName ? ` «${presetName}»` : '') + ':\n' + report.map(x => '• ' + x).join('\n');
+  setStatus(summary + (exportStatus.text.includes('Ozon') ? '\n\n→ Новые файлы отправлены на проверку зон.' : ''), 'done');
+  return report;
+}
+
+
+
+// ================= страницы: Результаты, История, Расписание =================
+function openPage(page) {
+  document.body.dataset.mode = page;
+  pvz.nav('welcome');
+  if (page === 'results') loadResults();
+  if (page === 'history') loadHistory();
+  if (page === 'schedule') loadSchedule();
+}
+document.querySelectorAll('[data-page]').forEach(el => (el.onclick = e => { e.preventDefault(); openPage(el.dataset.page); }));
+document.querySelectorAll('.back-home').forEach(b => (b.onclick = () => { document.body.dataset.mode = 'welcome'; }));
+pvz.onOpenPage(p => openPage(p));
+window.addEventListener('error', e => pvz.logError('интерфейс', `${e.message} @ ${String(e.filename).split('/').pop()}:${e.lineno}`));
+window.addEventListener('unhandledrejection', e => pvz.logError('интерфейс', String(e.reason && (e.reason.stack || e.reason.message) || e.reason)));
+const fmtTime = t => { const d = new Date(t); return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) + ' ' + d.toTimeString().slice(0, 5); };
+
+// ---------- Результаты ----------
+const R = { rows: [], sort: { k: 'checked', dir: -1 }, map: null, layer: null, markers: new Map(), sel: null, list: [] };
+const OZ_C = { 'зелёный': '#22c55e', 'синий': '#2563eb', 'голубой': '#60a5fa', 'гарантия < 3 млн': '#a78bfa', 'ошибка запроса': '#f59e0b' };
+function zoneColor(r) {
+  if (r.platform === 'Ozon') return OZ_C[r.zone] || '#9ca3af';
+  if (r.platform === 'Яндекс') return /оранж/.test(r.zone) ? '#fb923c' : /фиолет/.test(r.zone) ? '#c084fc' : /синий/.test(r.zone) ? '#6b99f5' : /голуб/.test(r.zone) ? '#67e8f9' : '#9ca3af';
+  return /гарантир/.test(r.zone) ? '#d8b4fe' : /без выплат/.test(r.zone) ? '#fde047' : /другой/.test(r.zone) ? '#fdba74' : '#d1d5db';
+}
+async function loadResults() {
+  $('rCount').textContent = 'загрузка…';
+  const r = await pvz.results();
+  R.rows = r.rows.map((x, i) => Object.assign(x, { id: i }));
+  const zones = [...new Set(R.rows.map(x => x.platform + ' · ' + x.zone))].sort();
+  const cur = $('rZone').value;
+  $('rZone').innerHTML = '<option value="">все зоны</option>' + zones.map(z => `<option${z === cur ? ' selected' : ''}>${esc(z)}</option>`).join('');
+  if (!R.map) {
+    R.map = L.map('rMap', { zoomControl: true, attributionControl: true }).setView([55.75, 37.62], 10);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap © CARTO', subdomains: 'abcd', maxZoom: 19 }).addTo(R.map);
+    R.layer = L.layerGroup().addTo(R.map);
+  }
+  setTimeout(() => R.map.invalidateSize(), 50);
+  renderResults(true);
+  if (r.errors.length) pvz.logError('результаты', r.errors.join('; '));
+}
+function filteredResults() {
+  const plats = [...$('rPlat').querySelectorAll('input:checked')].map(i => i.value);
+  const zone = $('rZone').value, area = numOf($('rArea')), price = numOf($('rPrice')), days = +$('rPeriod').value;
+  const q = $('rSearch').value.trim().toLowerCase();
+  const since = days ? Date.now() - days * 864e5 : 0;
+  return R.rows.filter(x => plats.includes(x.platform) && (!zone || zone === x.platform + ' · ' + x.zone)
+    && (area === '' || (x.areaMax ?? x.areaMin ?? 0) >= area) && (price === '' || x.price == null || x.price <= price)
+    && x.checked >= since && (!q || (x.address + ' ' + x.metro + ' ' + x.source + ' ' + x.note).toLowerCase().includes(q)));
+}
+function renderResults(fit) {
+  const list = filteredResults();
+  const { k, dir } = R.sort;
+  list.sort((a, b) => { const x = a[k], y = b[k]; if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1; return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y), 'ru')) * dir; });
+  R.list = list;
+  document.querySelectorAll('.r-table th').forEach(th => th.classList.toggle('sorted', th.dataset.k === k));
+  const shown = list.slice(0, 1000);
+  $('rCount').textContent = `${fmtNum(list.length)} из ${fmtNum(R.rows.length)}`;
+  const area = x => x.areaMin == null ? '' : (x.areaMax && x.areaMax !== x.areaMin ? `${fmtNum(x.areaMin)}–${fmtNum(x.areaMax)}` : fmtNum(x.areaMin)) + ' м²';
+  $('rRows').innerHTML = shown.map(x => `<tr data-id="${x.id}">
+    <td>${esc(x.platform)}</td>
+    <td><span class="zb"><i style="background:${zoneColor(x)}"></i>${esc(x.zone)}</span></td>
+    <td class="addr">${esc(x.address)}${x.metro ? `<small>${esc(x.metro)}</small>` : ''}${x.note ? `<small>${esc(x.note)}</small>` : ''}</td>
+    <td class="n">${area(x)}</td><td class="n">${x.price != null ? fmtNum(x.price) + ' ₽' : ''}</td><td class="n">${x.money ? fmtNum(x.money) + ' ₽' : ''}</td>
+    <td>${fmtTime(x.checked)}</td><td>${x.url ? '<a class="open" href="#">Открыть ↗</a>' : ''}</td></tr>`).join('');
+  $('rMore').textContent = list.length > shown.length ? `Показаны первые ${fmtNum(shown.length)} — уточните фильтры.` : (list.length ? '' : 'Ничего не найдено — измените фильтры или период.');
+  R.layer.clearLayers(); R.markers.clear();
+  const pts = [];
+  for (const x of list.slice(0, 3000)) {
+    if (x.lat == null) continue;
+    const m = L.circleMarker([x.lat, x.lon], { radius: 7, color: '#0b0d11', weight: 1.5, fillColor: zoneColor(x), fillOpacity: .95 })
+      .bindPopup(`<b>${esc(x.address)}</b><br>${esc(x.platform)}: ${esc(x.zone)}<br>${area(x)}${x.price != null ? ' · ' + fmtNum(x.price) + ' ₽/мес' : ''}${x.money ? '<br>Выплата: ' + fmtNum(x.money) + ' ₽' : ''}${x.url ? `<br><a href="#" data-url="${esc(x.url)}">Открыть объявление ↗</a>` : ''}`);
+    m.on('click', () => selectRow(x.id, false));
+    m.addTo(R.layer); R.markers.set(x.id, m); pts.push([x.lat, x.lon]);
+  }
+  if (fit && pts.length) R.map.fitBounds(pts, { padding: [30, 30], maxZoom: 14 });
+}
+function selectRow(id, fly) {
+  document.querySelectorAll('#rRows tr.sel').forEach(t => t.classList.remove('sel'));
+  const tr = document.querySelector(`#rRows tr[data-id="${id}"]`);
+  if (tr) { tr.classList.add('sel'); if (!fly) tr.scrollIntoView({ block: 'nearest' }); }
+  const m = R.markers.get(id);
+  if (m && fly) { R.map.flyTo(m.getLatLng(), Math.max(R.map.getZoom(), 15), { duration: .6 }); m.openPopup(); }
+}
+$('rRows').addEventListener('click', e => {
+  const tr = e.target.closest('tr'); if (!tr) return;
+  const x = R.rows[+tr.dataset.id];
+  if (e.target.closest('a.open')) { e.preventDefault(); pvz.openExternal(x.url); return; }
+  selectRow(x.id, true);
+});
+$('rMap').addEventListener('click', e => { const a = e.target.closest('a[data-url]'); if (a) { e.preventDefault(); pvz.openExternal(a.dataset.url); } });
+document.querySelectorAll('.r-table th[data-k]').forEach(th => (th.onclick = () => { R.sort = { k: th.dataset.k, dir: R.sort.k === th.dataset.k ? -R.sort.dir : (['price', 'areaMin', 'zone', 'address', 'platform'].includes(th.dataset.k) ? 1 : -1) }; renderResults(false); }));
+['rZone', 'rPeriod'].forEach(id => ($(id).onchange = () => renderResults(true)));
+['rArea', 'rPrice', 'rSearch'].forEach(id => $(id).addEventListener('input', () => renderResults(false)));
+$('rPlat').querySelectorAll('input').forEach(i => (i.onchange = () => renderResults(true)));
+$('rReload').onclick = () => loadResults();
+
+// ---------- История ----------
+const H_COLOR = { winner: '#F97316', cian: '#14B8A6', avito: '#3B82F6' };
+async function loadHistory() {
+  const h = await pvz.history();
+  $('hList').innerHTML = h.length ? h.map(x => {
+    const kind = x.type === 'export' ? 'Выгрузка · ' + (NAMES[x.site] || '') : x.type === 'check' ? 'Проверка зон' : 'Расписание';
+    const color = x.type === 'export' ? H_COLOR[x.site] : x.type === 'check' ? '#8B5CF6' : '#64748b';
+    const files = (x.files || []).map(f => `<a data-file="${esc(f)}" title="${esc(f)}">${esc(f.split(/[\\/]/).pop())}</a>`).join('');
+    return `<div class="h-item${x.ok === false ? ' bad' : ''}" style="--c:${color}">
+      <div class="t"><b>${esc(kind)}</b>${x.title ? '<em class="muted">' + esc(x.title) + '</em>' : ''}<span>${fmtTime(x.time)}</span></div>
+      <div class="r">${esc(prettyNums(x.reason || ''))}${x.total ? ` · ${x.type === 'check' ? 'адресов' : 'объявлений'}: ${fmtNum(x.total)}` : ''}</div>
+      ${files ? `<div class="f">${files}</div>` : ''}</div>`;
+  }).join('') : '<div class="s-empty">Запусков пока не было.</div>';
+  const e = await pvz.errors();
+  const n = (e.match(/^\d{4}-\d{2}-\d{2}T/gm) || []).length;
+  $('eCount').textContent = n ? fmtNum(n) : '';
+  $('eText').textContent = e ? e.trim().split('\n').slice(-300).join('\n') : 'Ошибок нет 👍';
+}
+$('hList').addEventListener('click', e => { const a = e.target.closest('a[data-file]'); if (a) pvz.showFile(a.dataset.file); });
+$('hReload').onclick = () => loadHistory();
+$('eCopy').onclick = async () => { await pvz.copyReport(); $('eMsg').textContent = 'Скопировано — вставьте в чат с Claude (Ctrl+V).'; };
+$('eClear').onclick = async () => { await pvz.clearErrors(); loadHistory(); };
+
+// ---------- Расписание ----------
+const S = { list: [], presets: {}, orders: [] };
+const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+async function loadSchedule() {
+  const c = await pvz.getCfg();
+  S.list = c.schedules || [];
+  S.presets = c.presets && Object.keys(c.presets).length ? c.presets : DEFAULT_PRESETS;
+  S.orders = await pvz.bwOrders();
+  $('sTray').checked = c.tray !== false; $('sAuto').checked = !!c.autostart;
+  renderSchedule();
+}
+const saveSchedule = () => pvz.setCfg({ schedules: S.list });
+function whatOptions(s) {
+  const cur = s.kind === 'winner' ? 'winner:' + s.guid : 'preset:' + s.preset;
+  return `<optgroup label="Baza Winner — заказ">${S.orders.map(o => `<option value="winner:${o.guid}"${cur === 'winner:' + o.guid ? ' selected' : ''}>${esc(o.name)}</option>`).join('')}</optgroup>` +
+    `<optgroup label="Циан и Авито — пресет">${Object.keys(S.presets).map(n => `<option value="preset:${esc(n)}"${cur === 'preset:' + n ? ' selected' : ''}>${esc(n)}</option>`).join('')}</optgroup>`;
+}
+function renderSchedule() {
+  $('sList').innerHTML = S.list.length ? S.list.map((s, i) => `<div class="s-item${s.enabled ? '' : ' off'}" data-i="${i}">
+      <label class="switch"><input type="checkbox" class="en"${s.enabled ? ' checked' : ''}><span></span></label>
+      <input type="time" class="tm" value="${s.time}">
+      <select class="what">${whatOptions(s)}</select>
+      <div class="s-days">${DAYS.map((d, k) => `<button class="${(s.days || []).includes(k + 1) ? 'on' : ''}" data-d="${k + 1}">${d}</button>`).join('')}</div>
+      <label class="chk"><input type="checkbox" class="ck"${s.check ? ' checked' : ''}>проверить зоны</label>
+      <button class="del" title="Удалить">✕</button></div>`).join('')
+    : '<div class="s-empty">Заданий нет. Нажмите «+ Добавить задание».</div>';
+}
+$('sList').addEventListener('change', e => {
+  const it = e.target.closest('.s-item'); if (!it) return; const s = S.list[+it.dataset.i];
+  if (e.target.classList.contains('en')) s.enabled = e.target.checked;
+  if (e.target.classList.contains('tm')) s.time = e.target.value;
+  if (e.target.classList.contains('ck')) s.check = e.target.checked;
+  if (e.target.classList.contains('what')) {
+    const [kind, ...rest] = e.target.value.split(':'); const v = rest.join(':');
+    s.kind = kind; if (kind === 'winner') { s.guid = v; s.name = (S.orders.find(o => o.guid === v) || {}).name; delete s.preset; } else { s.preset = v; s.name = v; delete s.guid; }
+  }
+  saveSchedule(); renderSchedule();
+});
+$('sList').addEventListener('click', e => {
+  const it = e.target.closest('.s-item'); if (!it) return; const i = +it.dataset.i, s = S.list[i];
+  if (e.target.closest('.del')) { S.list.splice(i, 1); saveSchedule(); renderSchedule(); return; }
+  const d = e.target.closest('[data-d]');
+  if (d) { const n = +d.dataset.d; s.days = (s.days || []).includes(n) ? s.days.filter(x => x !== n) : [...(s.days || []), n].sort(); saveSchedule(); renderSchedule(); }
+});
+$('sAdd').onclick = () => {
+  const o = S.orders[0];
+  S.list.push(Object.assign({ id: Date.now().toString(36), enabled: true, time: '13:30', days: [1, 2, 3, 4, 5], check: true },
+    o ? { kind: 'winner', guid: o.guid, name: o.name } : { kind: 'preset', preset: Object.keys(S.presets)[0], name: Object.keys(S.presets)[0] }));
+  saveSchedule(); renderSchedule();
 };
+$('sTray').onchange = () => pvz.setCfg({ tray: $('sTray').checked });
+$('sAuto').onchange = () => pvz.setAutostart($('sAuto').checked);
+
+// запуск задания по расписанию
+const wait = ms => new Promise(r => setTimeout(r, ms));
+pvz.onRunSchedule(async s => {
+  if (running) { pvz.notify('PVZ Master', `Задание «${s.name || ''}» пропущено: идёт другая выгрузка.`); return; }
+  let report = [];
+  try {
+    if (s.kind === 'winner') {
+      document.body.dataset.mode = 'work'; setSite('winner');
+      setStatus(`По расписанию: ${s.name || 'заказ Winner'}…`);
+      await pvz.navUrl('winner', `https://w7.baza-winner.ru/search/${s.guid}/params`);
+      await wait(6000); bwGuid = null; await refreshBw();
+      const { r, text } = await runExport({ title: s.name, forceCheck: !!s.check });
+      setStatus(text, r.ok ? 'done' : 'err');
+      report.push(r.ok ? `выгружено ${fmtNum(r.total)}, файлов ${r.saved.length}` : 'ошибка: ' + r.error);
+    } else {
+      const c = await pvz.getCfg();
+      const all = c.presets && Object.keys(c.presets).length ? c.presets : DEFAULT_PRESETS;
+      const p = all[s.preset];
+      if (!p) { report.push('пресет не найден'); }
+      else report = await runOrder(Object.assign({ cian: true, avito: true }, p), s.preset, { unattended: true, forceCheck: !!s.check });
+    }
+  } catch (e) { report.push('ошибка: ' + (e.message || e)); pvz.logError('расписание', e.stack || String(e)); }
+  pvz.notify(`PVZ Master — ${s.name || 'задание'} (${s.time})`, prettyNums(report.join(' · ') || 'готово'));
+});
+
+// ручной режим (для опытных): прежняя панель с вкладками сайтов
+$('expertBtn').onclick = async () => { const c = await pvz.getCfg(); openSite(c.lastSite && NAMES[c.lastSite] && c.lastSite !== 'ozon' ? c.lastSite : 'winner'); };

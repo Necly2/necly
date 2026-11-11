@@ -5,6 +5,13 @@ const { app } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
+// Переименование PVZ Avito → PVZ Master: если есть старая папка данных — продолжаем работать в ней
+// (настройки, пресеты, входы на сайты, журналы сохраняются).
+try {
+  const old = path.join(app.getPath('appData'), 'PVZ Avito');
+  if (fs.existsSync(old)) app.setPath('userData', old);
+} catch {}
+
 const bundled = parseInt(String(app.getVersion()).split('.').pop(), 10) || 0;
 const bundledEntry = path.join(__dirname, 'main.js');
 let entry = bundledEntry, build = bundled, updFile = null;

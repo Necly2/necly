@@ -1,5 +1,5 @@
-// PVZ Avito — отдельное приложение: слева панель управления, справа окно Авито.
-const { app, BrowserWindow, WebContentsView, ipcMain, dialog, shell, Menu, net } = require('electron');
+// PVZ Master — слева панель управления, справа окно сайта (Winner, Циан, Авито) и скрытые вкладки карт Ozon и WB.
+const { app, BrowserWindow, WebContentsView, ipcMain, dialog, shell, Menu, net, clipboard } = require('electron');
 const IS_MAC = process.platform === 'darwin';
 const path = require('path');
 const fs = require('fs');
@@ -9,6 +9,11 @@ const updater = require('./updater');
 const winner = require('./winner');
 const ozon = require('./ozon');
 const platforms = require('./platforms');
+const journal = require('./journal');
+const results = require('./results');
+const scheduler = require('./scheduler');
+process.on('uncaughtException', e => journal.logError('программа', e));
+process.on('unhandledRejection', e => journal.logError('программа (promise)', e));
 
 // убираем из User-Agent пометки Electron/приложения — остаётся обычная строка Chromium
 app.userAgentFallback = app.userAgentFallback
@@ -32,14 +37,24 @@ let currentSite = null, ozonRunning = false, ozonStop = false;
 const ozonQueue = [];
 const cfgPath = () => path.join(app.getPath('userData'), 'config.json');
 function loadCfg() {
-  const d = { root: DEF_ROOT, cianRoot: DEF_CIAN, ozonOut: DEF_OZON, ozonDays: 3, ozonThreads: 2, ozonPause: 2, ozonAuto: true, ozonCache: true, chkOzon: true, chkYandex: false, chkWb: false,
+  const d = { root: DEF_ROOT, cianRoot: DEF_CIAN, ozonOut: DEF_OZON, ozonDays: 3, ozonThreads: 2, ozonPause: 2, ozonAuto: false, ozonCache: true, chkOzon: true, chkYandex: false, chkWb: false,
+    tray: true, autostart: false, schedules: [],
     pages: 40, delay: 4, days: 7, part: 300, cianOnlyNew: true };
-  try { return Object.assign(d, JSON.parse(fs.readFileSync(cfgPath(), 'utf8'))); } catch { return d; }
+  let c; try { c = Object.assign(d, JSON.parse(fs.readFileSync(cfgPath(), 'utf8'))); } catch { c = d; }
+  // проверка зон запускается только по кнопке (решение пользователя 11.11.2026) — выключаем старую автопроверку один раз
+  if (!c.ozonAutoOff) { c.ozonAuto = false; c.ozonAutoOff = 1; try { saveCfg(c); } catch {} }
+  return c;
 }
 function saveCfg(c) { fs.mkdirSync(path.dirname(cfgPath()), { recursive: true }); fs.writeFileSync(cfgPath(), JSON.stringify(c, null, 2)); }
 
+let siteRect = null;   // место под сайт в мастере (присылает интерфейс)
 function layout() {
   const [w, h] = win.getContentSize();
+  if (mode === 'wizard') {
+    ozonView.setVisible(false);
+    if (siteRect && siteRect.width > 50) { view.setVisible(true); view.setBounds(siteRect); } else view.setVisible(false);
+    return;
+  }
   const b = { x: PANEL_W, y: 0, width: Math.max(100, w - PANEL_W), height: h };
   const showOzon = mode === 'work' && currentSite === 'ozon';
   const showView = mode === 'work' && !showOzon;
@@ -50,7 +65,8 @@ function layout() {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1400, height: 900, minWidth: 980, minHeight: 640, title: 'PVZ', backgroundColor: '#0d0f13',
+    show: !process.argv.includes('--hidden'),
+    width: 1400, height: 900, minWidth: 980, minHeight: 640, title: 'PVZ Master', backgroundColor: '#0d0f13', icon: path.join(__dirname, 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
   });
   if (IS_MAC) {
@@ -58,10 +74,10 @@ function createWindow() {
     Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' }]));
   } else win.removeMenu();
   win.loadFile(path.join(__dirname, 'panel.html'));
-  win.setTitle(`PVZ · поиск помещений — сборка ${updater.currentBuild()}`);
+  win.setTitle(`PVZ Master — сборка ${updater.currentBuild()}`);
   win.on('page-title-updated', e => e.preventDefault());
 
-  view = new WebContentsView({ webPreferences: { partition: 'persist:avito', contextIsolation: true } });
+  view = new WebContentsView({ webPreferences: { partition: 'persist:avito', contextIsolation: true, backgroundThrottling: false } });
   win.contentView.addChildView(view);
   // отдельная вкладка карты Ozon: работает в фоне, пока вы выгружаете с других сайтов
   ozonView = new WebContentsView({ webPreferences: { partition: 'persist:ozon', contextIsolation: true, backgroundThrottling: false } });
@@ -108,6 +124,7 @@ function saveRows(rows, cfg, site) {
   const saved = [];
   for (let i = 0; i < rows.length; i += cfg.part) {
     const ws = XLSX.utils.aoa_to_sheet([HEAD, ...rows.slice(i, i + cfg.part)]);
+    for (let r = 1; r <= Math.min(cfg.part, rows.length - i); r++) { const c = ws[XLSX.utils.encode_cell({ r, c: 7 })]; if (c && typeof c.v === 'number') c.z = '#,##0'; }
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'W7 экспорт');
     const file = path.join(dir, `${prefix}${n++}.xlsx`);
@@ -155,14 +172,23 @@ ipcMain.handle('nav', (_e, what) => {
   if (what === 'back' && wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack();
   else if (what === 'reload') wc.reload();
 });
-ipcMain.handle('navUrl', async (_e, site, url) => {
-  mode = 'work'; currentSite = site; layout();
+ipcMain.handle('navUrl', async (_e, site, url, keepMode) => {
+  if (!keepMode) mode = 'work';
+  currentSite = site; layout();
   await view.webContents.loadURL(url).catch(() => {});
   await new Promise(r => setTimeout(r, 2000));
   send('url', view.webContents.getURL());
   return view.webContents.getURL();
 });
 ipcMain.handle('currentUrl', () => view.webContents.getURL());
+// мастер: где показывать сайт (null — скрыть); режим 'wizard'
+ipcMain.handle('siteRect', (_e, r) => {
+  mode = 'wizard';
+  siteRect = r ? { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) } : null;
+  layout(); return true;
+});
+ipcMain.handle('siteBack', () => { if (view.webContents.navigationHistory.canGoBack()) view.webContents.navigationHistory.goBack(); });
+ipcMain.handle('siteReload', () => view.webContents.reload());
 ipcMain.handle('stop', () => { stopFlag = true; return view.webContents.executeJavaScript('window.__pvzStop = true').catch(() => {}); });
 ipcMain.handle('bwOrder', () => {
   const m = view.webContents.getURL().match(/baza-winner\.ru\/search\/([0-9a-f-]{36})/i);
@@ -185,11 +211,14 @@ ipcMain.handle('start', async (_e, c) => {
     running = true; stopFlag = false;
     try {
       const m = url.match(/\/search\/([0-9a-f-]{36})/i);
-      if (m && c.bw) { cfg.bwOrders = Object.assign({}, cfg.bwOrders, { [m[1]]: { tag: c.bw.tag, hide: c.bw.hide } }); saveCfg(cfg); }
+      if (m && c.bw) { cfg.bwOrders = Object.assign({}, cfg.bwOrders, { [m[1]]: { tag: c.bw.tag, hide: c.bw.hide, name: c.bw.name || (cfg.bwOrders && cfg.bwOrders[m[1]] && cfg.bwOrders[m[1]].name) || '' } }); saveCfg(cfg); }
       const r = await winner.run(view.webContents, cfg, c.bw || {}, st => send('status', st), () => stopFlag);
-      const q = autoOzon(cfg, r.saved);
+      const q = autoOzon(cfg, r.saved, c.forceCheck);
+      if (!r.ok) journal.logError('Winner', r.error);
+      else if (/ошибк/i.test(r.reason || '')) journal.logError('Winner', r.reason);
+      journal.addHistory({ type: 'export', site, title: c.title || (r.extra || '').replace(/^Заказ: /, '').split(';')[0], ok: !!r.ok, total: r.total || 0, files: r.saved || [], reason: r.reason || r.error });
       return Object.assign({ site, withCoords: r.total, ozonQueued: q }, r);
-    } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
+    } catch (e) { journal.logError('Winner', e); journal.addHistory({ type: 'export', site, ok: false, total: 0, files: [], reason: String(e && e.message || e) }); return { ok: false, error: String(e && e.message || e) }; }
     finally { running = false; }
   }
 
@@ -210,17 +239,20 @@ ipcMain.handle('start', async (_e, c) => {
       out = saveRows(res.rows, cfg, site);
       if (site === 'cian' && res.ids) addSeen(cfg, res.ids);
     }
-    const q = autoOzon(cfg, out.saved);
+    const q = autoOzon(cfg, out.saved, c.forceCheck);
+    journal.addHistory({ type: 'export', site, title: c.title || '', ok: true, total: res.rows.length, files: out.saved, reason: res.reason });
     return { ok: true, site, reason: res.reason, extra: res.extra || '', total: res.rows.length, withCoords: res.withCoords, ozonQueued: q, ...out };
   } catch (e) {
     clearInterval(timer);
+    journal.logError(site === 'cian' ? 'Циан' : 'Авито', e);
+    journal.addHistory({ type: 'export', site, title: c.title || '', ok: false, total: 0, files: [], reason: String(e && e.message || e) });
     return { ok: false, error: String(e && e.message || e) };
   } finally { running = false; }
 });
 
 // ---------- проверка Ozon ----------
-function autoOzon(cfg, files) {
-  if (!cfg.ozonAuto || !files || !files.length) return 0;
+function autoOzon(cfg, files, force) {
+  if (!(cfg.ozonAuto || force) || !files || !files.length) return 0;
   enqueueOzon(files); return files.length;
 }
 function enqueueOzon(paths) {
@@ -258,6 +290,7 @@ async function pumpOzon() {
   try {
     while (ozonQueue.length && !ozonStop) {
       const cfg = loadCfg();
+      if (ozonFresh) { cfg.ozonCache = false; ozonFresh = false; }
       const paths = ozonQueue.splice(0);
       const results = [];
       for (const p of enabledPlatforms(cfg)) {
@@ -279,8 +312,16 @@ async function pumpOzon() {
         }
       }
       send('ozonDone', { ok: true, results });
+      if (results.length && (!win.isVisible() || !win.isFocused())) scheduler.notify('PVZ Master — проверка зон завершена', results.map(r => `${r.label}: ${r.kind === 'ozon' ? 'файлов ' + r.saved.length : 'в «Результат» ' + r.main}`).join(' · '));
+      if (results.length) journal.addHistory({ type: 'check', ok: true, title: results.map(r => r.label).join(', '),
+        total: results.reduce((a, r) => a + (r.addresses || 0), 0), files: results.flatMap(r => r.saved || []),
+        reason: results.map(r => `${r.label}: ${r.reason}`).join('; '),
+        details: results.map(r => ({ label: r.label, addresses: r.addresses, suitable: r.kind === 'ozon' ? Object.entries(r.stats || {}).filter(([k]) => !['green_small', 'out_zone', 'unchecked'].includes(k)).reduce((a, [, v]) => a + v, 0) : r.main, unchecked: r.unchecked || (r.stats && r.stats.unchecked) || 0 })) });
+      for (const r of results) for (const e of (r.errors || [])) journal.logError(r.label, e);
     }
   } catch (e) {
+    journal.logError('проверка зон', e);
+    journal.addHistory({ type: 'check', ok: false, title: 'Проверка зон', total: 0, files: [], reason: String(e && e.message || e) });
     send('ozonDone', { ok: false, error: String(e && e.message || e) });
   } finally { ozonRunning = false; if (ozonStop) ozonQueue.length = 0; }
 }
@@ -296,8 +337,17 @@ ipcMain.handle('ozonScan', () => {
   const files = [...map.values()].sort((a, b) => a.path.localeCompare(b.path, 'ru', { numeric: true }));
   return { running: ozonRunning, files };
 });
-ipcMain.handle('ozonStart', (_e, paths) => {
+let ozonFresh = false;
+ipcMain.handle('ozonStart', (_e, paths, opts) => {
   if (!paths || !paths.length) return { ok: false, error: 'Нет файлов для проверки' };
+  if (opts && opts.fresh) {   // «Попробовать снова»: забыть, что эти файлы уже проверялись, и не брать результаты из памяти
+    const cfg = loadCfg();
+    for (const p of PLATFORMS) {
+      const jp = path.join(cfg.ozonOut, p.journal);
+      try { const j = JSON.parse(fs.readFileSync(jp, 'utf8')); for (const f of paths) delete j.files[f]; fs.writeFileSync(jp, JSON.stringify(j, null, 1)); } catch {}
+    }
+    ozonFresh = true;
+  }
   enqueueOzon(paths); return { ok: true };
 });
 ipcMain.handle('ozonStop', () => { ozonStop = true; return true; });
@@ -308,8 +358,57 @@ ipcMain.handle('ozonClearCache', () => {
 });
 ipcMain.handle('ozonState', () => ({ running: ozonRunning, queued: ozonQueue.length }));
 
+ipcMain.handle('history', () => journal.readHistory());
+ipcMain.handle('results', () => results.collect(loadCfg().ozonOut));
+ipcMain.handle('bwOrders', () => {
+  const cfg = loadCfg(), out = {};
+  for (const [g, o] of Object.entries(winner.KNOWN)) out[g] = { guid: g, name: o.name };
+  for (const [g, o] of Object.entries(cfg.bwOrders || {})) out[g] = { guid: g, name: (o && o.name) || (out[g] && out[g].name) || ('Заказ ' + g.slice(0, 8)) };
+  return Object.values(out);
+});
+ipcMain.handle('notify', (_e, t, b) => scheduler.notify(t, b));
+ipcMain.handle('setAutostart', (_e, on) => { const c = Object.assign(loadCfg(), { autostart: !!on }); saveCfg(c); scheduler.applyAutostart(on); return true; });
+ipcMain.handle('isVisible', () => win.isVisible());
+ipcMain.handle('errors', () => journal.readErrors());
+ipcMain.handle('clearErrors', () => journal.clearErrors());
+ipcMain.handle('copyReport', () => { clipboard.writeText(journal.report(updater.currentBuild())); return true; });
+ipcMain.handle('logError', (_e, where, msg) => journal.logError(where, msg));
+ipcMain.handle('openFile', (_e, p) => shell.openPath(p));
+ipcMain.handle('showFile', (_e, p) => shell.showItemInFolder(p));
+ipcMain.handle('openExternal', (_e, u) => /^https?:\/\//.test(u) && shell.openExternal(u));
+
 ipcMain.handle('checkUpdate', () => updater.check(win, { manual: true }));
 ipcMain.handle('version', () => updater.currentBuild());
 
-app.whenReady().then(() => { createWindow(); updater.schedule(win); if (process.env.PVZ_DEBUG) console.log('PVZ main ready, exceljs', typeof require('exceljs').Workbook, 'build', updater.currentBuild()); });
-app.on('window-all-closed', () => app.quit());
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) app.quit();
+app.on('second-instance', () => { if (win) { win.show(); win.focus(); } });
+app.on('activate', () => { if (win) win.show(); });
+if (gotLock) app.whenReady().then(() => {
+  createWindow(); updater.schedule(win);
+  scheduler.setupTray(win); scheduler.bindClose(win, loadCfg); scheduler.applyAutostart(loadCfg().autostart);
+  scheduler.start(loadCfg, s => { journal.addHistory({ type: 'schedule', ok: true, title: s.name || s.preset || 'задание', reason: 'запуск по расписанию ' + s.time }); win.webContents.send('runSchedule', s); }); if (process.env.PVZ_DEBUG) console.log('PVZ main ready, exceljs', typeof require('exceljs').Workbook, 'build', updater.currentBuild());
+  if (process.env.PVZ_SHOT) selfTest(process.env.PVZ_SHOT);
+});
+// самопроверка интерфейса (только для разработки): обходит экраны, пишет ошибки консоли и снимки окна
+async function selfTest(dir) {
+  win.webContents.on('console-message', (_e, level, msg) => { if (level >= 2) console.log('RENDERER', msg); });
+  const W8 = ms => new Promise(r => setTimeout(r, ms));
+  await W8(2500);
+  const shot = async n => { const img = await win.webContents.capturePage(); fs.writeFileSync(path.join(dir, n + '.png'), img.toPNG()); };
+  const J = c => win.webContents.executeJavaScript(c, true).catch(e => console.log('JSERR', e.message));
+  await shot('01-home');
+  await J(`$('startBtn').click(); 1`); await W8(1200); await shot('02-select');
+  await J(`$('wzNext').click(); 1`); await W8(900); await shot('03-cian');
+  await J(`$('wzNext').click(); 1`); await W8(900); await shot('04-avito');
+  await J(`$('aOpen').click(); 1`); await W8(3500); await shot('04b-avito-site');
+  console.log('VIEW', JSON.stringify({ visible: view.getVisible ? view.getVisible() : null, bounds: view.getBounds(), host: await J(`JSON.stringify($('wzSiteHost').getBoundingClientRect())`) }));
+  await J(`$('wzSiteClose').click(); 1`); await W8(500);
+  await J(`$('wzNext').click(); 1`); await W8(900); await shot('05-avito-modal');
+  await J(`[...document.querySelectorAll('#mBtns button')].find(b=>/без них/.test(b.textContent)).click(); 1`); await W8(1200); await shot('06-winner');
+  await J(`document.querySelector('#oList .on') && document.querySelector('#oList .on').click(); 1`); await W8(300);
+  await J(`$('wzNext').click(); 1`); await W8(900); await shot('07-center');
+  for (const page of ['results', 'history', 'schedule']) { await J(`openPage('${page}'); 1`); await W8(1800); await shot('08-' + page); }
+  console.log('SELFTEST DONE'); app.exit(0);
+}
+app.on('window-all-closed', () => { if (scheduler.isQuitting() || !loadCfg().tray) app.quit(); });

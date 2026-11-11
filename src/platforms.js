@@ -199,7 +199,7 @@ function writeSheet(ws, spec, rows, withReason) {
       cell.border = border;
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + r.color } };
       if (c === 'Ссылка на первоисточник' && r.d._url) { cell.value = { text: 'Открыть объявление', hyperlink: r.d._url }; cell.font = { color: { argb: 'FF0563C1' }, underline: true }; }
-      if (c === spec.money && r.extra[c]) cell.numFmt = '#,##0';
+      if ((c === spec.money || c === 'Цена, ₽') && typeof cell.value === 'number') cell.numFmt = '#,##0';
     });
   }
   cols.forEach((c, j) => (ws.getColumn(j + 1).width = spec.widths[c] || 14));
