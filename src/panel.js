@@ -1,12 +1,12 @@
 const $ = id => document.getElementById(id);
 function showPath(id, p) { $(id).textContent = p || ''; $(id).title = p || ''; }
 const F = ['pages', 'delay', 'days', 'part'];
-const NAMES = { avito: 'Авито', cian: 'Циан', winner: 'Baza Winner', ozon: 'Проверка Ozon' };
+const NAMES = { avito: 'Авито', cian: 'Циан', winner: 'Baza Winner', ozon: 'Проверка зон' };
 const lastDirs = {};
 let running = false;      // идёт выгрузка с сайта
 let ozonBusy = false;     // идёт проверка Ozon
 let ozFiles = [];
-const exportStatus = { text: 'Готово к работе.', kind: '' }, ozonStatusMsg = { text: 'Нажмите «Проверить на Ozon» — проверятся новые выгрузки.', kind: '' };
+const exportStatus = { text: 'Готово к работе.', kind: '' }, ozonStatusMsg = { text: 'Выберите площадки и нажмите «Проверить зоны» — проверятся новые выгрузки.', kind: '' };
 
 // ---------- старт ----------
 async function init() {
@@ -17,6 +17,7 @@ async function init() {
   showPath('ozonOut', c.ozonOut);
   $('ozonAuto').checked = c.ozonAuto !== false;
   $('ozonCache').checked = c.ozonCache !== false;
+  $('chkOzon').checked = c.chkOzon !== false; $('chkYandex').checked = !!c.chkYandex; $('chkWb').checked = !!c.chkWb;
   $('ozonDays').value = c.ozonDays; $('ozonThreads').value = c.ozonThreads; $('ozonPause').value = c.ozonPause;
   const st = await pvz.ozonState(); ozonBusy = st.running; refreshRunUI();
   $('cianOnlyNew').checked = c.cianOnlyNew !== false;
@@ -67,6 +68,7 @@ $('ozClear').onclick = async () => { const n = await pvz.ozonClearCache(); $('oz
   const v = Math.max(1, parseInt($(id).value, 10) || 1); $(id).value = v; pvz.setCfg({ [id]: v }); if (id === 'ozonDays') rescan();
 }));
 $('ozRescan').onclick = () => rescan();
+['chkOzon', 'chkYandex', 'chkWb'].forEach(id => ($(id).onchange = () => { pvz.setCfg({ [id]: $(id).checked }); setTimeout(rescan, 100); }));
 
 // ---------- Ozon: список новых выгрузок ----------
 const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -75,7 +77,7 @@ async function rescan() {
   ozFiles = r.files;
   $('ozCount').textContent = ozFiles.length ? ozFiles.length + ' шт.' : '';
   $('ozFiles').innerHTML = ozFiles.length
-    ? ozFiles.map(f => `<div class="file${f.partial ? ' partial' : ''}" title="${esc(f.path)}"><b>${esc(f.name)}</b><span>${f.partial ? 'дозапуск' : esc(f.folder)}</span></div>`).join('')
+    ? ozFiles.map(f => `<div class="file${f.partial ? ' partial' : ''}" title="${esc(f.path)}"><b>${esc(f.name)}</b><span>${f.partial ? 'дозапуск' : esc(f.folder)}<span class="pf">${(f.platforms || []).map(p => ({ ozon: 'O', yandex: 'Я', wb: 'WB' })[p]).join(' ')}</span></span></div>`).join('')
     : '<div class="hint">Новых выгрузок нет — всё проверено.</div>';
   refreshRunUI();
 }
@@ -119,7 +121,7 @@ function refreshRunUI() {
   const busy = oz ? ozonBusy : running;
   $('work').classList.toggle('running', busy);
   $('go').disabled = busy || (oz && !ozFiles.length && !ozonBusy);
-  $('goText').textContent = oz ? (ozonBusy ? 'Идёт проверка…' : 'Проверить на Ozon' + (ozFiles.length ? ` (${ozFiles.length})` : '')) : (running ? 'Идёт выгрузка…' : 'Выгрузить');
+  $('goText').textContent = oz ? (ozonBusy ? 'Идёт проверка…' : 'Проверить зоны' + (ozFiles.length ? ` (${ozFiles.length})` : '')) : (running ? 'Идёт выгрузка…' : 'Выгрузить');
   $('stop').textContent = oz ? 'Остановить проверку' : 'Остановить и сохранить';
   paint(oz ? ozonStatusMsg : exportStatus, oz ? ozonProg : null);
   $('ozonMini').classList.toggle('on', ozonBusy && !oz);
@@ -128,22 +130,38 @@ pvz.onStatus(s => running && setStatus(s));
 pvz.onOzonStatus(s => {
   ozonBusy = true;
   setOzon(s.text, '', s.total ? { done: s.done || 0, total: s.total } : null);
-  $('ozonMini').textContent = 'Ozon: ' + s.text.split('\n')[0];
+  $('ozonMini').textContent = 'Проверка: ' + s.text.split('\n')[0];
   refreshRunUI();
 });
-pvz.onOzonDone(r => {
-  ozonBusy = false;
-  if (!r.ok) { setOzon('Ошибка проверки Ozon: ' + r.error, 'err'); refreshRunUI(); rescan(); return; }
+function ozonText(r) {
   const z = r.stats;
-  let t = `Ozon — ${r.reason}.\nФайлов: ${r.files}, адресов: ${r.addresses}.\n` +
+  let t = `Ozon — ${r.reason}. Файлов: ${r.files}, адресов: ${r.addresses}.\n` +
     `Подходящих: зелёных ≥ 49 м² ${z['зелёный']}, синих ${z['синий']}, голубых ${z['голубой']}, < 3 млн ${z['гарантия < 3 млн']}, ошибка запроса ${z['ошибка запроса']}.\n` +
     `Не подошли: вне зоны/недоступно ${z.out_zone}, зелёных < 49 м² ${z.green_small}` + (z.unchecked ? `; не проверено ${z.unchecked}` : '') + '.';
-  if (r.saved.length) { t += `\n\nФайлы (${r.saved.length}):\n` + r.saved.map(f => '• ' + f.split(/[\\/]/).pop()).join('\n'); lastDirs.ozon = r.saved[0].replace(/[\\/][^\\/]+$/, ''); }
-  if (r.manual.length) t += `\n\nПроверить вручную (${r.manual.length}):\n` + r.manual.slice(0, 15).map(x => '• ' + x).join('\n');
-  if (r.odd.length) t += `\n\nСтранные цены (${r.odd.length}):\n` + r.odd.slice(0, 10).map(x => '• ' + x).join('\n');
-  if (r.errors.length) t += '\n\nОшибки чтения:\n' + r.errors.map(x => '• ' + x).join('\n');
-  setOzon(t, z.unchecked || r.errors.length ? 'err' : 'done');
-  $('ozonMini').textContent = 'Ozon: ' + r.reason + ' — нажмите, чтобы посмотреть';
+  if (r.odd && r.odd.length) t += `\nСтранные цены (${r.odd.length}): ` + r.odd.slice(0, 5).join('; ');
+  return t;
+}
+function platformText(r) {
+  const parts = Object.entries(r.stats || {}).map(([k, v]) => `${k}: ${v}`);
+  return `${r.label} — ${r.reason}. Файлов: ${r.files}, адресов: ${r.addresses}.\n` +
+    `В «Результат»: ${r.main}` + (parts.length ? ` (${parts.join('; ')})` : '') + `; в «Исключённые»: ${r.excluded}` + (r.unchecked ? `; не проверено ${r.unchecked}` : '') + '.';
+}
+pvz.onOzonDone(res => {
+  ozonBusy = false;
+  if (!res.ok) { setOzon('Ошибка проверки: ' + res.error, 'err'); refreshRunUI(); rescan(); return; }
+  if (!res.results.length) { setOzon('Новых файлов для выбранных площадок нет.', 'done'); refreshRunUI(); rescan(); return; }
+  let bad = false; const saved = [], manual = [], errors = [];
+  const blocks = res.results.map(r => {
+    if (r.unchecked || (r.errors && r.errors.length) || /ограничил|не ответила/.test(r.reason)) bad = true;
+    saved.push(...(r.saved || [])); manual.push(...(r.manual || []).map(x => `[${r.label}] ${x}`)); errors.push(...(r.errors || []));
+    return r.kind === 'ozon' ? ozonText(r) : platformText(r);
+  });
+  let t = blocks.join('\n\n');
+  if (saved.length) { t += `\n\nФайлы (${saved.length}):\n` + saved.map(f => '• ' + f.split(/[\\/]/).pop()).join('\n'); lastDirs.ozon = saved[0].replace(/[\\/][^\\/]+$/, ''); }
+  if (manual.length) t += `\n\nПроверить вручную (${manual.length}):\n` + manual.slice(0, 15).map(x => '• ' + x).join('\n');
+  if (errors.length) t += '\n\nОшибки чтения:\n' + errors.map(x => '• ' + x).join('\n');
+  setOzon(t, bad ? 'err' : 'done');
+  $('ozonMini').textContent = 'Проверка зон: готово — нажмите, чтобы посмотреть';
   $('ozonMini').classList.toggle('on', !isOzonSite());
   refreshRunUI(); rescan();
 });

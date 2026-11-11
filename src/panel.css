@@ -96,10 +96,10 @@ input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,va
 
 .switch{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px}
 .switch input{display:none}
-.switch span{width:36px;height:20px;border-radius:999px;background:#2a303b;position:relative;flex:none;transition:.2s}
-.switch span::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#cfd4dc;transition:.2s}
-.switch input:checked + span{background:var(--accent)}
-.switch input:checked + span::after{left:18px;background:#fff}
+.switch > span:not(.lbl){width:36px;height:20px;border-radius:999px;background:#2a303b;position:relative;flex:none;transition:.2s}
+.switch > span:not(.lbl)::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#cfd4dc;transition:.2s}
+.switch input:checked + span:not(.lbl){background:var(--accent)}
+.switch input:checked + span:not(.lbl)::after{left:18px;background:#fff}
 
 /* показывать блоки только для своего сайта */
 .only-avito,.only-cian,.only-winner,.only-ozon{display:none !important}
@@ -179,3 +179,8 @@ select:focus{border-color:var(--accent)}
 .manual ul{margin:0;padding-left:18px;line-height:1.5}
 .manual .box-h{color:#fcd34d}
 .small-p{padding:9px !important;font-size:13px !important}
+
+.switch span.lbl{width:auto;height:auto;background:none;border-radius:0}
+.switch span.lbl::after{display:none}
+.switch small{display:block;color:var(--muted);font-size:11.5px}
+.file .pf{color:var(--accent);font-size:11px;margin-left:6px}

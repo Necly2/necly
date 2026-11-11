@@ -61,8 +61,8 @@ const writeJson = (p, o) => { fs.mkdirSync(path.dirname(p), { recursive: true })
 const journalPath = out => path.join(out, 'ozon_checked.json');
 
 // новые выгрузки: export_excel… / avito… в папках АДРЕСА и АДРЕСА ЦИАН, изменённые за N дней и ещё не проверенные
-function scan(roots, outDir, days) {
-  const j = readJson(journalPath(outDir), { files: {} });
+function scan(roots, outDir, days, journalName) {
+  const j = readJson(journalName ? path.join(outDir, journalName) : journalPath(outDir), { files: {} });
   const since = Date.now() - (days || 3650) * 864e5;
   const found = [];
   const walk = (dir, depth) => {
@@ -228,4 +228,4 @@ async function run(files, ctx) {
   return { ok: true, reason, saved, errors, stats, manual, odd, files: data.length, addresses: total };
 }
 
-module.exports = { scan, run, OZON_URL };
+module.exports = { scan, run, readExport, OZON_URL };

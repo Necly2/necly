@@ -1,5 +1,5 @@
 // PVZ Avito — отдельное приложение: слева панель управления, справа окно Авито.
-const { app, BrowserWindow, WebContentsView, ipcMain, dialog, shell, Menu } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, dialog, shell, Menu, net } = require('electron');
 const IS_MAC = process.platform === 'darwin';
 const path = require('path');
 const fs = require('fs');
@@ -8,6 +8,7 @@ const { collector, cianCollector } = require('./collector');
 const updater = require('./updater');
 const winner = require('./winner');
 const ozon = require('./ozon');
+const platforms = require('./platforms');
 
 // убираем из User-Agent пометки Electron/приложения — остаётся обычная строка Chromium
 app.userAgentFallback = app.userAgentFallback
@@ -26,12 +27,12 @@ const DEF_ROOT = path.join(PVZ_BASE, 'АДРЕСА');
 const DEF_CIAN = path.join(PVZ_BASE, 'АДРЕСА ЦИАН');
 const DEF_OZON = path.join(PVZ_BASE, 'ПРОВЕРКА OZON');
 
-let win, view, ozonView, running = false, stopFlag = false;
+let win, view, ozonView, wbView, running = false, stopFlag = false;
 let currentSite = null, ozonRunning = false, ozonStop = false;
 const ozonQueue = [];
 const cfgPath = () => path.join(app.getPath('userData'), 'config.json');
 function loadCfg() {
-  const d = { root: DEF_ROOT, cianRoot: DEF_CIAN, ozonOut: DEF_OZON, ozonDays: 3, ozonThreads: 2, ozonPause: 2, ozonAuto: true, ozonCache: true,
+  const d = { root: DEF_ROOT, cianRoot: DEF_CIAN, ozonOut: DEF_OZON, ozonDays: 3, ozonThreads: 2, ozonPause: 2, ozonAuto: true, ozonCache: true, chkOzon: true, chkYandex: false, chkWb: false,
     pages: 40, delay: 4, days: 7, part: 300, cianOnlyNew: true };
   try { return Object.assign(d, JSON.parse(fs.readFileSync(cfgPath(), 'utf8'))); } catch { return d; }
 }
@@ -66,6 +67,10 @@ function createWindow() {
   ozonView = new WebContentsView({ webPreferences: { partition: 'persist:ozon', contextIsolation: true, backgroundThrottling: false } });
   win.contentView.addChildView(ozonView);
   ozonView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  // скрытая вкладка карты Wildberries: API WB отвечает только из браузера (антибот), поэтому запросы идут со страницы карты
+  wbView = new WebContentsView({ webPreferences: { partition: 'persist:wb', contextIsolation: true, backgroundThrottling: false } });
+  win.contentView.addChildView(wbView); wbView.setVisible(false);
+  wbView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   layout();
   win.on('resize', layout);
   // ссылки «в новой вкладке» открываем в том же окне
@@ -222,30 +227,74 @@ function enqueueOzon(paths) {
   for (const p of paths) if (!ozonQueue.includes(p)) ozonQueue.push(p);
   pumpOzon();
 }
+const PLATFORMS = [
+  { key: 'yandex', cfg: 'chkYandex', journal: 'yandex_checked.json', label: 'Яндекс Маркет' },
+  { key: 'wb', cfg: 'chkWb', journal: 'wb_checked.json', label: 'Wildberries' },
+  { key: 'ozon', cfg: 'chkOzon', journal: 'ozon_checked.json', label: 'Ozon' }
+];
+const enabledPlatforms = cfg => PLATFORMS.filter(p => (p.key === 'ozon' ? cfg.chkOzon !== false : !!cfg[p.cfg]));
+// какие файлы ещё не проверены на этой площадке (по её журналу)
+function needs(cfg, p, paths) {
+  const j = (() => { try { return JSON.parse(fs.readFileSync(path.join(cfg.ozonOut, p.journal), 'utf8')); } catch { return { files: {} }; } })();
+  return paths.map(f => { try { return { path: f, size: fs.statSync(f).size }; } catch { return null; } })
+    .filter(Boolean).filter(f => { const r = j.files[f.path]; return !r || r.size !== f.size || (r.pending && r.pending.length); });
+}
+async function ensureWb() {
+  const wc = wbView.webContents;
+  const test = () => wc.executeJavaScript(`fetch('/pvz-map-backend/api/v2/map/check-point?point.longitude=37.6176&point.latitude=55.7558&area=70&tariff_type=BasicTariff',{headers:{Accept:'application/json'}}).then(r=>r.status).catch(()=>0)`, true).catch(() => 0);
+  if (/map\.wb\.ru/.test(wc.getURL()) && (await test()) === 200) return true;
+  await wc.loadURL('https://map.wb.ru/').catch(() => {});
+  for (let i = 0; i < 20; i++) { await new Promise(r => setTimeout(r, 2000)); if ((await test()) === 200) return true; }
+  return false;
+}
+const wbFetch = async url => {
+  const r = await wbView.webContents.executeJavaScript(`fetch(${JSON.stringify(url)},{headers:{Accept:'application/json'}}).then(async r=>({s:r.status,t:await r.text()})).catch(()=>({s:0,t:''}))`, true).catch(() => ({ s: 0, t: '' }));
+  return { status: r.s, ok: r.s >= 200 && r.s < 300, json: async () => JSON.parse(r.t) };
+};
+
 async function pumpOzon() {
   if (ozonRunning) { send('ozonStatus', { text: `В очереди ещё файлов: ${ozonQueue.length}`, running: true, queued: ozonQueue.length }); return; }
   ozonRunning = true; ozonStop = false;
   try {
     while (ozonQueue.length && !ozonStop) {
       const cfg = loadCfg();
-      const files = ozonQueue.splice(0).map(p => { try { return { path: p, size: fs.statSync(p).size }; } catch { return null; } }).filter(Boolean);
-      if (!files.length) continue;
-      send('ozonStatus', { text: `Проверка Ozon: файлов ${files.length}…`, running: true });
-      const r = await ozon.run(files, {
-        wc: ozonView.webContents, cfg, cachePath: path.join(app.getPath('userData'), 'ozon_cache.json'),
-        status: (text, extra) => send('ozonStatus', Object.assign({ text, running: true }, extra || {})),
-        isStopped: () => ozonStop
-      });
-      send('ozonDone', r);
+      const paths = ozonQueue.splice(0);
+      const results = [];
+      for (const p of enabledPlatforms(cfg)) {
+        if (ozonStop) break;
+        const files = needs(cfg, p, paths);
+        if (!files.length) continue;
+        const status = (text, extra) => send('ozonStatus', Object.assign({ text, running: true }, extra || {}));
+        if (p.key === 'ozon') {
+          results.push(Object.assign({ kind: 'ozon', label: 'Ozon' }, await ozon.run(files, {
+            wc: ozonView.webContents, cfg, cachePath: path.join(app.getPath('userData'), 'ozon_cache.json'), status, isStopped: () => ozonStop })));
+        } else {
+          let fetchFn = u => net.fetch(u);
+          if (p.key === 'wb') {
+            status('Wildberries: открываю карту map.wb.ru…');
+            if (!(await ensureWb())) { results.push({ kind: 'wb', label: 'Wildberries', reason: 'карта WB не ответила — откройте вкладку позже и повторите', saved: [], errors: [], stats: {}, main: 0, excluded: 0, unchecked: 0, manual: [], files: files.length, addresses: 0 }); continue; }
+            fetchFn = wbFetch;
+          }
+          results.push(await platforms.run(p.key, files, { fetch: fetchFn, status, isStopped: () => ozonStop, outDir: cfg.ozonOut }));
+        }
+      }
+      send('ozonDone', { ok: true, results });
     }
   } catch (e) {
     send('ozonDone', { ok: false, error: String(e && e.message || e) });
-  } finally { ozonRunning = false; ozonQueue.length = ozonStop ? 0 : ozonQueue.length; }
+  } finally { ozonRunning = false; if (ozonStop) ozonQueue.length = 0; }
 }
 ipcMain.handle('ozonScan', () => {
   const cfg = loadCfg();
-  const files = ozon.scan([cfg.root, cfg.cianRoot], cfg.ozonOut, cfg.ozonDays);
-  return { running: ozonRunning, files: files.map(f => ({ path: f.path, name: path.basename(f.path), folder: path.basename(path.dirname(f.path)), partial: f.partial })) };
+  const map = new Map();
+  for (const p of enabledPlatforms(cfg)) {
+    for (const f of ozon.scan([cfg.root, cfg.cianRoot], cfg.ozonOut, cfg.ozonDays, p.journal)) {
+      const e = map.get(f.path) || { path: f.path, name: path.basename(f.path), folder: path.basename(path.dirname(f.path)), partial: false, platforms: [] };
+      e.platforms.push(p.key); e.partial = e.partial || f.partial; map.set(f.path, e);
+    }
+  }
+  const files = [...map.values()].sort((a, b) => a.path.localeCompare(b.path, 'ru', { numeric: true }));
+  return { running: ozonRunning, files };
 });
 ipcMain.handle('ozonStart', (_e, paths) => {
   if (!paths || !paths.length) return { ok: false, error: 'Нет файлов для проверки' };
