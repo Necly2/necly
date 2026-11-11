@@ -311,5 +311,5 @@ ipcMain.handle('ozonState', () => ({ running: ozonRunning, queued: ozonQueue.len
 ipcMain.handle('checkUpdate', () => updater.check(win, { manual: true }));
 ipcMain.handle('version', () => updater.currentBuild());
 
-app.whenReady().then(() => { createWindow(); updater.schedule(win); });
+app.whenReady().then(() => { createWindow(); updater.schedule(win); if (process.env.PVZ_DEBUG) console.log('PVZ main ready, exceljs', typeof require('exceljs').Workbook, 'build', updater.currentBuild()); });
 app.on('window-all-closed', () => app.quit());

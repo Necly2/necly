@@ -1,7 +1,7 @@
 // Автообновление из GitHub-релиза: Windows — avito-windows-latest, Mac — avito-mac-latest.
 // Сравнивает номер сборки (version.txt) с версией приложения 1.0.<сборка>, показывает «что нового».
-// Windows: скачивает новый app.asar и заменяет его после выхода.
-// Mac: скачивает новый PVZ Avito.app (zip под свой процессор), заменяет программу и перезапускает её.
+// Обновление: скачивается app.asar новой сборки в папку данных программы (userData/updates/app-<N>.asar),
+// программа перезапускается, загрузчик boot.js подхватывает новую версию. Файлы самой программы не меняются.
 const { app, net, dialog, Notification } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -9,10 +9,9 @@ const { spawn } = require('child_process');
 
 const IS_MAC = process.platform === 'darwin';
 const BASE = `https://github.com/Necly2/necly/releases/download/${IS_MAC ? 'avito-mac' : 'avito-windows'}-latest/`;
-const MAC_ZIP = `PVZ-Avito-Mac-${process.arch === 'arm64' ? 'arm64' : 'x64'}.zip`;
 const STAMP = () => path.join(app.getPath('userData'), 'last-update-check.txt');
 
-const currentBuild = () => parseInt(String(app.getVersion()).split('.').pop(), 10) || 0;
+const currentBuild = () => global.PVZ_BUILD || parseInt(String(app.getVersion()).split('.').pop(), 10) || 0;
 
 async function getText(url) {
   const r = await net.fetch(url + '?t=' + Date.now(), { cache: 'no-store' });
@@ -43,71 +42,30 @@ async function check(win, { manual = false } = {}) {
   });
   if (r.response !== 0) return;
 
-  if (IS_MAC) return updateMac(win);
-
-  const res = process.resourcesPath;
-  if (!canWrite(res)) {
-    dialog.showMessageBox(win, { type: 'warning', message: 'Нет прав на запись в папку программы.',
-      detail: 'Переложите папку «PVZ Avito» в свою папку (например, Документы), не в Program Files, или скачайте новую версию вручную со страницы GitHub.' });
-    return;
-  }
+  const dir = path.join(app.getPath('userData'), 'updates');
+  const target = path.join(dir, `app-${latest}.asar`);
   try {
-    process.noAsar = true;
+    fs.mkdirSync(dir, { recursive: true });
     const resp = await net.fetch(BASE + 'app.asar?t=' + Date.now(), { cache: 'no-store' });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const buf = Buffer.from(await resp.arrayBuffer());
-    if (buf.length < 100000) throw new Error('файл обновления слишком маленький');
-    fs.writeFileSync(path.join(res, 'app.asar.new'), buf);
+    if (buf.length < 1000000) throw new Error('файл обновления слишком маленький');
+    process.noAsar = true;                       // писать .asar как обычный файл
+    fs.writeFileSync(target + '.tmp', buf);
+    try { fs.unlinkSync(target); } catch {}
+    fs.renameSync(target + '.tmp', target);
+    // старые скачанные версии убираем (используемая сейчас может быть занята — тогда в следующий раз)
+    for (const f of fs.readdirSync(dir)) if (f !== path.basename(target) && /^app-\d+\.asar(\.tmp|\.broken)?$/.test(f)) { try { fs.unlinkSync(path.join(dir, f)); } catch {} }
   } catch (e) {
-    process.noAsar = false;
     dialog.showMessageBox(win, { type: 'error', message: 'Не удалось скачать обновление', detail: String(e.message || e) });
     return;
-  }
-  process.noAsar = false;
-
-  // после выхода PowerShell заменит app.asar и перезапустит программу
-  const q = s => "'" + String(s).replace(/'/g, "''") + "'";
-  const ps = `$new=${q(path.join(res, 'app.asar.new'))};$asar=${q(path.join(res, 'app.asar'))};$exe=${q(process.execPath)};` +
-    `Start-Sleep -Seconds 2;for($i=0;$i -lt 30;$i++){try{Move-Item -Force -LiteralPath $new -Destination $asar -ErrorAction Stop;break}catch{Start-Sleep -Seconds 1}};` +
-    `Start-Process -FilePath $exe`;
-  const enc = Buffer.from(ps, 'utf16le').toString('base64');
-  spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-EncodedCommand', enc],
-        { detached: true, stdio: 'ignore', windowsHide: true }).unref();
-  app.quit();
-}
-
-async function updateMac(win) {
-  // /Applications/PVZ Avito.app/Contents/MacOS/PVZ Avito → /Applications/PVZ Avito.app
-  const bundle = path.resolve(process.execPath, '..', '..', '..');
-  if (!bundle.endsWith('.app')) { dialog.showMessageBox(win, { type: 'warning', message: 'Не удалось определить папку программы.' }); return; }
-  if (!canWrite(path.dirname(bundle))) {
-    dialog.showMessageBox(win, { type: 'warning', message: 'Нет прав на запись в папку программы.',
-      detail: 'Перетащите «PVZ Avito» в «Программы» (Applications) и обновитесь оттуда, или скачайте новую версию вручную со страницы GitHub.' });
+  } finally { process.noAsar = false; }
+  if (!fs.existsSync(path.join(target, 'src', 'main.js'))) {
+    dialog.showMessageBox(win, { type: 'error', message: 'Скачанное обновление повреждено — попробуйте ещё раз позже.' });
     return;
   }
-  const work = fs.mkdtempSync(path.join(app.getPath('temp'), 'pvz-upd-'));
-  const zip = path.join(work, 'new.zip');
-  try {
-    const resp = await net.fetch(BASE + MAC_ZIP + '?t=' + Date.now(), { cache: 'no-store' });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    fs.writeFileSync(zip, Buffer.from(await resp.arrayBuffer()));
-    const { execFileSync } = require('child_process');
-    process.noAsar = true;
-    execFileSync('/usr/bin/ditto', ['-x', '-k', zip, work]);
-    process.noAsar = false;
-    const newApp = fs.readdirSync(work).find(f => f.endsWith('.app'));
-    if (!newApp) throw new Error('в архиве нет .app');
-    try { execFileSync('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', path.join(work, newApp)]); } catch {}
-    const q = s => "'" + String(s).replace(/'/g, "'\\''") + "'";
-    const script = `while kill -0 ${process.pid} 2>/dev/null; do sleep 0.5; done; ` +
-      `rm -rf ${q(bundle)} && mv ${q(path.join(work, newApp))} ${q(bundle)} && open ${q(bundle)}; rm -rf ${q(work)}`;
-    spawn('/bin/sh', ['-c', script], { detached: true, stdio: 'ignore' }).unref();
-  } catch (e) {
-    process.noAsar = false;
-    dialog.showMessageBox(win, { type: 'error', message: 'Не удалось скачать обновление', detail: String(e.message || e) });
-    return;
-  }
-  app.quit();
+  app.relaunch();
+  app.exit(0);
 }
 
 // раз в день: при запуске (если с прошлой проверки прошло > 20 ч) и далее каждые 24 ч
