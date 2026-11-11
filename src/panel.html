@@ -23,9 +23,9 @@
  #url{font-size:11px;color:#889;word-break:break-all;margin-top:10px}
  .warn{color:#b60}
 </style></head><body>
-<h2>PVZ · Авито + Циан</h2>
+<h2>PVZ · Авито + Циан + Winner</h2>
 <div class="sub">Выберите сайт, выставьте фильтры в окне справа, затем нажмите «Выгрузить».</div>
-<div class="nav"><button id="avito">Авито</button><button id="cian">Циан</button></div>
+<div class="nav"><button id="avito">Авито</button><button id="cian">Циан</button><button id="winner">Winner</button></div>
 <div class="nav"><button id="back">← Назад</button><button id="reload">⟳ Обновить</button></div>
 <fieldset><legend>Настройки</legend>
  <label>Страниц максимум <input id="pages" type="number" min="1" max="100"></label>
@@ -33,10 +33,16 @@
  <label>Не старше, дней (0 = все) <input id="days" type="number" min="0" max="90"></label>
  <label>Строк в файле <input id="part" type="number" min="50" max="1000"></label>
 </fieldset>
-<fieldset><legend>Авито → папка АДРЕСА</legend>
+<fieldset><legend>Авито и Winner → папка АДРЕСА</legend>
  <div id="root" class="root"></div>
  <button class="small" id="pick">Выбрать…</button> <button class="small" id="open">Открыть</button>
- <div class="hint">&lt;Месяц&gt;\Адреса ДД AVITO\avito ДД N.xlsx</div>
+ <div class="hint">Авито: &lt;Месяц&gt;\Адреса ДД AVITO\avito ДД N.xlsx<br>Winner: &lt;Месяц&gt;\Адреса ДД[ метка]\export_excel[ метка] ДД N.xlsx</div>
+</fieldset>
+<fieldset><legend>Winner — текущий заказ</legend>
+ <div id="bwName" class="root">Откройте заказ в Winner (войдите сами)</div>
+ <label>Метка файлов (#4, МО или пусто) <input id="bwTag" type="text" style="width:70px"></label>
+ <label style="justify-content:flex-start;gap:6px"><input type="checkbox" id="bwHide"> выгруженные — «в скрытые»</label>
+ <div class="hint">Без скрытия (как Заказ #4) выгружается весь заказ, отметки снимаются.</div>
 </fieldset>
 <fieldset><legend>Циан → папка АДРЕСА ЦИАН</legend>
  <div id="cianRoot" class="root"></div>

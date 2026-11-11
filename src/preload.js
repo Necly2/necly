@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('pvz', {
   nav: w => ipcRenderer.invoke('nav', w),
   start: c => ipcRenderer.invoke('start', c),
   stop: () => ipcRenderer.invoke('stop'),
+  bwOrder: () => ipcRenderer.invoke('bwOrder'),
   checkUpdate: () => ipcRenderer.invoke('checkUpdate'),
   version: () => ipcRenderer.invoke('version'),
   onStatus: cb => ipcRenderer.on('status', (_e, s) => cb(s)),

@@ -5,6 +5,7 @@ const fs = require('fs');
 const XLSX = require('xlsx');
 const { collector, cianCollector } = require('./collector');
 const updater = require('./updater');
+const winner = require('./winner');
 
 // убираем из User-Agent пометки Electron/приложения — остаётся обычная строка Chromium
 app.userAgentFallback = app.userAgentFallback
@@ -13,12 +14,13 @@ app.userAgentFallback = app.userAgentFallback
 
 const PANEL_W = 320;
 const START_URL = 'https://www.avito.ru/moskva/kommercheskaya_nedvizhimost/sdam-ASgBAgICAUSwCNRW';
+const WINNER_URL = 'https://w7.baza-winner.ru/';
 const CIAN_URL = 'https://www.cian.ru/cat.php?deal_type=rent&engine_version=2&offer_type=offices&office_type[0]=2&office_type[1]=4&office_type[2]=5&office_type[3]=12&region=1&minarea=24&maxarea=130&minfloor=1&maxfloor=1&minfloorn=3&sort=creation_date_desc';
 const MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 const DEF_ROOT = path.join(app.getPath('home'), 'OneDrive', 'Desktop', 'PVZ', 'АДРЕСА');
 const DEF_CIAN = path.join(app.getPath('home'), 'OneDrive', 'Desktop', 'PVZ', 'АДРЕСА ЦИАН');
 
-let win, view, running = false;
+let win, view, running = false, stopFlag = false;
 const cfgPath = () => path.join(app.getPath('userData'), 'config.json');
 function loadCfg() {
   const d = { root: DEF_ROOT, cianRoot: DEF_CIAN, pages: 40, delay: 4, days: 7, part: 300, cianOnlyNew: true };
@@ -112,9 +114,14 @@ ipcMain.handle('nav', (_e, what) => {
   if (what === 'back' && wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack();
   else if (what === 'home' || what === 'avito') wc.loadURL(START_URL);
   else if (what === 'cian') wc.loadURL(CIAN_URL);
+  else if (what === 'winner') wc.loadURL(WINNER_URL);
   else if (what === 'reload') wc.reload();
 });
-ipcMain.handle('stop', () => view.webContents.executeJavaScript('window.__pvzStop = true').catch(() => {}));
+ipcMain.handle('stop', () => { stopFlag = true; return view.webContents.executeJavaScript('window.__pvzStop = true').catch(() => {}); });
+ipcMain.handle('bwOrder', () => {
+  const m = view.webContents.getURL().match(/baza-winner\.ru\/search\/([0-9a-f-]{36})/i);
+  return m ? Object.assign({ guid: m[1] }, winner.orderInfo(m[1], loadCfg())) : null;
+});
 
 ipcMain.handle('start', async (_e, c) => {
   if (running) return { ok: false, error: 'Выгрузка уже идёт' };
@@ -122,10 +129,22 @@ ipcMain.handle('start', async (_e, c) => {
   cfg.delay = Math.max(3, cfg.delay);
   saveCfg(cfg);
   const url = view.webContents.getURL();
-  const site = /^https:\/\/(www\.)?avito\.ru\//.test(url) ? 'avito' : /^https:\/\/([a-z0-9-]+\.)?cian\.ru\//.test(url) ? 'cian' : '';
-  if (!site) return { ok: false, error: 'Откройте на Авито или Циане страницу выдачи с фильтрами' };
+  const site = /^https:\/\/(www\.)?avito\.ru\//.test(url) ? 'avito' : /^https:\/\/([a-z0-9-]+\.)?cian\.ru\//.test(url) ? 'cian'
+             : /^https:\/\/w7\.baza-winner\.ru\//.test(url) ? 'winner' : '';
+  if (!site) return { ok: false, error: 'Откройте на Авито / Циане страницу выдачи или в Winner — заказ' };
   const root = site === 'cian' ? cfg.cianRoot : cfg.root;
   if (!fs.existsSync(root)) return { ok: false, error: `Папка ${site === 'cian' ? 'АДРЕСА ЦИАН' : 'АДРЕСА'} не найдена — выберите её в панели` };
+
+  if (site === 'winner') {
+    running = true; stopFlag = false;
+    try {
+      const m = url.match(/\/search\/([0-9a-f-]{36})/i);
+      if (m && c.bw) { cfg.bwOrders = Object.assign({}, cfg.bwOrders, { [m[1]]: { tag: c.bw.tag, hide: c.bw.hide } }); saveCfg(cfg); }
+      const r = await winner.run(view.webContents, cfg, c.bw || {}, st => send('status', st), () => stopFlag);
+      return Object.assign({ site, withCoords: r.total }, r);
+    } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
+    finally { running = false; }
+  }
 
   running = true;
   const timer = setInterval(async () => {
