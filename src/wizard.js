@@ -72,7 +72,7 @@ async function openSiteView(kind, url) {
   if (url) await pvz.navUrl(kind, url, true);
 }
 function closeSiteView() { W.siteOpen = false; document.body.classList.remove('site-open'); pvz.siteRect(null); }
-$('wzSiteClose').onclick = () => { closeSiteView(); };
+$('wzSiteClose').onclick = () => { W.liveSite = false; closeSiteView(); if (cur() === 'center') rerender(); };
 $('wzSiteBack').onclick = () => pvz.siteBack();
 $('wzSiteReload').onclick = () => pvz.siteReload();
 
@@ -320,6 +320,7 @@ function renderCenter() {
       ${R.phase === 'exported' && !checking ? '<button class="ghost" id="ccExportAgain">⬇ Выгрузить ещё раз</button>' : ''}
       ${R.check.st === 'err' && !checking ? '<button class="ghost" id="ccContinue">▶ Продолжить проверку</button>' : ''}
       ${(R.check.st === 'ok' || R.check.st === 'err') && !checking && checks.length ? '<button class="ghost" id="ccCheckAgain">↻ Проверить снова</button>' : ''}
+      ${exporting ? `<button class="ghost" id="ccLive">${W.siteOpen ? '▣ Свернуть сайт' : '👁 Показать сайт'}</button>` : ''}
       <button class="ghost" id="ccSave">Сохранить сценарий</button>
       ${R.files.length ? '<button class="ghost" id="ccFolder">Открыть папку</button>' : ''}
       ${R.check.st === 'ok' || R.check.st === 'err' ? '<button class="ghost" id="ccResults">Результаты</button>' : ''}
@@ -353,6 +354,11 @@ function renderCenter() {
   on('ccHome', () => goHome());
   on('ccContinue', () => runCheck(false));
   on('ccSave', saveScenario);
+  on('ccLive', async () => {
+    if (W.siteOpen) { W.liveSite = false; closeSiteView(); }
+    else { W.liveSite = true; await openSiteView(W.siteKind || 'cian'); }
+    rerender();
+  });
   on('ccFolder', () => pvz.showFile(R.files[0]));
   on('ccResults', () => openPage('results'));
   $('wzStep').querySelectorAll('a[data-file]').forEach(a => (a.onclick = () => pvz.showFile(a.dataset.file)));
@@ -371,7 +377,9 @@ async function exportOne(k) {
   S.st = 'run'; S.text = 'Открываю сайт…'; S.files = []; S.total = 0; W.run.cur = k; rerender();
   const parts = [];
   const go = async (url, extra, label, waitMs) => {
-    await openSiteView(k, url);
+    // сайт работает в фоне; показывается только если вы нажали «Показать сайт»
+    W.siteKind = k;
+    if (W.liveSite) await openSiteView(k, url); else await pvz.navUrl(k, url, true);
     if (waitMs) await sleep(waitMs);
     if (W.run.stop) return null;
     S.text = (label ? label + ': ' : '') + 'выгрузка…'; rerender();
@@ -405,7 +413,7 @@ async function exportOne(k) {
   W.run.cur = null; rerender();
 }
 async function runExportAll(onlyFailed) {
-  const R = W.run; R.phase = 'export'; R.stop = false; rerender();
+  const R = W.run; R.phase = 'export'; R.stop = false; W.liveSite = false; closeSiteView(); rerender();
   if (!onlyFailed) R.files = [];
   for (const k of Object.keys(R.src)) {
     if (onlyFailed && R.src[k].st !== 'err') continue;
