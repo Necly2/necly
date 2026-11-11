@@ -35,6 +35,7 @@ function setSite(site) {
 }
 function openSite(site) {
   if (running) return;
+  if (site === 'order') { openOrder(); return; }
   document.body.dataset.mode = 'work';
   setSite(site);
   pvz.nav(site);
@@ -45,7 +46,7 @@ $('home').onclick = () => { if (running) return; document.body.dataset.mode = 'w
 $('ozonMini').onclick = () => openSite('ozon');
 document.addEventListener('keydown', e => {
   if (document.body.dataset.mode !== 'welcome') return;
-  const k = { '1': 'winner', '2': 'cian', '3': 'avito', '4': 'ozon' }[e.key]; if (k) openSite(k);
+  const k = { '1': 'winner', '2': 'order', '3': 'ozon' }[e.key]; if (k) openSite(k);
 });
 
 $('back').onclick = () => pvz.nav('back');
@@ -161,6 +162,12 @@ $('go').onclick = async () => {
     return;
   }
   if (running) return;
+  const { r, text } = await runExport();
+  setStatus(text, !r.ok || /ошибк/i.test(r.reason || '') ? 'err' : 'done');
+};
+
+// выгрузка с открытого сайта; extra — переопределения настроек (например, свежесть из формы заказа)
+async function runExport(extra) {
   await refreshBw();
   const c = {};
   F.forEach(k => (c[k] = Math.max(0, parseInt($(k).value, 10) || 0)));
@@ -168,18 +175,185 @@ $('go').onclick = async () => {
   if (!c.pages) c.pages = 1;
   if (!c.part) c.part = 300;
   if (bwGuid) c.bw = { tag: $('bwTag').value.trim(), hide: $('bwHide').checked };
-
+  Object.assign(c, extra || {});
   running = true; refreshRunUI();
   setStatus('Запуск…');
   const r = await pvz.start(c);
   running = false; refreshRunUI();
-
-  if (!r.ok) { setStatus('Ошибка: ' + r.error, 'err'); return; }
+  if (!r.ok) return { r, text: 'Ошибка: ' + r.error };
   if (r.dir) lastDirs[r.site] = r.dir;
   let t = `${NAMES[r.site] || ''} — ${r.reason}.\nОбъявлений: ${r.total}` + (r.site !== 'winner' ? `, с координатами: ${r.withCoords}.` : '.');
   if (r.extra) t += '\n' + r.extra;
   t += r.saved.length ? `\n\nСохранено файлов: ${r.saved.length}\n` + r.saved.map(f => '• ' + f.split(/[\\/]/).pop()).join('\n') : '\nНичего не сохранено.';
   if (r.site !== 'winner' && r.total && r.withCoords < r.total * 0.8) t += '\n⚠ Координаты не у всех объявлений — сообщите Claude.';
   if (r.ozonQueued) t += `\n\n→ Отправлено на проверку Ozon: ${r.ozonQueued} файл(ов). Ход — во вкладке «Ozon».`;
-  setStatus(t, /ошибк/i.test(r.reason) ? 'err' : 'done');
+  return { r, text: t };
+}
+
+
+// ================= Циан и Авито: параметры заказа в программе =================
+const TYPES = [
+  { k: 'shop', name: 'Торговая площадь', cian: 2 },
+  { k: 'psn', name: 'Свободного назначения', cian: 5 },
+  { k: 'food', name: 'Общепит', cian: 4 },
+  { k: 'serv', name: 'Бытовые услуги', cian: 12 },
+  { k: 'office', name: 'Офис', cian: 1 },
+  { k: 'store', name: 'Склад', cian: 3 }
+];
+const DEFAULT_PRESETS = {
+  'Заказ #4 (Москва)': { cian: true, avito: true, region: 'msk', types: ['shop', 'psn', 'food', 'serv'], areaFrom: 24, areaTo: 130, priceFrom: '', priceTo: '', floor1: true, floorsFrom: 3, days: 7 },
+  'Заказ #5 (Москва и МО, до 120 тыс.)': { cian: true, avito: true, region: 'msk_mo', types: ['shop', 'psn', 'food', 'serv'], areaFrom: 24, areaTo: 130, priceFrom: '', priceTo: 120000, floor1: true, floorsFrom: 3, days: 7 }
+};
+let presets = {}, curAvitoUrl = null;
+$('oTypes').innerHTML = TYPES.map(t => `<label><input type="checkbox" value="${t.k}"><span>${t.name}</span></label>`).join('');
+
+const val = id => { const v = $(id).value.trim(); return v === '' ? '' : Math.max(0, +v || 0); };
+function readForm() {
+  return {
+    cian: $('oCian').checked, avito: $('oAvito').checked,
+    region: $('oRegion').querySelector('.on').dataset.v,
+    types: [...$('oTypes').querySelectorAll('input:checked')].map(i => i.value),
+    areaFrom: val('oAreaFrom'), areaTo: val('oAreaTo'), priceFrom: val('oPriceFrom'), priceTo: val('oPriceTo'),
+    floor1: $('oFloor1').checked, floorsFrom: val('oFloorsFrom'), days: val('oDays'),
+    avitoUrl: curAvitoUrl || null
+  };
+}
+function fillForm(p) {
+  $('oCian').checked = p.cian !== false; $('oAvito').checked = p.avito !== false;
+  $('oRegion').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === (p.region || 'msk')));
+  $('oTypes').querySelectorAll('input').forEach(i => (i.checked = (p.types || []).includes(i.value)));
+  $('oAreaFrom').value = p.areaFrom ?? ''; $('oAreaTo').value = p.areaTo ?? '';
+  $('oPriceFrom').value = p.priceFrom ?? ''; $('oPriceTo').value = p.priceTo ?? '';
+  $('oFloor1').checked = !!p.floor1; $('oFloorsFrom').value = p.floorsFrom ?? ''; $('oDays').value = p.days ?? 7;
+  curAvitoUrl = p.avitoUrl || null;
+  renderNotice();
+}
+function fillSelect(sel) {
+  $('pSelect').innerHTML = '<option value="">— новый —</option>' + Object.keys(presets).map(n => `<option>${esc(n)}</option>`).join('');
+  $('pSelect').value = sel || '';
+}
+async function openOrder() {
+  const c = await pvz.getCfg();
+  presets = c.presets && Object.keys(c.presets).length ? c.presets : JSON.parse(JSON.stringify(DEFAULT_PRESETS));
+  const last = c.lastPreset && presets[c.lastPreset] ? c.lastPreset : Object.keys(presets)[0];
+  fillSelect(last); $('pName').value = last || '';
+  fillForm(last ? presets[last] : DEFAULT_PRESETS['Заказ #4 (Москва)']);
+  document.body.dataset.mode = 'order';
+  pvz.nav('welcome');
+}
+$('pSelect').onchange = () => { const n = $('pSelect').value; $('pName').value = n; if (n) fillForm(presets[n]); pvz.setCfg({ lastPreset: n }); };
+$('pSave').onclick = () => {
+  const n = $('pName').value.trim();
+  if (!n) { $('pMsg').textContent = 'введите название'; return; }
+  presets[n] = readForm(); pvz.setCfg({ presets, lastPreset: n }); fillSelect(n);
+  $('pMsg').textContent = 'сохранено ✓'; setTimeout(() => ($('pMsg').textContent = ''), 2500);
+};
+$('pDel').onclick = () => {
+  const n = $('pSelect').value; if (!n) return;
+  delete presets[n]; pvz.setCfg({ presets }); fillSelect(''); $('pName').value = ''; $('pMsg').textContent = 'удалено';
+};
+$('oRegion').querySelectorAll('button').forEach(b => (b.onclick = () => { $('oRegion').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); renderNotice(); }));
+document.querySelectorAll('#order input').forEach(i => i.addEventListener('change', renderNotice));
+['oBack', 'oCancel'].forEach(id => ($(id).onclick = () => { document.body.dataset.mode = 'welcome'; }));
+
+// что программа сделает сама, а что придётся ввести вручную
+function avitoManual(p) {
+  const m = [];
+  if (p.types.length) m.push('Вид объекта: ' + p.types.map(k => TYPES.find(t => t.k === k).name).join(', '));
+  if (p.areaFrom !== '' || p.areaTo !== '') m.push(`Площадь: ${p.areaFrom !== '' ? 'от ' + p.areaFrom : ''} ${p.areaTo !== '' ? 'до ' + p.areaTo : ''} м²`.replace(/\s+/g, ' '));
+  return m;
+}
+function renderNotice() {
+  const p = readForm(), warn = [], info = [];
+  if (!p.cian && !p.avito) warn.push('Не выбран ни один сайт.');
+  if (!p.types.length) warn.push('Не выбран вид помещения — будут все виды коммерческой аренды.');
+  if (p.avito) {
+    if (p.avitoUrl) info.push('Авито: используются фильтры, сохранённые в пресете (вид объекта, площадь). Если поменяли их в форме — нажмите «Забыть фильтры Авито» и выставьте заново.');
+    else {
+      const m = avitoManual(p);
+      if (m.length) warn.push('<b>Авито — нужно ввести вручную на сайте</b> (Авито не даёт задать это из программы):<ul>' + m.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>Регион, цену и сортировку по дате программа подставит сама. После ввода нажмите «Готово — выгружать». Если сохраните пресет — в следующий раз вводить не придётся.');
+    }
+    if (p.floor1 || p.floorsFrom !== '') info.push('Авито: в выдаче нет этажа и этажности дома — эти условия на Авито не применяются.');
+  }
+  if (p.cian) {
+    info.push('Циан: все параметры задаются автоматически' + (p.region === 'msk_mo' ? '; «Москва и МО» — два поиска подряд (Москва, затем область).' : '.'));
+  }
+  if (p.days !== '' && p.days > 0) info.push(`Свежесть: объявления старше ${p.days} дн. отбрасываются программой.`);
+  $('oNotice').innerHTML = warn.map(x => `<div class="note warn">${x}</div>`).join('') +
+    (info.length ? `<div class="note info"><b>К сведению</b><ul>${info.map(x => '<li>' + x + '</li>').join('')}</ul></div>` : '');
+  $('oAvitoState').innerHTML = p.avito ? (p.avitoUrl
+    ? '<span class="ok">✓ Фильтры Авито сохранены в пресете.</span> <a id="oForgetAvito">Забыть фильтры Авито</a>'
+    : 'Фильтры Авито (вид объекта, площадь) не сохранены — при запуске нужно будет выставить их на сайте один раз.') : '';
+  const fa = document.getElementById('oForgetAvito'); if (fa) fa.onclick = () => { curAvitoUrl = null; renderNotice(); };
+}
+
+function cianUrl(p, region) {
+  const u = new URL('https://www.cian.ru/cat.php');
+  const q = u.searchParams;
+  q.set('deal_type', 'rent'); q.set('engine_version', '2'); q.set('offer_type', 'offices');
+  TYPES.filter(t => p.types.includes(t.k)).forEach((t, i) => q.set(`office_type[${i}]`, t.cian));
+  q.set('region', region);
+  if (p.areaFrom !== '') q.set('minarea', p.areaFrom); if (p.areaTo !== '') q.set('maxarea', p.areaTo);
+  if (p.priceFrom !== '') q.set('minprice', p.priceFrom); if (p.priceTo !== '') q.set('maxprice', p.priceTo);
+  if (p.floor1) { q.set('minfloor', 1); q.set('maxfloor', 1); }
+  if (p.floorsFrom !== '') q.set('minfloorn', p.floorsFrom);
+  q.set('sort', 'creation_date_desc');
+  return u.href;
+}
+function avitoUrl(p) {
+  const u = new URL(`https://www.avito.ru/${p.region === 'msk_mo' ? 'moskva_i_mo' : 'moskva'}/kommercheskaya_nedvizhimost/sdam-ASgBAgICAUSwCNRW`);
+  if (p.priceFrom !== '') u.searchParams.set('pmin', p.priceFrom); if (p.priceTo !== '') u.searchParams.set('pmax', p.priceTo);
+  u.searchParams.set('s', '104');   // сортировка по дате
+  return u.href;
+}
+
+// ожидание ручного ввода на сайте (баннер в панели)
+function waitManual(lines, hint) {
+  $('manualList').innerHTML = lines.map(x => '<li>' + esc(x) + '</li>').join('');
+  $('manualHint').textContent = hint || '';
+  $('manual').classList.add('on');
+  return new Promise(res => {
+    $('manualOk').onclick = () => { $('manual').classList.remove('on'); res(true); };
+    $('manualSkip').onclick = () => { $('manual').classList.remove('on'); res(false); };
+  });
+}
+
+$('oRun').onclick = async () => {
+  const p = readForm();
+  if (!p.cian && !p.avito) { renderNotice(); return; }
+  const presetName = $('pSelect').value || null;
+  const extra = { days: p.days === '' ? 0 : p.days };
+  const report = [];
+  document.body.dataset.mode = 'work';
+  if (p.cian) {
+    for (const reg of (p.region === 'msk_mo' ? ['1', '4593'] : ['1'])) {
+      setSite('cian'); setStatus(`Открываю Циан (${reg === '1' ? 'Москва' : 'Московская область'})…`);
+      await pvz.navUrl('cian', cianUrl(p, reg));
+      const { r, text } = await runExport(extra);
+      report.push(`Циан ${reg === '1' ? '(Москва)' : '(МО)'}: ` + (r.ok ? `${r.total} объявл., файлов ${r.saved.length}` : 'ошибка — ' + r.error));
+      setStatus(text, r.ok ? 'done' : 'err');
+      if (!r.ok || /остановлено вручную/.test(r.reason || '')) break;
+    }
+  }
+  if (p.avito) {
+    setSite('avito'); setStatus('Открываю Авито…');
+    await pvz.navUrl('avito', p.avitoUrl || avitoUrl(p));
+    let go = true;
+    const m = p.avitoUrl ? [] : avitoManual(p);
+    if (m.length) {
+      setStatus('Ждём, пока вы выставите фильтры на Авито…');
+      go = await waitManual(m, presetName ? `Фильтры запомнятся в пресете «${presetName}» — в следующий раз вводить не придётся.` : 'Сохраните пресет в форме, чтобы в следующий раз не вводить это заново.');
+      if (go && presetName) {
+        const u = await pvz.currentUrl();
+        if (/avito\.ru/.test(u)) { presets[presetName] = Object.assign({}, presets[presetName] || p, { avitoUrl: u }); pvz.setCfg({ presets }); }
+      }
+    }
+    if (go) {
+      const { r, text } = await runExport(extra);
+      report.push('Авито: ' + (r.ok ? `${r.total} объявл., файлов ${r.saved.length}` : 'ошибка — ' + r.error));
+      setStatus(text, r.ok ? 'done' : 'err');
+    } else report.push('Авито: пропущено');
+  }
+  setStatus('Итог по заказу' + (presetName ? ` «${presetName}»` : '') + ':\n' + report.map(x => '• ' + x).join('\n') +
+    (exportStatus.text.includes('Ozon') ? '\n\n→ Новые файлы отправлены на проверку Ozon.' : ''), 'done');
 };

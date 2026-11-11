@@ -150,6 +150,14 @@ ipcMain.handle('nav', (_e, what) => {
   if (what === 'back' && wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack();
   else if (what === 'reload') wc.reload();
 });
+ipcMain.handle('navUrl', async (_e, site, url) => {
+  mode = 'work'; currentSite = site; layout();
+  await view.webContents.loadURL(url).catch(() => {});
+  await new Promise(r => setTimeout(r, 2000));
+  send('url', view.webContents.getURL());
+  return view.webContents.getURL();
+});
+ipcMain.handle('currentUrl', () => view.webContents.getURL());
 ipcMain.handle('stop', () => { stopFlag = true; return view.webContents.executeJavaScript('window.__pvzStop = true').catch(() => {}); });
 ipcMain.handle('bwOrder', () => {
   const m = view.webContents.getURL().match(/baza-winner\.ru\/search\/([0-9a-f-]{36})/i);

@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('pvz', {
   pickFolder: w => ipcRenderer.invoke('pickFolder', w),
   openFolder: p => ipcRenderer.invoke('openFolder', p),
   nav: w => ipcRenderer.invoke('nav', w),
+  navUrl: (site, url) => ipcRenderer.invoke('navUrl', site, url),
+  currentUrl: () => ipcRenderer.invoke('currentUrl'),
   start: c => ipcRenderer.invoke('start', c),
   stop: () => ipcRenderer.invoke('stop'),
   bwOrder: () => ipcRenderer.invoke('bwOrder'),
