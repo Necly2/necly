@@ -335,7 +335,18 @@ window.addEventListener('unhandledrejection', e => pvz.logError('интерфе�
 const fmtTime = t => { const d = new Date(t); return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) + ' ' + d.toTimeString().slice(0, 5); };
 
 // ---------- Результаты ----------
-const R = { rows: [], sort: { k: 'checked', dir: -1 }, map: null, layer: null, markers: new Map(), sel: null, list: [] };
+const R = { rows: [], sort: { k: 'checked', dir: -1 }, map: null, layer: null, markers: new Map(), sel: null, list: [], day: 'all', marks: {} };
+const dayKey = t => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const markKey = x => x.url || (x.platform + '|' + x.address);
+function renderDays() {
+  const cnt = {}; let marked = 0;
+  for (const x of R.rows) { const k = dayKey(x.checked); cnt[k] = (cnt[k] || 0) + 1; if (x.mark) marked++; }
+  const days = [];
+  for (let i = 0; i < 5; i++) { const d = new Date(); d.setDate(d.getDate() - i); days.push([dayKey(d), i === 0 ? 'Сегодня' : i === 1 ? 'Вчера' : d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) + ', ' + d.toLocaleDateString('ru-RU', { weekday: 'short' })]); }
+  const b = (k, label, n) => `<button data-day="${k}" class="${R.day === k ? 'on' : ''}${n ? '' : ' empty'}">${label}<span>${fmtNum(n)}</span></button>`;
+  $('rDays').innerHTML = b('all', 'Все', R.rows.length) + days.map(([k, l]) => b(k, l, cnt[k] || 0)).join('') + '<i></i>' + b('marked', '✓ Отмеченные', marked);
+  $('rDays').querySelectorAll('button').forEach(x => (x.onclick = () => { R.day = x.dataset.day; renderDays(); renderResults(true); }));
+}
 const OZ_C = { 'зелёный': '#22c55e', 'синий': '#2563eb', 'голубой': '#60a5fa', 'гарантия < 3 млн': '#a78bfa', 'ошибка запроса': '#f59e0b' };
 function zoneColor(r) {
   if (r.platform === 'Ozon') return OZ_C[r.zone] || '#9ca3af';
@@ -345,7 +356,9 @@ function zoneColor(r) {
 async function loadResults() {
   $('rCount').textContent = 'загрузка…';
   const r = await pvz.results();
-  R.rows = r.rows.map((x, i) => Object.assign(x, { id: i }));
+  R.marks = (await pvz.getCfg()).resMarks || {};
+  R.rows = r.rows.map((x, i) => Object.assign(x, { id: i, mark: R.marks[markKey(x)] ? 1 : 0 }));
+  renderDays();
   const zones = [...new Set(R.rows.map(x => x.platform + ' · ' + x.zone))].sort();
   const cur = $('rZone').value;
   $('rZone').innerHTML = '<option value="">все зоны</option>' + zones.map(z => `<option${z === cur ? ' selected' : ''}>${esc(z)}</option>`).join('');
@@ -362,12 +375,11 @@ async function loadResults() {
 }
 function filteredResults() {
   const plats = [...$('rPlat').querySelectorAll('input:checked')].map(i => i.value);
-  const zone = $('rZone').value, area = numOf($('rArea')), price = numOf($('rPrice')), days = +$('rPeriod').value;
+  const zone = $('rZone').value, area = numOf($('rArea')), price = numOf($('rPrice')), day = R.day;
   const q = $('rSearch').value.trim().toLowerCase();
-  const since = days ? Date.now() - days * 864e5 : 0;
   return R.rows.filter(x => plats.includes(x.platform) && (!zone || zone === x.platform + ' · ' + x.zone)
     && (area === '' || (x.areaMax ?? x.areaMin ?? 0) >= area) && (price === '' || x.price == null || x.price <= price)
-    && x.checked >= since && (!q || (x.address + ' ' + x.metro + ' ' + x.source + ' ' + x.note).toLowerCase().includes(q)));
+    && (day === 'all' || (day === 'marked' ? x.mark : dayKey(x.checked) === day)) && (!q || (x.address + ' ' + x.metro + ' ' + x.source + ' ' + x.note).toLowerCase().includes(q)));
 }
 function renderResults(fit) {
   const list = filteredResults();
@@ -378,13 +390,13 @@ function renderResults(fit) {
   const shown = list.slice(0, 1000);
   $('rCount').textContent = `${fmtNum(list.length)} из ${fmtNum(R.rows.length)}`;
   const area = x => x.areaMin == null ? '' : (x.areaMax && x.areaMax !== x.areaMin ? `${fmtNum(x.areaMin)}–${fmtNum(x.areaMax)}` : fmtNum(x.areaMin)) + ' м²';
-  $('rRows').innerHTML = shown.map(x => `<tr data-id="${x.id}">
+  $('rRows').innerHTML = shown.map(x => `<tr data-id="${x.id}"${x.mark ? ' class="marked"' : ''}>
     <td>${esc(x.platform)}</td>
     <td><span class="zb"><i style="background:${zoneColor(x)}"></i>${esc(x.zone)}</span></td>
     <td class="addr">${esc(x.address)}${x.metro ? `<small>${esc(x.metro)}</small>` : ''}${x.note ? `<small>${esc(x.note)}</small>` : ''}</td>
     <td class="n">${area(x)}</td><td class="n">${x.price != null ? fmtNum(x.price) + ' ₽' : ''}</td><td class="n">${x.money ? fmtNum(x.money) + ' ₽' : ''}</td>
-    <td>${fmtTime(x.checked)}</td><td>${x.url ? '<a class="open" href="#">Открыть ↗</a>' : ''}</td></tr>`).join('');
-  $('rMore').textContent = list.length > shown.length ? `Показаны первые ${fmtNum(shown.length)} — уточните фильтры.` : (list.length ? '' : 'Ничего не найдено — измените фильтры или период.');
+    <td>${fmtTime(x.checked)}</td><td>${x.url ? '<a class="open" href="#">Открыть ↗</a>' : ''}</td><td class="mk"><label class="mbox"><input type="checkbox"${x.mark ? ' checked' : ''}><span></span></label></td></tr>`).join('');
+  $('rMore').textContent = list.length > shown.length ? `Показаны первые ${fmtNum(shown.length)} — уточните фильтры.` : (list.length ? '' : 'Ничего не найдено — измените фильтры или день.');
   R.layer.clearLayers(); R.markers.clear();
   const pts = [];
   for (const x of list.slice(0, 3000)) {
@@ -406,12 +418,20 @@ function selectRow(id, fly) {
 $('rRows').addEventListener('click', e => {
   const tr = e.target.closest('tr'); if (!tr) return;
   const x = R.rows[+tr.dataset.id];
+  if (e.target.closest('.mbox')) {
+    if (e.target.tagName !== 'INPUT') return;
+    x.mark = e.target.checked ? 1 : 0; tr.classList.toggle('marked', !!x.mark);
+    if (x.mark) R.marks[markKey(x)] = Date.now(); else delete R.marks[markKey(x)];
+    pvz.setCfg({ resMarks: R.marks }); renderDays();
+    if (R.day === 'marked' && !x.mark) renderResults(false);
+    return;
+  }
   if (e.target.closest('a.open')) { e.preventDefault(); pvz.openExternal(x.url); return; }
   selectRow(x.id, true);
 });
 $('rMap').addEventListener('click', e => { const a = e.target.closest('a[data-url]'); if (a) { e.preventDefault(); pvz.openExternal(a.dataset.url); } });
 document.querySelectorAll('.r-table th[data-k]').forEach(th => (th.onclick = () => { R.sort = { k: th.dataset.k, dir: R.sort.k === th.dataset.k ? -R.sort.dir : (['price', 'areaMin', 'zone', 'address', 'platform'].includes(th.dataset.k) ? 1 : -1) }; renderResults(false); }));
-['rZone', 'rPeriod'].forEach(id => ($(id).onchange = () => renderResults(true)));
+['rZone'].forEach(id => ($(id).onchange = () => renderResults(true)));
 ['rArea', 'rPrice', 'rSearch'].forEach(id => $(id).addEventListener('input', () => renderResults(false)));
 $('rPlat').querySelectorAll('input').forEach(i => (i.onchange = () => renderResults(true)));
 $('rReload').onclick = () => loadResults();

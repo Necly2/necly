@@ -65,12 +65,12 @@
     <label class="field">Зона<select id="rZone"><option value="">все зоны</option></select></label>
     <label class="field">Площадь от, м²<input id="rArea" type="text" inputmode="numeric" class="num"></label>
     <label class="field">Цена до, ₽/мес<input id="rPrice" type="text" inputmode="numeric" class="num"></label>
-    <label class="field">Проверено<select id="rPeriod"><option value="1">сегодня</option><option value="3">3 дня</option><option value="7" selected>7 дней</option><option value="30">30 дней</option><option value="0">всё время</option></select></label>
     <label class="field grow">Поиск<input id="rSearch" type="text" placeholder="адрес, метро, источник"></label>
   </div>
+  <div class="r-days" id="rDays"></div>
   <div class="r-body">
     <div class="r-table-wrap"><table class="r-table"><thead><tr>
-      <th data-k="platform">Площадка</th><th data-k="zone">Зона</th><th data-k="address">Адрес</th><th data-k="areaMin" class="n">Площадь</th><th data-k="price" class="n">Цена</th><th data-k="money" class="n">Выплата</th><th data-k="checked">Проверено</th><th></th>
+      <th data-k="platform">Площадка</th><th data-k="zone">Зона</th><th data-k="address">Адрес</th><th data-k="areaMin" class="n">Площадь</th><th data-k="price" class="n">Цена</th><th data-k="money" class="n">Выплата</th><th data-k="checked">Проверено</th><th></th><th class="mk" data-k="mark" title="Отмеченные — щёлкните, чтобы отсортировать">✓</th>
     </tr></thead><tbody id="rRows"></tbody></table><div class="hint" id="rMore"></div></div>
     <div class="r-map" id="rMap"></div>
   </div>

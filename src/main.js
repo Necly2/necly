@@ -428,6 +428,7 @@ async function selfTest(dir) {
   await J(`document.querySelector('#oList .on') && document.querySelector('#oList .on').click(); 1`); await W8(300);
   await J(`$('wzNext').click(); 1`); await W8(900); await J(`document.querySelectorAll('#wzStep details.fold').forEach(d=>d.open=true); 1`); await W8(400); await shot('07-center');
   for (const page of ['results', 'history', 'schedule']) { await J(`openPage('${page}'); 1`); await W8(1800); await shot('08-' + page); }
+  if (process.env.PVZ_FAKE) { await J(`openPage('results'); 1`); await W8(1500); await J(`(()=>{const z=['голубой','синий','зелёный'];R.rows=Array.from({length:14},(_,i)=>({id:i,platform:'Ozon',zone:z[i%3],address:'Москва, ул. Тестовая, '+(i+1),metro:'м. Пример',note:'',areaMin:30+i,price:50000+i*5000,checked:Date.now()-Math.floor(i/3)*864e5,url:'https://x/'+i,lat:55.7+i*0.01,lon:37.5+i*0.01,mark:i%4===0?1:0}));renderDays();renderResults(true);})(); 1`); await W8(1500); await shot('09-results-fake'); }
   console.log('SELFTEST DONE'); app.exit(0);
 }
 app.on('window-all-closed', () => { if (scheduler.isQuitting() || !loadCfg().tray) app.quit(); });
