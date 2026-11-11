@@ -147,6 +147,9 @@
         <label class="field">Пауза, с<input id="ozonPause" type="number" min="1" max="10"></label>
       </div>
       <p class="hint">Ozon ограничивает частые запросы: при блокировке программа сама подождёт 25 мин и продолжит.</p>
+      <label class="switch"><input type="checkbox" id="ozonCache"><span></span>Запоминать результаты на 3 дня</label>
+      <div class="row2"><button class="ghost" id="ozClear">Очистить память</button><span class="hint" id="ozClearMsg" style="align-self:center"></span></div>
+      <p class="hint">Когда включено, адрес, уже проверенный за последние 3 дня, повторно на карте не проверяется — меньше запросов к Ozon. Выключите, чтобы каждый раз проверять заново.</p>
     </div>
     <div class="box only-ozon">
       <div class="box-h">Папка результатов</div>

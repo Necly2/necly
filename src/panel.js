@@ -16,6 +16,7 @@ async function init() {
   showPath('cianRoot', c.cianRoot);
   showPath('ozonOut', c.ozonOut);
   $('ozonAuto').checked = c.ozonAuto !== false;
+  $('ozonCache').checked = c.ozonCache !== false;
   $('ozonDays').value = c.ozonDays; $('ozonThreads').value = c.ozonThreads; $('ozonPause').value = c.ozonPause;
   const st = await pvz.ozonState(); ozonBusy = st.running; refreshRunUI();
   $('cianOnlyNew').checked = c.cianOnlyNew !== false;
@@ -59,6 +60,8 @@ $('cianOnlyNew').onchange = () => pvz.setCfg({ cianOnlyNew: $('cianOnlyNew').che
 $('pickO').onclick = async () => { const c = await pvz.pickFolder('ozon'); showPath('ozonOut', c.ozonOut); rescan(); };
 $('openO').onclick = () => pvz.openFolder(lastDirs.ozon || $('ozonOut').title);
 $('ozonAuto').onchange = () => pvz.setCfg({ ozonAuto: $('ozonAuto').checked });
+$('ozonCache').onchange = () => pvz.setCfg({ ozonCache: $('ozonCache').checked });
+$('ozClear').onclick = async () => { const n = await pvz.ozonClearCache(); $('ozClearMsg').textContent = n ? `забыто адресов: ${n}` : 'память пуста'; };
 ['ozonDays', 'ozonThreads', 'ozonPause'].forEach(id => ($(id).onchange = () => {
   const v = Math.max(1, parseInt($(id).value, 10) || 1); $(id).value = v; pvz.setCfg({ [id]: v }); if (id === 'ozonDays') rescan();
 }));

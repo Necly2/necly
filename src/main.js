@@ -31,7 +31,7 @@ let currentSite = null, ozonRunning = false, ozonStop = false;
 const ozonQueue = [];
 const cfgPath = () => path.join(app.getPath('userData'), 'config.json');
 function loadCfg() {
-  const d = { root: DEF_ROOT, cianRoot: DEF_CIAN, ozonOut: DEF_OZON, ozonDays: 3, ozonThreads: 2, ozonPause: 2, ozonAuto: true,
+  const d = { root: DEF_ROOT, cianRoot: DEF_CIAN, ozonOut: DEF_OZON, ozonDays: 3, ozonThreads: 2, ozonPause: 2, ozonAuto: true, ozonCache: true,
     pages: 40, delay: 4, days: 7, part: 300, cianOnlyNew: true };
   try { return Object.assign(d, JSON.parse(fs.readFileSync(cfgPath(), 'utf8'))); } catch { return d; }
 }
@@ -244,6 +244,11 @@ ipcMain.handle('ozonStart', (_e, paths) => {
   enqueueOzon(paths); return { ok: true };
 });
 ipcMain.handle('ozonStop', () => { ozonStop = true; return true; });
+ipcMain.handle('ozonClearCache', () => {
+  const p = path.join(app.getPath('userData'), 'ozon_cache.json');
+  let n = 0; try { n = Object.keys(JSON.parse(fs.readFileSync(p, 'utf8'))).length; fs.unlinkSync(p); } catch {}
+  return n;
+});
 ipcMain.handle('ozonState', () => ({ running: ozonRunning, queued: ozonQueue.length }));
 
 ipcMain.handle('checkUpdate', () => updater.check(win, { manual: true }));

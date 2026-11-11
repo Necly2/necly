@@ -123,8 +123,10 @@ async function run(files, ctx) {
   for (const { rows } of data) for (const d of rows) if (!addrOf[d._key]) addrOf[d._key] = String(d['Адрес']).replace(/[\t\n]/g, ' ');
 
   // 2. кэш результатов по координатам
+  // «Запоминать результаты на 3 дня» (выключаемо): без неё используются только результаты этого запуска
   const cache = readJson(ctx.cachePath, {});
-  const fresh = k => cache[k] && Date.now() - cache[k][2] < CACHE_DAYS * 864e5;
+  const runStart = Date.now(), useCache = cfg.ozonCache !== false;
+  const fresh = k => cache[k] && (useCache ? Date.now() - cache[k][2] < CACHE_DAYS * 864e5 : cache[k][2] >= runStart);
   const todo = Object.keys(addrOf).filter(k => !fresh(k));
   const total = Object.keys(addrOf).length;
   let blockedGaveUp = false, stoppedByUser = false;
