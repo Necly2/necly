@@ -31,7 +31,7 @@ jobs:
         run: |
           npx @electron/packager . "PVZ Avito" --platform=win32 --arch=x64 --asar --overwrite --out=dist \
             --app-version=1.0.${{ github.run_number }} \
-            --ignore="^/\.github" --ignore="^/dist" --ignore="\.md$"
+            --ignore="^/\.github" --ignore="^/dist" --ignore="\.md$" --ignore="\.zip$"
           cd dist && mv "PVZ Avito-win32-x64" "PVZ Avito" && 7z a ../PVZ-Avito-Windows.zip "PVZ Avito" && cd ..
           cp "dist/PVZ Avito/resources/app.asar" app.asar
           echo "${{ github.run_number }}" > version.txt
@@ -92,7 +92,7 @@ jobs:
           for ARCH in arm64 x64; do
             npx @electron/packager . "PVZ Avito" --platform=darwin --arch=$ARCH --asar --overwrite --out=dist \
               --app-version=1.0.${{ github.run_number }} --app-bundle-id=ru.necly.pvzavito \
-              --ignore="^/\.github" --ignore="^/dist" --ignore="\.md$"
+              --ignore="^/\.github" --ignore="^/dist" --ignore="\.md$" --ignore="\.zip$"
             APP="dist/PVZ Avito-darwin-$ARCH/PVZ Avito.app"
             codesign --force --deep -s - "$APP"
             codesign --verify --deep "$APP"
