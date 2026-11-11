@@ -414,3 +414,12 @@ body.site-open .fgrid{grid-template-columns:1fr 1fr}
 .m-btns button{padding:11px 18px}
 .m-x{position:absolute;top:14px;right:14px;border:0;background:transparent;color:var(--muted);font-size:16px;padding:6px}
 .m-x:hover{color:#fff}
+
+/* нижняя строка центра управления: слева — назад/выход, справа — следующее действие */
+.wz-nav .nav-left,.wz-nav .nav-right{display:flex;align-items:center;gap:14px}
+.link-btn{border:0;background:transparent;color:var(--muted);font-size:13px;padding:6px 4px;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.link-btn:hover{color:#c4c9d4}
+.link-btn:disabled{opacity:.4;cursor:default}
+.nav-hint{color:var(--muted);font-size:12.5px}
+.cc-main{padding:14px 28px !important;font-size:15px !important}
+.danger.cc-main{display:block;border-radius:12px}

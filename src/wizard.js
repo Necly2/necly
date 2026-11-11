@@ -106,7 +106,7 @@ async function goTo(i, dir) {
   el.classList.remove('enter'); el.classList.add('leave');
   await sleep(180);
   if (cur() !== 'center') closeSiteView();
-  W.step = i;
+  W.step = i; W.justEntered = true;
   el.classList.remove('leave');
   render();
   void el.offsetWidth; el.classList.add('enter');
@@ -316,30 +316,48 @@ function renderCenter() {
       </div>
     </div>
     <div class="cc-actions" style="margin-top:16px">
-      ${R.phase === 'idle' ? '<button class="primary go-export" id="ccExport">⬇ Выгрузить объявления</button>' : ''}
-      ${exporting || checking ? '<button class="danger" style="display:block" id="ccStop">Стоп</button>' : ''}
-      ${R.phase === 'exported' && !checking ? `<button class="primary go-check" id="ccCheck"${!checks.length || !R.files.length ? ' disabled' : ''}>✓ ${R.check.st === 'wait' ? 'Начать проверку' : 'Проверить снова'}</button>` : ''}
-      ${R.phase === 'exported' && hasErr ? '<button class="ghost" id="ccRetryExp">↻ Повторить выгрузку с ошибкой</button>' : ''}
-      ${R.phase === 'exported' && !exporting ? '<button class="ghost" id="ccExportAgain">⬇ Выгрузить ещё раз</button>' : ''}
+      ${R.phase === 'exported' && hasErr && !checking ? '<button class="ghost" id="ccRetryExp">↻ Повторить выгрузку с ошибкой</button>' : ''}
+      ${R.phase === 'exported' && !checking ? '<button class="ghost" id="ccExportAgain">⬇ Выгрузить ещё раз</button>' : ''}
       ${R.check.st === 'err' && !checking ? '<button class="ghost" id="ccContinue">▶ Продолжить проверку</button>' : ''}
+      ${(R.check.st === 'ok' || R.check.st === 'err') && !checking && checks.length ? '<button class="ghost" id="ccCheckAgain">↻ Проверить снова</button>' : ''}
       <button class="ghost" id="ccSave">Сохранить сценарий</button>
       ${R.files.length ? '<button class="ghost" id="ccFolder">Открыть папку</button>' : ''}
       ${R.check.st === 'ok' || R.check.st === 'err' ? '<button class="ghost" id="ccResults">Результаты</button>' : ''}
     </div>
-    <div class="wz-nav"><button class="ghost" id="wzBack"${exporting || checking ? ' disabled' : ''}>← Назад</button><button class="primary" id="wzNext"${exporting || checking ? ' disabled' : ''}>Готово</button></div>`;
+    ${(() => {
+      // справа внизу — всегда следующее действие по порядку (там, где на прошлых шагах была «Далее»)
+      const allDone = R.phase === 'exported' && (!checks.length || R.check.st === 'ok' || R.check.st === 'err');
+      let main;
+      if (exporting) main = '<button class="danger cc-main" id="ccStop">■ Остановить выгрузку</button>';
+      else if (checking) main = '<button class="danger cc-main" id="ccStop">■ Остановить проверку</button>';
+      else if (R.phase === 'idle') main = '<button class="primary go-export cc-main" id="ccExport">⬇ Выгрузить объявления</button>';
+      else if (R.phase === 'exported' && checks.length && R.check.st === 'wait') main = `<button class="primary go-check cc-main" id="ccCheck"${!R.files.length ? ' disabled title="Нет файлов для проверки"' : ''}>✓ Начать проверку</button>`;
+      else if (allDone) main = '<button class="primary cc-main" id="wzNext">Готово ✓</button>';
+      else main = '';
+      const hint = R.phase === 'idle' ? 'Шаг 1 из 2: выгрузка объявлений в Excel' : R.phase === 'exported' && checks.length && R.check.st === 'wait' ? 'Шаг 2 из 2: проверка зон по выгруженным файлам' : allDone ? 'Всё сделано — можно закрыть мастер' : '';
+      return `<div class="wz-nav"><div class="nav-left"><button class="ghost" id="wzBack"${exporting || checking ? ' disabled' : ''}>← Назад</button>
+        <button class="link-btn" id="ccHome"${exporting || checking ? ' disabled' : ''}>На главный экран</button></div>
+        <div class="nav-right"><span class="nav-hint">${hint}</span>${main}</div></div>`;
+    })()}`;
   const on = (id, f) => { const e = $(id); if (e) e.onclick = f; };
+  // защита от двойного щелчка: сразу после перехода на шаг главная кнопка недолго неактивна
+  const mainBtn = document.querySelector('.cc-main');
+  if (mainBtn && W.justEntered) { mainBtn.disabled = true; setTimeout(() => { if (!mainBtn.hasAttribute('title')) mainBtn.disabled = false; }, 700); }
+  W.justEntered = false;
   on('ccExport', () => runExportAll(false));
   on('ccExportAgain', () => { newRun(); runExportAll(false); });
   on('ccRetryExp', () => runExportAll(true));
   on('ccStop', () => { if (W.run.phase === 'export') { W.run.stop = true; pvz.stop(); } if (W.run.check.st === 'run') pvz.ozonStop(); });
-  on('ccCheck', () => runCheck(R.check.st !== 'wait'));
+  on('ccCheck', () => runCheck(false));
+  on('ccCheckAgain', () => runCheck(true));
+  on('ccHome', () => goHome());
   on('ccContinue', () => runCheck(false));
   on('ccSave', saveScenario);
   on('ccFolder', () => pvz.showFile(R.files[0]));
   on('ccResults', () => openPage('results'));
   $('wzStep').querySelectorAll('a[data-file]').forEach(a => (a.onclick = () => pvz.showFile(a.dataset.file)));
   $('wzBack').onclick = () => goTo(W.step - 1);
-  $('wzNext').onclick = () => goHome();
+  on('wzNext', () => goHome());
 }
 const rerender = () => { if (cur() === 'center') renderCenter(); renderRibbon(); };
 
