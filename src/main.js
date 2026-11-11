@@ -33,11 +33,11 @@ const DEF_CIAN = path.join(PVZ_BASE, 'АДРЕСА ЦИАН');
 const DEF_OZON = path.join(PVZ_BASE, 'ПРОВЕРКА OZON');
 
 let win, view, ozonView, wbView, running = false, stopFlag = false;
-let currentSite = null, ozonRunning = false, ozonStop = false;
+let currentSite = null, ozonRunning = false, ozonStop = false, ozonSkip = false;
 const ozonQueue = [];
 const cfgPath = () => path.join(app.getPath('userData'), 'config.json');
 function loadCfg() {
-  const d = { root: DEF_ROOT, cianRoot: DEF_CIAN, ozonOut: DEF_OZON, ozonDays: 3, ozonThreads: 2, ozonPause: 2, ozonAuto: false, ozonCache: true, chkOzon: true, chkYandex: false, chkWb: false,
+  const d = { root: DEF_ROOT, cianRoot: DEF_CIAN, ozonOut: DEF_OZON, ozonDays: 3, ozonThreads: 2, ozonPause: 2, ozonWait: 25, ozonTries: 3, ozonAuto: false, ozonCache: true, chkOzon: true, chkYandex: false, chkWb: false,
     tray: true, autostart: false, schedules: [],
     pages: 40, delay: 4, days: 7, part: 300, cianOnlyNew: true };
   let c; try { c = Object.assign(d, JSON.parse(fs.readFileSync(cfgPath(), 'utf8'))); } catch { c = d; }
@@ -66,7 +66,7 @@ function layout() {
 function createWindow() {
   win = new BrowserWindow({
     show: !process.argv.includes('--hidden'),
-    width: 1400, height: 900, minWidth: 980, minHeight: 640, title: 'PVZ Master', backgroundColor: '#0d0f13', icon: path.join(__dirname, 'icon.png'),
+    width: 1400, height: 900, minWidth: 980, minHeight: 640, title: 'PVZ Master', backgroundColor: require('electron').nativeTheme.shouldUseDarkColors ? '#0f1115' : '#f4f6f9', icon: path.join(__dirname, 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
   });
   if (IS_MAC) {
@@ -286,7 +286,7 @@ const wbFetch = async url => {
 
 async function pumpOzon() {
   if (ozonRunning) { send('ozonStatus', { text: `В очереди ещё файлов: ${ozonQueue.length}`, running: true, queued: ozonQueue.length }); return; }
-  ozonRunning = true; ozonStop = false;
+  ozonRunning = true; ozonStop = false; ozonSkip = false;
   try {
     while (ozonQueue.length && !ozonStop) {
       const cfg = loadCfg();
@@ -300,7 +300,7 @@ async function pumpOzon() {
         const status = (text, extra) => send('ozonStatus', Object.assign({ text, running: true }, extra || {}));
         if (p.key === 'ozon') {
           results.push(Object.assign({ kind: 'ozon', label: 'Ozon' }, await ozon.run(files, {
-            wc: ozonView.webContents, cfg, cachePath: path.join(app.getPath('userData'), 'ozon_cache.json'), status, isStopped: () => ozonStop })));
+            wc: ozonView.webContents, cfg, cachePath: path.join(app.getPath('userData'), 'ozon_cache.json'), status, isStopped: () => ozonStop, takeSkip: () => { const v = ozonSkip; ozonSkip = false; return v; } })));
         } else {
           let fetchFn = u => net.fetch(u);
           if (p.key === 'wb') {
@@ -351,6 +351,7 @@ ipcMain.handle('ozonStart', (_e, paths, opts) => {
   enqueueOzon(paths); return { ok: true };
 });
 ipcMain.handle('ozonStop', () => { ozonStop = true; return true; });
+ipcMain.handle('ozonNow', () => { ozonSkip = true; return true; });
 ipcMain.handle('ozonClearCache', () => {
   const p = path.join(app.getPath('userData'), 'ozon_cache.json');
   let n = 0; try { n = Object.keys(JSON.parse(fs.readFileSync(p, 'utf8'))).length; fs.unlinkSync(p); } catch {}
@@ -397,6 +398,7 @@ async function selfTest(dir) {
   await W8(2500);
   const shot = async n => { const img = await win.webContents.capturePage(); fs.writeFileSync(path.join(dir, n + '.png'), img.toPNG()); };
   const J = c => win.webContents.executeJavaScript(c, true).catch(e => console.log('JSERR', e.message));
+  if (process.env.PVZ_THEME) await J(`localStorage.setItem('pvzTheme','${process.env.PVZ_THEME}'); location.reload(); 1`).catch(()=>{}), await W8(2500);
   await shot('01-home');
   await J(`$('startBtn').click(); 1`); await W8(1200); await shot('02-select');
   await J(`$('wzNext').click(); 1`); await W8(900); await shot('03-cian');
@@ -407,7 +409,7 @@ async function selfTest(dir) {
   await J(`$('wzNext').click(); 1`); await W8(900); await shot('05-avito-modal');
   await J(`[...document.querySelectorAll('#mBtns button')].find(b=>/без них/.test(b.textContent)).click(); 1`); await W8(1200); await shot('06-winner');
   await J(`document.querySelector('#oList .on') && document.querySelector('#oList .on').click(); 1`); await W8(300);
-  await J(`$('wzNext').click(); 1`); await W8(900); await shot('07-center');
+  await J(`$('wzNext').click(); 1`); await W8(900); await J(`document.querySelectorAll('#wzStep details.fold').forEach(d=>d.open=true); 1`); await W8(400); await shot('07-center');
   for (const page of ['results', 'history', 'schedule']) { await J(`openPage('${page}'); 1`); await W8(1800); await shot('08-' + page); }
   console.log('SELFTEST DONE'); app.exit(0);
 }

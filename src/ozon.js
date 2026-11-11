@@ -139,16 +139,25 @@ async function run(files, ctx) {
     const test = async () => { try { return await J(`fetch(${JSON.stringify(TEST)}, {headers:{Accept:'application/json'}}).then(r => r.status).catch(() => 0)`); } catch { return 0; } };
     let st = await test();
     let waits = 0;
+    const waitMin = Math.max(1, cfg.ozonWait || 25), tries = Math.max(1, cfg.ozonTries || 3);
     const waitBlock = async () => {
       waits++;
-      if (waits > 3) return false;
-      const until = new Date(Date.now() + 25 * 60e3);
-      for (let s = 25 * 60; s > 0; s--) {
-        if (isStopped()) return false;
-        if (s % 5 === 0) status(`Ozon временно ограничил запросы (так бывает при частой проверке).\nПродолжу в ${until.toTimeString().slice(0, 5)} (попытка ${waits} из 3). Можно остановить — проверенное сохранится.`, { wait: true });
-        await sleep(1000);
+      if (waits > tries) return false;
+      while (true) {
+        const until = new Date(Date.now() + waitMin * 60e3);
+        let skipped = false;
+        for (let s = waitMin * 60; s > 0; s--) {
+          if (isStopped()) return false;
+          if (ctx.takeSkip && ctx.takeSkip()) { skipped = true; break; }
+          if (s % 5 === 0 || s === waitMin * 60) status(`Ozon временно ограничил запросы (так бывает при частой проверке).\nПовторю сам в ${until.toTimeString().slice(0, 5)} (попытка ${waits} из ${tries}). Можно нажать «Попробовать сейчас» или остановить — проверенное сохранится.`, { wait: true });
+          await sleep(1000);
+        }
+        if (skipped) status('Пробую подключиться к Ozon…', { wait: false });
+        const ok = (await test()) === 200;
+        if (ok || !skipped) return ok;
+        status('Ozon всё ещё ограничивает запросы — жду дальше.', { wait: true });
+        await sleep(1500);
       }
-      return (await test()) === 200;
     };
     while (st !== 200) {
       if (!(await waitBlock())) { blockedGaveUp = !isStopped(); stoppedByUser = isStopped(); break; }

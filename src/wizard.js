@@ -3,14 +3,14 @@
 // «Выгрузка и проверка» (выгрузить объявления; затем отдельной кнопкой — проверка зон).
 (() => {
 const SRC = {
-  cian: { name: 'Циан', color: '#0468FF', desc: 'Коммерческая аренда. Все параметры поиска подставляются автоматически, большой поиск сам делится по площади.' },
-  avito: { name: 'Авито', color: '#00AAFF', cls: 'avito', desc: 'Регион, цена и сортировка — автоматически. Вид объекта, площадь и этаж выставляются на сайте один раз и запоминаются.' },
-  winner: { name: 'Baza Winner', color: '#F97316', desc: 'Ваши сохранённые заказы, выгрузка порциями по 300 через мастер экспорта. Вход на сайт — ваш.' }
+  cian: { name: 'Циан', color: '#0468FF', desc: 'Всё настраивается автоматически' },
+  avito: { name: 'Авито', color: '#00AAFF', cls: 'avito', desc: 'Часть фильтров — один раз на сайте' },
+  winner: { name: 'Baza Winner', color: '#F97316', desc: 'Ваши сохранённые заказы' }
 };
 const CHK = {
-  ozon: { name: 'Ozon', color: '#005BFF', desc: 'Зелёный (от 49 м²), синий, голубой, гарантия < 3 млн.' },
-  yandex: { name: 'Яндекс Маркет', color: '#FFCC00', cls: 'ym', desc: 'Группы субсидий 1–4: до 300 / 250 / 200 / 140 тыс. ₽.' },
-  wb: { name: 'Wildberries', color: '#CB11AB', cls: 'wb', desc: 'Где можно открыть ПВЗ: гарантия и тариф, от 25 м².' }
+  ozon: { name: 'Ozon', color: '#005BFF', desc: 'Зелёный, синий, голубой' },
+  yandex: { name: 'Яндекс Маркет', color: '#FFCC00', cls: 'ym', desc: 'Группы субсидий 1–4' },
+  wb: { name: 'Wildberries', color: '#CB11AB', cls: 'wb', desc: 'Гарантия и тариф' }
 };
 const STEP_INFO = { select: ['Выбор', '#8B5CF6'], cian: ['Циан', '#0468FF'], avito: ['Авито', '#00AAFF'], winner: ['Winner', '#F97316'], center: ['Выгрузка и проверка', '#14B8A6'] };
 const ICON_OK = '<svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>';
@@ -82,7 +82,7 @@ const paramsStep = () => W.steps.find(s => s === 'cian' || s === 'avito');
 const cur = () => W.steps[W.step];
 function renderRibbon() {
   const busy = W.run && (W.run.phase === 'export' || (W.run.check && W.run.check.st === 'run'));
-  $('wzSteps').innerHTML = W.steps.map((s, i) => `<li class="${i < W.step ? 'done' : i === W.step ? 'cur' : ''}" data-i="${i}" style="--sc:${STEP_INFO[s][1]}"><b>${i < W.step ? '✓' : i + 1}</b>${STEP_INFO[s][0]}</li>`).join('');
+  $('wzSteps').innerHTML = W.steps.map((s, i) => `<li class="${i < W.step ? 'done' : i === W.step ? 'cur' : ''}" data-i="${i}"><b>${i < W.step ? '✓' : i + 1}</b>${STEP_INFO[s][0]}</li>`).join('');
   $('wzSteps').querySelectorAll('li.done').forEach(li => (li.onclick = () => { if (!busy) goTo(+li.dataset.i); }));
 }
 function paramChips(p) {
@@ -116,7 +116,6 @@ function render() {
   if (W.step >= W.steps.length) W.step = W.steps.length - 1;
   renderRibbon(); renderBar();
   const s = cur();
-  $('wzStep').style.setProperty('--sc', STEP_INFO[s][1]);
   ({ select: renderSelect, cian: renderCian, avito: renderAvito, winner: renderWinner, center: renderCenter })[s]();
   $('wzStep').scrollTop = 0;
 }
@@ -143,6 +142,10 @@ function saveRows(c) {
     file: j(mon, chk.map(([k]) => ({ ozon: 'OZON', yandex: 'ЯНДЕКС', wb: 'WB' })[k]).join(' / ') + ' <имя выгрузки>.xlsx'), note: 'по файлу на каждую выгрузку; Ozon — подходящие зоны, Яндекс/WB — листы «Результат» и «Исключённые»' });
   return rows;
 }
+function saveSum(c) {
+  const short = p => (p || 'не выбрана').split(/[\\/]/).filter(Boolean).slice(-1)[0] || p;
+  return saveRows(c).map(r => `${r.who === 'Результаты проверки' ? 'результаты' : r.who} → ${short(r.dir)}`).join(' · ');
+}
 function saveBlock(c, compact) {
   const rows = saveRows(c);
   if (!rows.length) return '';
@@ -166,14 +169,13 @@ async function renderSelect() {
   const c = await pvz.getCfg();
   presets = c.presets && Object.keys(c.presets).length ? c.presets : JSON.parse(JSON.stringify(DEFAULT_PRESETS));
   $('wzStep').innerHTML = `<h2>Где работаем?</h2>
-    <p class="lead">Отметьте, где искать объявления и на каких картах потом проверять помещения. Выгрузка и проверка запускаются только вашими кнопками на последнем шаге.</p>
-    <div class="scen"><label class="field">Сценарий<select id="wzScen"><option value="">— текущие настройки —</option>${Object.keys(presets).map(n => `<option${n === W.scenario ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
-      <span class="hint">Сценарий — сохранённый набор: источники, проверки, параметры, фильтры Авито и заказы Winner.</span></div>
+    <p class="lead">Источники объявлений и карты для проверки.</p>
+    <div class="scen-inline"><span class="muted">Сценарий</span><select id="wzScen"><option value="">— текущие настройки —</option>${Object.keys(presets).map(n => `<option${n === W.scenario ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select><span class="qm" title="Сохранённый набор: источники, проверки, параметры, фильтры Авито и заказы Winner">?</span></div>
     <h3>Источники объявлений</h3><div class="pick" id="wzSrc">${Object.entries(SRC).map(([k, v]) => card(k, v, W.sources[k])).join('')}</div>
     <h3>Проверка зон</h3><div class="pick" id="wzChk">${Object.entries(CHK).map(([k, v]) => card(k, v, W.checks[k])).join('')}</div>
-    <h3>Куда сохранять и как будут называться файлы</h3><div id="wzSave">${saveBlock(c, false)}</div>
+    <details class="fold" id="wzSaveF"><summary>Куда сохранять<span class="sum" id="wzSaveSum">${esc(saveSum(c))}</span></summary><div id="wzSave">${saveBlock(c, false)}</div></details>
     ${nav('Отмена', null, 'Далее →', !Object.values(W.sources).some(Boolean))}`;
-  const refreshSave = () => { $('wzSave').innerHTML = saveBlock(c, false); bindSaveBlock($('wzSave')); };
+  const refreshSave = () => { $('wzSave').innerHTML = saveBlock(c, false); $('wzSaveSum').textContent = saveSum(c); bindSaveBlock($('wzSave')); };
   $('wzSrc').querySelectorAll('.pc-card').forEach(b => (b.onclick = () => { W.sources[b.dataset.k] = !W.sources[b.dataset.k]; b.classList.toggle('on'); buildSteps(); renderRibbon(); $('wzNext').disabled = !Object.values(W.sources).some(Boolean); persist(); refreshSave(); }));
   $('wzChk').querySelectorAll('.pc-card').forEach(b => (b.onclick = () => { W.checks[b.dataset.k] = !W.checks[b.dataset.k]; b.classList.toggle('on'); persist(); refreshSave(); }));
   bindSaveBlock($('wzSave'));
@@ -229,9 +231,9 @@ const listHtml = items => `<ul class="chk-list">${items.map(([k, t]) => `<li cla
 function renderCian() {
   const first = paramsStep() === 'cian';
   $('wzStep').innerHTML = `<h2>Циан <span class="tag">шаг ${W.step + 1}</span></h2>
-    <p class="lead">${first ? 'Задайте параметры поиска. Они же будут вводными для Авито.' : 'Параметры уже заданы.'} На Циане всё подставляется автоматически — проверьте и жмите «Далее».</p>
+    <p class="lead">${first ? 'Параметры поиска — они же для Авито.' : 'Параметры уже заданы — всё подставится само.'}</p>
     ${first ? paramsForm() : ''}
-    <h3>Что будет на Циане</h3><div id="cList">${listHtml(cianList())}</div>
+    <details class="fold"><summary>Что будет на Циане<span class="sum">всё автоматически</span></summary><div id="cList">${listHtml(cianList())}</div></details>
     <button class="bigbtn" id="cOpen"><svg viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>Посмотреть этот поиск на Циане</button>
     ${nav('← Назад')}`;
   if (first) bindParams(() => ($('cList').innerHTML = listHtml(cianList())));
@@ -253,12 +255,12 @@ function renderAvito() {
   const first = paramsStep() === 'avito';
   const manual = !W.avitoUrl && avitoManual(W.params).length;
   $('wzStep').innerHTML = `<h2>Авито <span class="tag">шаг ${W.step + 1}</span></h2>
-    <p class="lead">${first ? 'Задайте параметры поиска. ' : ''}Авито не даёт задать часть фильтров из программы — их нужно один раз выставить на сайте (отмечены ✎). Программа запомнит их.</p>
+    <p class="lead">${first ? 'Параметры поиска. ' : ''}Вид, площадь и этаж — один раз на сайте, программа запомнит.</p>
     ${first ? paramsForm() : ''}
-    <h3>Что будет на Авито</h3><div id="aList">${listHtml(avitoItems())}</div>
+    <details class="fold"${manual ? ' open' : ''}><summary>Что будет на Авито<span class="sum">${W.avitoUrl ? 'фильтры сохранены' : manual ? 'нужно выставить на сайте' : 'всё автоматически'}</span></summary><div id="aList">${listHtml(avitoItems())}</div></details>
     ${W.avitoUrl ? `<div class="okline">✓ Фильтры Авито сохранены. <a id="aReset">Выставить заново</a></div>` : ''}
     <button class="bigbtn" id="aOpen"><svg viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>${W.avitoUrl ? 'Открыть Авито с сохранёнными фильтрами' : 'Открыть Авито и выставить фильтры'}</button>
-    <p class="hint" id="aHint" style="margin-top:10px">${manual ? 'На сайте справа выберите вид объекта, площадь и этаж (блок «Этаж» появляется после выбора вида), дождитесь выдачи и нажмите «Далее» — фильтры запомнятся.' : ''}</p>
+    <p class="hint" id="aHint" style="margin-top:10px">${manual ? 'Выберите на сайте вид, площадь и этаж и нажмите «Далее».' : ''}</p>
     ${nav('← Назад')}`;
   if (first) bindParams(() => ($('aList').innerHTML = listHtml(avitoItems())));
   if ($('aReset')) $('aReset').onclick = () => { W.avitoUrl = null; persist(); render(); };
@@ -284,10 +286,9 @@ function renderAvito() {
 // ---------------- шаг: Winner ----------------
 async function renderWinner() {
   $('wzStep').innerHTML = `<h2>Baza Winner <span class="tag">шаг ${W.step + 1}</span></h2>
-    <p class="lead">Отметьте заказы для выгрузки. Параметры самих заказов (площадь, цена, виды) хранятся в Winner. Если вход на сайт слетел — откройте Winner и войдите сами.</p>
+    <p class="lead">Отметьте заказы для выгрузки.<span class="qm" title="Параметры заказов хранятся в самом Winner. Если вход слетел — откройте Winner и войдите сами.">?</span></p>
     <div id="oList"><p class="hint">Загружаю заказы…</p></div>
     <button class="bigbtn" id="wOpen"><svg viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>Открыть Winner (вход, просмотр заказов)</button>
-    <p class="hint" style="margin-top:10px">«В скрытые»: после проверки записанного файла выгруженные объявления помещаются в скрытые (как для заказов #3 и #5). Без галочки (как #4) выгружается весь заказ, объявления остаются в ленте.</p>
     ${nav('← Назад')}`;
   W.ordersList = await pvz.bwOrders();
   const known = { 'f6fcd57a-013b-45c8-abcd-89f04b3bf28b': { tag: '', hide: true }, 'bde0dac7-35da-4e41-92d9-a94b78552bdb': { tag: '#4', hide: false }, '3daabb2d-e169-4789-91c9-7b2cb677f87c': { tag: 'МО', hide: true } };
@@ -297,7 +298,7 @@ async function renderWinner() {
       <label class="switch"><input type="checkbox" class="on"${s.on ? ' checked' : ''}><span></span></label>
       <div><b>${esc(o.name)}</b><div class="hint">${o.guid.slice(0, 8)}…</div></div>
       <label class="field">Метка файлов<input type="text" class="tg" value="${esc(s.tag)}" placeholder="пусто"></label>
-      <label class="switch"><input type="checkbox" class="hd"${s.hide ? ' checked' : ''}><span></span><span class="lbl">в скрытые</span></label></div>`; }).join('') || '<p class="hint">Заказы не найдены — откройте Winner и зайдите в нужный заказ, он появится здесь.</p>';
+      <label class="switch"><input type="checkbox" class="hd"${s.hide ? ' checked' : ''}><span></span><span class="lbl">в скрытые</span><span class="qm" title="После проверки файла выгруженные объявления уходят в скрытые (#3, #5). Без галочки (#4) — остаются в ленте.">?</span></label></div>`; }).join('') || '<p class="hint">Заказы не найдены — откройте Winner и зайдите в нужный заказ, он появится здесь.</p>';
   $('oList').querySelectorAll('.order-row').forEach(r => {
     const s = W.orders[r.dataset.g];
     r.querySelector('.on').onchange = e => { s.on = e.target.checked; persist(); };
@@ -319,7 +320,7 @@ const chosenOrders = () => W.ordersList.filter(o => W.orders[o.guid] && W.orders
 function newRun() {
   const src = {};
   for (const k of ['cian', 'avito', 'winner']) if (W.sources[k]) src[k] = { st: 'wait', text: 'ожидает', files: [], total: 0 };
-  W.run = { phase: 'idle', src, files: [], check: { st: 'wait', text: 'Запустится после выгрузки по кнопке «Начать проверку».' }, stop: false, cur: null };
+  W.run = { phase: 'idle', src, files: [], check: { st: 'wait', text: 'После выгрузки, по кнопке «Начать проверку».' }, stop: false, cur: null };
 }
 function srcSummary(k) {
   if (k === 'winner') return chosenOrders().map(o => `${o.name}${o.tag ? ' · метка ' + o.tag : ''}${o.hide ? ' · в скрытые' : ' · без скрытия'}`).join('\n') || 'заказы не выбраны';
@@ -333,9 +334,9 @@ function renderCenter() {
   const checks = Object.entries(CHK).filter(([k]) => W.checks[k]);
   const exporting = R.phase === 'export', checking = R.check.st === 'run';
   const hasErr = Object.values(R.src).some(s => s.st === 'err');
+  const openF = [...document.querySelectorAll('#wzStep details.fold[open] > summary')].map(s => s.firstChild.textContent);
   $('wzStep').innerHTML = `<h2>Выгрузка и проверка</h2>
-    <p class="lead">Проверьте, что всё верно. Сначала нажмите «Выгрузить объявления» — появятся Excel-файлы. Затем отдельной кнопкой «Начать проверку».</p>
-    <details class="cc-save"><summary>Куда сохраняются файлы</summary><div id="ccSaveBox"></div></details>
+    <p class="lead">Сначала выгрузка, потом проверка — обе по кнопке.</p>
     <div class="cc-grid">
       ${Object.entries(R.src).map(([k, s]) => `<div class="cc-card ${SRC[k].cls || ''}" style="--b:${SRC[k].color}" id="cc_${k}">
         <div class="h"><b>${SRC[k].name}</b><span class="st ${ST[s.st][1]}">${s.st === 'run' ? 'идёт…' : s.st === 'ok' ? 'готово · ' + fmtNum(s.total) : ST[s.st][0]}</span></div>
@@ -346,10 +347,18 @@ function renderCenter() {
         <div class="h"><b>Проверка зон</b><div class="chips-inline" style="margin-left:8px">${checks.map(([k, v]) => `<span style="--b:${v.color}">${v.name}</span>`).join('') || '<span style="--b:#64748b">не выбрана</span>'}</div>
           <span class="st ${ST[R.check.st][1]}">${ST[R.check.st][0]}</span></div>
         <div class="p">${esc(prettyNums(R.check.text))}</div>
+        ${checking && R.check.wait ? '<div class="cc-actions" style="margin-top:10px"><button class="primary" id="ccNow" style="padding:9px 16px;font-size:13px">↻ Попробовать сейчас</button></div>' : ''}
         ${checking ? `<div class="bar ${R.check.total ? '' : 'ind'}"><i style="${R.check.total ? `width:${Math.round(100 * (R.check.done || 0) / R.check.total)}%;transform:none` : ''}"></i></div>` : ''}
         ${R.check.saved && R.check.saved.length ? `<div class="cc-files">${R.check.saved.map(f => `<a data-file="${esc(f)}" title="${esc(f)}">📄 ${esc(f.split(/[\\/]/).pop())}</a>`).join('')}</div>` : ''}
       </div>
     </div>
+    ${W.checks.ozon ? `<details class="fold" id="ozSetF"><summary>Настройки проверки Ozon<span class="sum" id="ozSum"></span></summary><div class="fgrid" id="ozSet">
+      <label class="field">Пауза между запросами, с<input type="text" class="num" data-oz="ozonPause" inputmode="numeric"></label>
+      <label class="field">Потоков<input type="text" class="num" data-oz="ozonThreads" inputmode="numeric"></label>
+      <label class="field">Ожидание при ограничении, мин<input type="text" class="num" data-oz="ozonWait" inputmode="numeric"></label>
+      <label class="field">Попыток после ограничения<input type="text" class="num" data-oz="ozonTries" inputmode="numeric"></label></div>
+      <p class="hint" style="margin-top:8px">Меньше пауза и больше потоков — быстрее, но Ozon чаще ограничивает. Надёжно: пауза 2 с, 2 потока. Изменения действуют со следующего запуска проверки.</p></details>` : ''}
+    <details class="fold"><summary>Куда сохраняются файлы<span class="sum" id="ccSaveSum"></span></summary><div id="ccSaveBox"></div></details>
     <div class="cc-actions" style="margin-top:16px">
       ${R.phase === 'exported' && hasErr && !checking ? '<button class="ghost" id="ccRetryExp">↻ Повторить выгрузку с ошибкой</button>' : ''}
       ${R.phase === 'exported' && !checking ? '<button class="ghost" id="ccExportAgain">⬇ Выгрузить ещё раз</button>' : ''}
@@ -370,13 +379,14 @@ function renderCenter() {
       else if (R.phase === 'exported' && checks.length && R.check.st === 'wait') main = `<button class="primary go-check cc-main" id="ccCheck"${!R.files.length ? ' disabled title="Нет файлов для проверки"' : ''}>✓ Начать проверку</button>`;
       else if (allDone) main = '<button class="primary cc-main" id="wzNext">Готово ✓</button>';
       else main = '';
-      const hint = R.phase === 'idle' ? 'Шаг 1 из 2: выгрузка объявлений в Excel' : R.phase === 'exported' && checks.length && R.check.st === 'wait' ? 'Шаг 2 из 2: проверка зон по выгруженным файлам' : allDone ? 'Всё сделано — можно закрыть мастер' : '';
+      const hint = R.phase === 'idle' ? 'Шаг 1 из 2' : R.phase === 'exported' && checks.length && R.check.st === 'wait' ? 'Шаг 2 из 2' : '';
       return `<div class="wz-nav"><div class="nav-left"><button class="ghost" id="wzBack"${exporting || checking ? ' disabled' : ''}>← Назад</button>
         <button class="link-btn" id="ccHome"${exporting || checking ? ' disabled' : ''}>На главный экран</button></div>
         <div class="nav-right"><span class="nav-hint">${hint}</span>${main}</div></div>`;
     })()}`;
   const on = (id, f) => { const e = $(id); if (e) e.onclick = f; };
-  pvz.getCfg().then(c => { const b = $('ccSaveBox'); if (b) { b.innerHTML = saveBlock(c, false); bindSaveBlock(b); } });
+  document.querySelectorAll('#wzStep details.fold > summary').forEach(s => { if (openF.includes(s.firstChild.textContent)) s.parentNode.open = true; });
+  pvz.getCfg().then(c => { const b = $('ccSaveBox'); if (b) { b.innerHTML = saveBlock(c, false); $('ccSaveSum').textContent = saveSum(c); bindSaveBlock(b); } });
   // защита от двойного щелчка: сразу после перехода на шаг главная кнопка недолго неактивна
   const mainBtn = document.querySelector('.cc-main');
   if (mainBtn && W.justEntered) { mainBtn.disabled = true; setTimeout(() => { if (!mainBtn.hasAttribute('title')) mainBtn.disabled = false; }, 700); }
@@ -389,6 +399,16 @@ function renderCenter() {
   on('ccCheckAgain', () => runCheck(true));
   on('ccHome', () => goHome());
   on('ccContinue', () => runCheck(false));
+  on('ccNow', () => { pvz.ozonNow(); W.run.check.wait = false; W.run.check.text = 'Пробую подключиться к Ozon…'; rerender(); });
+  if ($('ozSet')) pvz.getCfg().then(c => {
+    const sum = () => { $('ozSum').textContent = `пауза ${c.ozonPause || 2} с · потоков ${c.ozonThreads || 2} · ожидание ${c.ozonWait || 25} мин × ${c.ozonTries || 3}`; };
+    const D = { ozonPause: 2, ozonThreads: 2, ozonWait: 25, ozonTries: 3 }, MAX = { ozonThreads: 4, ozonTries: 10 };
+    $('ozSet').querySelectorAll('[data-oz]').forEach(i => {
+      const k = i.dataset.oz; setNum(i, c[k] || D[k]);
+      i.onchange = () => { let v = Math.max(1, numOf(i) || D[k]); if (MAX[k]) v = Math.min(MAX[k], v); setNum(i, v); c[k] = v; pvz.setCfg({ [k]: v }); sum(); };
+    });
+    sum();
+  });
   on('ccSave', saveScenario);
   on('ccLive', async () => {
     if (W.siteOpen) { W.liveSite = false; closeSiteView(); }
@@ -483,7 +503,10 @@ async function runCheck(fresh) {
 pvz.onStatus(s => { if (W.run && W.run.cur) { const S = W.run.src[W.run.cur]; S.text = s; const el = document.querySelector(`#cc_${W.run.cur} .p`); if (el) el.textContent = prettyNums(s); } });
 pvz.onOzonStatus(s => {
   if (!(W.run && W.run.check && W.run.check.st === 'run')) return;
+  const wasWait = !!W.run.check.wait;
   Object.assign(W.run.check, { text: s.text, done: s.done, total: s.total });
+  W.run.check.wait = !!s.wait;
+  if (wasWait !== !!W.run.check.wait) { rerender(); return; }
   const el = document.querySelector('#cc_check .p'); if (el) el.textContent = prettyNums(s.text);
   const bar = document.querySelector('#cc_check .bar'); if (bar && s.total) { bar.classList.remove('ind'); bar.firstChild.style.width = Math.round(100 * (s.done || 0) / s.total) + '%'; bar.firstChild.style.transform = 'none'; }
 });

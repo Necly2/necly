@@ -93,7 +93,7 @@ async function collector(C) {
       if (!all.has(it.id)) { all.set(it.id, it); added++; }
     }
     if (!items.length) { reason = 'выдача закончилась'; break; }
-    if (!added) { if (++emptyRow >= 2) { reason = 'новых объявлений нет 2 страницы подряд'; break; } } else emptyRow = 0;
+    if (!added) { if (++emptyRow >= 2) { reason = C.days ? `готово: дальше только объявления старше ${C.days} дн.` : 'готово: дальше только уже собранные объявления'; break; } } else emptyRow = 0;
     page++;
     if (page <= C.pages) {
       for (let s = C.delay; s > 0 && !window.__pvzStop; s--) { P(`Пауза ${s} с… (следующая стр. ${page})\nСобрано: ${all.size}`); await sleep(1000); }
