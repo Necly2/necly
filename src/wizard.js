@@ -127,6 +127,37 @@ function bindNav(onNext) {
   $('wzNext').onclick = onNext || (() => goTo(W.step + 1));
 }
 
+
+// ---------------- куда сохраняются файлы ----------------
+const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+function saveRows(c) {
+  const d = new Date(), dd = String(d.getDate()).padStart(2, '0'), mon = MONTHS_RU[d.getMonth()];
+  const sep = /\\/.test(c.root || '') ? '\\' : '/';
+  const j = (...a) => a.join(sep);
+  const rows = [];
+  if (W.sources.cian) rows.push({ key: 'cian', who: 'Циан', color: '#0468FF', dir: c.cianRoot, file: j(mon, `Циан ${dd}`, `export_excel ЦИАН ${dd} 1.xlsx`), note: 'по 300 строк; номер N продолжается' });
+  if (W.sources.avito) rows.push({ key: 'avito', who: 'Авито', color: '#00AAFF', dir: c.root, file: j(mon, `Адреса ${dd} AVITO`, `avito ${dd} 1.xlsx`), note: 'по 300 строк; номер N продолжается' });
+  if (W.sources.winner) rows.push({ key: 'avito', who: 'Baza Winner', color: '#F97316', dir: c.root, file: j(mon, `Адреса ${dd}[ метка]`, `export_excel[ метка] ${dd} 1.xlsx`), note: 'метка заказа: #4, МО или пусто; та же папка, что у Авито' });
+  const chk = Object.entries(CHK).filter(([k]) => W.checks[k]);
+  if (chk.length) rows.push({ key: 'ozon', who: 'Результаты проверки', color: '#8B5CF6', dir: c.ozonOut,
+    file: j(mon, chk.map(([k]) => ({ ozon: 'OZON', yandex: 'ЯНДЕКС', wb: 'WB' })[k]).join(' / ') + ' <имя выгрузки>.xlsx'), note: 'по файлу на каждую выгрузку; Ozon — подходящие зоны, Яндекс/WB — листы «Результат» и «Исключённые»' });
+  return rows;
+}
+function saveBlock(c, compact) {
+  const rows = saveRows(c);
+  if (!rows.length) return '';
+  return `<div class="save-box">${rows.map(r => `<div class="save-row" style="--b:${r.color}">
+      <div class="sv-who">${r.who}</div>
+      <div class="sv-path"><div class="sv-dir" title="${esc(r.dir || '')}">${esc(r.dir || 'папка не выбрана')}</div>
+        <div class="sv-file">└ ${esc(r.file)}</div>${compact ? '' : `<div class="hint">${esc(r.note)}</div>`}</div>
+      ${compact ? '' : `<div class="sv-btns"><button class="ghost sm" data-pick="${r.key}">Выбрать папку…</button><button class="ghost sm" data-open="${esc(r.dir || '')}">Открыть</button></div>`}
+    </div>`).join('')}</div>`;
+}
+function bindSaveBlock(root) {
+  root.querySelectorAll('[data-pick]').forEach(b => (b.onclick = async () => { await pvz.pickFolder(b.dataset.pick); render(); }));
+  root.querySelectorAll('[data-open]').forEach(b => (b.onclick = () => b.dataset.open && pvz.openFolder(b.dataset.open)));
+}
+
 // ---------------- шаг 1: выбор ----------------
 function card(key, info, on) {
   return `<button class="pc-card ${info.cls || ''}${on ? ' on' : ''}" data-k="${key}" style="--b:${info.color}"><span class="ck">${ICON_OK}</span><span class="nm">${info.name}</span><span class="ds">${info.desc}</span></button>`;
@@ -140,9 +171,12 @@ async function renderSelect() {
       <span class="hint">Сценарий — сохранённый набор: источники, проверки, параметры, фильтры Авито и заказы Winner.</span></div>
     <h3>Источники объявлений</h3><div class="pick" id="wzSrc">${Object.entries(SRC).map(([k, v]) => card(k, v, W.sources[k])).join('')}</div>
     <h3>Проверка зон</h3><div class="pick" id="wzChk">${Object.entries(CHK).map(([k, v]) => card(k, v, W.checks[k])).join('')}</div>
+    <h3>Куда сохранять и как будут называться файлы</h3><div id="wzSave">${saveBlock(c, false)}</div>
     ${nav('Отмена', null, 'Далее →', !Object.values(W.sources).some(Boolean))}`;
-  $('wzSrc').querySelectorAll('.pc-card').forEach(b => (b.onclick = () => { W.sources[b.dataset.k] = !W.sources[b.dataset.k]; b.classList.toggle('on'); buildSteps(); renderRibbon(); $('wzNext').disabled = !Object.values(W.sources).some(Boolean); persist(); }));
-  $('wzChk').querySelectorAll('.pc-card').forEach(b => (b.onclick = () => { W.checks[b.dataset.k] = !W.checks[b.dataset.k]; b.classList.toggle('on'); persist(); }));
+  const refreshSave = () => { $('wzSave').innerHTML = saveBlock(c, false); bindSaveBlock($('wzSave')); };
+  $('wzSrc').querySelectorAll('.pc-card').forEach(b => (b.onclick = () => { W.sources[b.dataset.k] = !W.sources[b.dataset.k]; b.classList.toggle('on'); buildSteps(); renderRibbon(); $('wzNext').disabled = !Object.values(W.sources).some(Boolean); persist(); refreshSave(); }));
+  $('wzChk').querySelectorAll('.pc-card').forEach(b => (b.onclick = () => { W.checks[b.dataset.k] = !W.checks[b.dataset.k]; b.classList.toggle('on'); persist(); refreshSave(); }));
+  bindSaveBlock($('wzSave'));
   $('wzScen').onchange = () => { applyScenario($('wzScen').value); render(); };
   bindNav();
 }
@@ -301,6 +335,7 @@ function renderCenter() {
   const hasErr = Object.values(R.src).some(s => s.st === 'err');
   $('wzStep').innerHTML = `<h2>Выгрузка и проверка</h2>
     <p class="lead">Проверьте, что всё верно. Сначала нажмите «Выгрузить объявления» — появятся Excel-файлы. Затем отдельной кнопкой «Начать проверку».</p>
+    <details class="cc-save"><summary>Куда сохраняются файлы</summary><div id="ccSaveBox"></div></details>
     <div class="cc-grid">
       ${Object.entries(R.src).map(([k, s]) => `<div class="cc-card ${SRC[k].cls || ''}" style="--b:${SRC[k].color}" id="cc_${k}">
         <div class="h"><b>${SRC[k].name}</b><span class="st ${ST[s.st][1]}">${s.st === 'run' ? 'идёт…' : s.st === 'ok' ? 'готово · ' + fmtNum(s.total) : ST[s.st][0]}</span></div>
@@ -341,6 +376,7 @@ function renderCenter() {
         <div class="nav-right"><span class="nav-hint">${hint}</span>${main}</div></div>`;
     })()}`;
   const on = (id, f) => { const e = $(id); if (e) e.onclick = f; };
+  pvz.getCfg().then(c => { const b = $('ccSaveBox'); if (b) { b.innerHTML = saveBlock(c, false); bindSaveBlock(b); } });
   // защита от двойного щелчка: сразу после перехода на шаг главная кнопка недолго неактивна
   const mainBtn = document.querySelector('.cc-main');
   if (mainBtn && W.justEntered) { mainBtn.disabled = true; setTimeout(() => { if (!mainBtn.hasAttribute('title')) mainBtn.disabled = false; }, 700); }

@@ -423,3 +423,15 @@ body.site-open .fgrid{grid-template-columns:1fr 1fr}
 .nav-hint{color:var(--muted);font-size:12.5px}
 .cc-main{padding:14px 28px !important;font-size:15px !important}
 .danger.cc-main{display:block;border-radius:12px}
+
+/* куда сохраняются файлы */
+.save-box{display:flex;flex-direction:column;gap:8px}
+.save-row{display:grid;grid-template-columns:150px 1fr auto;gap:14px;align-items:center;background:var(--card);border:1px solid var(--line);border-left:4px solid var(--b);border-radius:12px;padding:11px 14px}
+body.site-open .save-row{grid-template-columns:1fr}
+.sv-who{font-weight:700}
+.sv-dir{font:12.5px Consolas,Menlo,monospace;color:#dfe3ea;word-break:break-all}
+.sv-file{font:12px Consolas,Menlo,monospace;color:#86efac;margin-top:2px}
+.sv-btns{display:flex;gap:6px}
+.cc-save{margin-bottom:12px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 14px}
+.cc-save summary{cursor:pointer;color:#c4c9d4;font-weight:600}
+.cc-save[open] summary{margin-bottom:10px}
