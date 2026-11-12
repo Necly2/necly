@@ -442,7 +442,7 @@ async function exportOne(k) {
     const r = await pvz.start(await baseCfg(extra));
     if (r.saved) S.files.push(...r.saved);
     S.total += r.total || 0;
-    parts.push((label ? label + ': ' : '') + (r.ok ? `${r.reason}. Объявлений ${fmtNum(r.total)}, файлов ${r.saved.length}` : 'ошибка — ' + r.error));
+    parts.push((label ? label + ': ' : '') + (r.ok ? `${r.reason}. Объявлений ${fmtNum(r.total)}, файлов ${r.saved.length}` + (r.extra ? `\n${r.extra}` : '') : 'ошибка — ' + r.error));
     return r;
   };
   let bad = null;
