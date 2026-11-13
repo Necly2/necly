@@ -596,3 +596,12 @@ body.site-open .wz-site{padding:12px 14px 12px 12px}
 .star{border:none;background:none;color:var(--muted);font-size:16px;cursor:pointer;padding:0 0 0 8px;vertical-align:-1px}
 .star.on{color:#f5b301}
 .star:hover{color:#f5b301}
+/* результаты: сайт объявления посередине (при широком окне) */
+.r-lst{display:none;flex-direction:column;gap:8px;min-height:0}
+.r-lst .r-map{flex:1;min-height:0}
+.r-body.with-lst{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr) minmax(0,1fr)}
+.r-body.with-lst .r-lst{display:flex}
+.r-maptools{flex-wrap:nowrap;min-height:34px}
+.r-maptools b{font-size:13px}
+.map-sel{width:auto;padding:6px 10px;font-size:12.5px}
+#rLstHost{display:block}

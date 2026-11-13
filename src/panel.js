@@ -399,6 +399,7 @@ async function loadResults() {
   $('rCount').textContent = 'загрузка…';
   const r = await pvz.results();
   const cfg = await pvz.getCfg();
+  if (R.showLst === undefined) { R.showLst = cfg.resShowLst != null ? (cfg.resShowLst && lstAuto()) || (cfg.resShowLst && window.innerWidth >= 1400) : lstAuto(); R.base = cfg.resBase || '2gis'; $('rBase').value = R.base; R.mapMode = cfg.resMap || 'res'; $('rMapSel').value = R.mapMode; }
   R.marks = cfg.resMarks || {}; R.seen = cfg.resSeen || {}; R.watch = cfg.resWatch || {}; if (cfg.resDedup === false) R.dedup = false;
   prepRows(r.rows);
   renderDays();
@@ -407,13 +408,12 @@ async function loadResults() {
   $('rZone').innerHTML = '<option value="">все зоны</option>' + zones.map(z => `<option${z === cur ? ' selected' : ''}>${esc(z)}</option>`).join('');
   if (!R.map) {
     R.map = L.map('rMap', { zoomControl: true, attributionControl: true }).setView([55.75, 37.62], 10);
-    const tiles = () => L.tileLayer('https://tile{s}.maps.2gis.com/tiles?x={x}&y={y}&z={z}&v=1', { attribution: '© 2ГИС', subdomains: '0123', maxZoom: 18 });
-    R.tiles = tiles().addTo(R.map);
-    window.addEventListener('pvz-theme', () => { R.map.removeLayer(R.tiles); R.tiles = tiles().addTo(R.map); });
+    R.tiles = baseTiles().addTo(R.map);
     R.layer = L.layerGroup().addTo(R.map);
   }
   setTimeout(() => R.map.invalidateSize(), 50);
   renderResults(true);
+  applyLst(); if (R.mapMode !== 'res') setMapMode(R.mapMode);
   if (r.errors.length) pvz.logError('результаты', r.errors.join('; '));
 }
 function filteredResults() {
@@ -465,33 +465,83 @@ function ozQuery(x) {
   const a = x.address.trim();
   return /москв|московск|область|г\.|город/i.test(a) ? a : 'Москва, ' + a;
 }
-const ozRect = () => { const b = $('rOzHost').getBoundingClientRect(); return { x: b.left, y: b.top, width: b.width, height: b.height }; };
+const rectOf = id => { const b = $(id).getBoundingClientRect(); return { x: b.left, y: b.top, width: b.width, height: b.height }; };
+const ozRect = () => rectOf('rOzHost');
+// какая карта выбрана справа: «res» — точки (Leaflet), «ozon» — карта Ozon, остальные — сайты карт
+R.mapMode = 'res';
+const MAP_NAMES = { yandex: 'Яндекс.Карты', '2gis': '2ГИС', osm: 'OpenStreetMap', ozon: 'Карта Ozon', wb: 'Карта WB', ym: 'Карта Яндекс Маркета' };
+const extPoint = x => x && x.lat != null ? { lat: x.lat, lon: x.lon } : null;
+function mapQuery(x, mode) { return mode === 'ozon' ? ozQuery(x) : ozQuery(x); }
 function setMapMode(m) {
-  R.ozon = m === 'ozon';
-  $('rMapMode').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
-  $('rMap').style.display = R.ozon ? 'none' : ''; $('rOzHost').style.display = R.ozon ? 'block' : 'none';
-  $('rOzReload').style.display = R.ozon ? '' : 'none';
-  if (!R.ozon) { pvz.ozonMapRect(null); $('rOzQ').textContent = ''; setTimeout(() => R.map && R.map.invalidateSize(), 30); return; }
+  R.mapMode = m; R.ozon = m === 'ozon'; $('rMapSel').value = m; pvz.setCfg({ resMap: m }); $('rMapZoom').dataset.zoom = m === 'ozon' ? 'ozonmap' : m;
+  const live = m !== 'res';
+  $('rMap').style.display = live ? 'none' : ''; $('rOzHost').style.display = live ? 'block' : 'none';
+  $('rOzReload').style.display = live ? '' : 'none'; $('rBase').style.display = live ? 'none' : ''; $('rMapZoom').style.display = live ? '' : 'none';
+  if (m !== 'ozon') pvz.ozonMapRect(null);
+  if (m === 'ozon' || m === 'res') pvz.extRect(null, null); else pvz.extRect(m, null);
+  if (!live) { $('rOzQ').textContent = ''; pvz.extHideAll('map'); setTimeout(() => R.map && R.map.invalidateSize(), 30); return; }
   const x = R.sel != null ? R.rows[R.sel] : null;
-  if (!x) { pvz.ozonMapRect(null); $('rOzQ').textContent = 'Выберите объявление в таблице'; return; }
-  showOnOzon(x);
+  if (!x) { $('rOzQ').textContent = 'Выберите объявление в таблице'; return; }
+  showOnMap(x);
 }
-async function showOnOzon(x) {
-  const q = ozQuery(x);
+async function showOnMap(x) {
+  const m = R.mapMode; if (m === 'res') return;
+  const q = mapQuery(x, m);
   $('rOzQ').textContent = 'Ищу: ' + q;
   await new Promise(r => requestAnimationFrame(r));
-  const res = await pvz.ozonMapShow(ozRect(), q);
-  if (!R.ozon || R.rows[R.sel] !== x) return;
+  const res = m === 'ozon' ? await pvz.ozonMapShow(ozRect(), q) : await pvz.extShow(m, ozRect(), q, extPoint(x));
+  if (R.mapMode !== m || R.rows[R.sel] !== x) return;
+  zoomShow(m === 'ozon' ? 'ozonmap' : m);
   if (res && res.ok) $('rOzQ').textContent = q + (res.how === 'enter' ? ' (подсказка не появилась — нажат Enter)' : '');
   else { $('rOzQ').textContent = 'Не удалось ввести адрес (' + ((res && res.why) || 'ошибка') + ') — он скопирован, вставьте в поиск Ctrl+V'; navigator.clipboard && navigator.clipboard.writeText(q).catch(() => {}); }
 }
-$('rMapMode').querySelectorAll('button').forEach(b => (b.onclick = () => setMapMode(b.dataset.m)));
-$('rOzReload').onclick = async () => { await pvz.ozonMapReload(); const x = R.rows[R.sel]; if (x) setTimeout(() => showOnOzon(x), 1500); };
-new ResizeObserver(() => { if (R.ozon && document.body.dataset.mode === 'results' && R.sel != null) pvz.ozonMapRect(ozRect()); }).observe($('rOzHost'));
-new MutationObserver(() => { if (document.body.dataset.mode !== 'results' && R.ozon) setMapMode('res'); }).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
+const showOnOzon = x => showOnMap(x);
+$('rMapSel').onchange = () => setMapMode($('rMapSel').value);
+$('rOzReload').onclick = async () => { if (R.mapMode === 'ozon') await pvz.ozonMapReload(); else await pvz.extReload(R.mapMode); const x = R.rows[R.sel]; if (x) setTimeout(() => showOnMap(x), 1800); };
+$('rMapZoom').querySelectorAll('[data-z]').forEach(b => b.addEventListener('click', () => ($('rMapZoom').dataset.zoom = R.mapMode === 'ozon' ? 'ozonmap' : R.mapMode), true));
+// сайт объявления — средняя колонка
+function lstAuto() { return window.innerWidth >= 1700; }
+function applyLst() {
+  const on = R.showLst; $('rShowLst').checked = on;
+  document.querySelector('.r-body').classList.toggle('with-lst', on);
+  if (!on) pvz.extRect('listing', null);
+  setTimeout(() => { R.map && R.map.invalidateSize(); syncRects(); }, 60);
+  if (on && R.sel != null) showListing(R.rows[R.sel]);
+}
+async function showListing(x) {
+  if (!R.showLst || !x) return;
+  if (!x.url) { pvz.extRect('listing', null); $('rLstQ').textContent = 'у объявления нет ссылки'; return; }
+  $('rLstQ').textContent = x.address;
+  await new Promise(r => requestAnimationFrame(r));
+  await pvz.extShow('listing', rectOf('rLstHost'), x.url);
+  zoomShow('listing');
+}
+$('rShowLst').onchange = () => { R.showLst = $('rShowLst').checked; pvz.setCfg({ resShowLst: R.showLst }); applyLst(); };
+$('rLstExt').onclick = () => { const x = R.rows[R.sel]; if (x && x.url) pvz.openExternal(x.url); };
+function syncRects() {
+  if (document.body.dataset.mode !== 'results' || modalIsOpen()) return;
+  if (R.sel == null) return;
+  if (R.mapMode === 'ozon') pvz.ozonMapRect(ozRect()); else if (R.mapMode !== 'res') pvz.extRect(R.mapMode, ozRect());
+  if (R.showLst) pvz.extRect('listing', rectOf('rLstHost'));
+}
+const modalIsOpen = () => $('modal').classList.contains('on');
+new ResizeObserver(syncRects).observe($('rOzHost'));
+new ResizeObserver(syncRects).observe($('rLstHost'));
+// уход со страницы или окно по центру — спрятать встроенные сайты
+new MutationObserver(() => {
+  if (document.body.dataset.mode !== 'results') { pvz.ozonMapRect(null); pvz.extHideAll(); }
+  else setTimeout(syncRects, 50);
+}).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
+new MutationObserver(() => { if (modalIsOpen()) { pvz.ozonMapRect(null); pvz.extHideAll(); } else syncRects(); }).observe($('modal'), { attributes: true, attributeFilter: ['class'] });
+$('rBase').onchange = () => { R.base = $('rBase').value; pvz.setCfg({ resBase: R.base }); if (R.map) { R.map.removeLayer(R.tiles); R.tiles = baseTiles().addTo(R.map); } };
+function baseTiles() {
+  return R.base === 'osm' ? L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 })
+    : L.tileLayer('https://tile{s}.maps.2gis.com/tiles?x={x}&y={y}&z={z}&v=1', { attribution: '© 2ГИС', subdomains: '0123', maxZoom: 18 });
+}
 function selectRow(id, fly) {
   R.sel = id; if (R.rows[id]) markSeen(R.rows[id], document.querySelector(`#rRows tr[data-id="${id}"]`));
-  if (R.ozon) showOnOzon(R.rows[id]);
+  if (R.mapMode && R.mapMode !== 'res') showOnMap(R.rows[id]);
+  if (R.showLst) showListing(R.rows[id]);
   document.querySelectorAll('#rRows tr.sel').forEach(t => t.classList.remove('sel'));
   const tr = document.querySelector(`#rRows tr[data-id="${id}"]`);
   if (tr) { tr.classList.add('sel'); if (!fly) tr.scrollIntoView({ block: 'nearest' }); }

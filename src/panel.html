@@ -74,11 +74,31 @@
     <div class="r-table-wrap"><table class="r-table"><thead><tr>
       <th class="num-c">№</th><th data-k="platform">Площадка</th><th data-k="zone">Зона</th><th data-k="address">Адрес</th><th data-k="areaMin" class="n">Площадь</th><th data-k="price" class="n">Цена</th><th data-k="checked">Проверено</th><th></th><th class="mk" data-k="mark" title="Отмеченные — щёлкните, чтобы отсортировать">✓</th>
     </tr></thead><tbody id="rRows"></tbody></table><div class="hint" id="rMore"></div></div>
+    <div class="r-lst" id="rLstCol">
+      <div class="r-maptools"><b>Объявление</b><span class="hint grow" id="rLstQ"></span>
+        <div class="zoom" data-zoom="listing"><button class="ghost sm" data-z="-1">−</button><span class="zv">100 %</span><button class="ghost sm" data-z="1">+</button></div>
+        <button class="ghost sm" id="rLstExt" title="Открыть в браузере">↗</button></div>
+      <div class="r-map oz-host" id="rLstHost"><div class="oz-wait">Выберите объявление в таблице</div></div>
+    </div>
     <div class="r-mapcol">
-      <div class="r-maptools"><div class="o-seg" id="rMapMode"><button data-m="res" class="on">Карта результатов</button><button data-m="ozon">Карта Ozon</button></div>
-        <span class="hint grow" id="rOzQ"></span><button class="ghost sm" id="rOzReload" title="Перезагрузить карту Ozon" style="display:none">↻</button></div>
+      <div class="r-maptools">
+        <select id="rMapSel" class="map-sel">
+          <option value="res">Точки результатов</option>
+          <option value="yandex">Яндекс.Карты</option>
+          <option value="2gis">2ГИС</option>
+          <option value="osm">OpenStreetMap</option>
+          <option value="ozon">Карта Ozon</option>
+          <option value="wb">Карта WB</option>
+          <option value="ym">Карта Яндекс Маркета</option>
+        </select>
+        <select id="rBase" class="map-sel" title="Подложка карты с точками"><option value="2gis">подложка 2ГИС</option><option value="osm">подложка OSM</option></select>
+        <span class="hint grow" id="rOzQ"></span>
+        <div class="zoom" data-zoom="map" id="rMapZoom" style="display:none"><button class="ghost sm" data-z="-1">−</button><span class="zv">100 %</span><button class="ghost sm" data-z="1">+</button></div>
+        <button class="ghost sm" id="rOzReload" title="Перезагрузить карту" style="display:none">↻</button>
+        <label class="tgl" title="Показывать сайт объявления рядом с картой"><input type="checkbox" id="rShowLst"><span>Сайт объявления</span></label>
+      </div>
       <div class="r-map" id="rMap"></div>
-      <div class="r-map oz-host" id="rOzHost"><div class="oz-wait">Загружаю карту Ozon…</div></div>
+      <div class="r-map oz-host" id="rOzHost"><div class="oz-wait">Загружаю карту…</div></div>
     </div>
   </div>
 </section>

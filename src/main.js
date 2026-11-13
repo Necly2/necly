@@ -91,6 +91,10 @@ function createWindow() {
   wbView = new WebContentsView({ webPreferences: { partition: 'persist:wb', contextIsolation: true, backgroundThrottling: false } });
   win.contentView.addChildView(wbView); wbView.setVisible(false);
   wbView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  // тайлы OpenStreetMap для карты результатов: OSM требует Referer и понятный User-Agent
+  require('electron').session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['https://*.tile.openstreetmap.org/*', 'https://tile.openstreetmap.org/*'] }, (d, cb) => {
+    d.requestHeaders.Referer = 'https://github.com/Necly2/necly'; d.requestHeaders['User-Agent'] = 'PVZMaster/1.0 (+https://github.com/Necly2/necly)'; cb({ requestHeaders: d.requestHeaders });
+  });
   trace.cleanup(); trace.log('программа', `запуск, сборка ${updater.currentBuild()}, ${process.platform} ${process.arch}`);
   trace.watch('persist:avito', 'сайт'); trace.watch('persist:ozon', 'Ozon'); trace.watch('persist:wb', 'WB');
   layout();
@@ -181,7 +185,7 @@ ipcMain.handle('createFolders', async () => {
 const ZOOMS = [0.5, 0.6, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 const zoomKey = wc => { try { return new URL(wc.getURL()).hostname.replace(/^www\./, '').split('.').slice(-2).join('.'); } catch { return ''; } };
 function applyZoom(wc) { const k = zoomKey(wc), z = (loadCfg().zoom || {})[k]; if (k && z) wc.setZoomFactor(z); }
-function viewOf(which) { return which === 'ozonmap' ? (typeof mapView !== 'undefined' && mapView) : which === 'listing' ? (typeof listView !== 'undefined' && listView) : which === 'extmap' ? (typeof extView !== 'undefined' && extView) : view; }
+function viewOf(which) { return which === 'ozonmap' ? mapView : ext[which] ? ext[which].view : which === 'site' ? view : null; }
 ipcMain.handle('zoom', (_e, which, step) => {
   const v = viewOf(which); if (!v) return 1; const wc = v.webContents, k = zoomKey(wc);
   let z = wc.getZoomFactor();
@@ -473,10 +477,10 @@ async function mapReloadWait() {
   mapReady = mapView.webContents.loadURL(ozon.OZON_URL).catch(() => {});
   await mapReady; await new Promise(r => setTimeout(r, 3500));
 }
-async function mapSearchOnce(wc, q, seq) {
-  if (await wc.executeJavaScript(MAP_ERR, true).catch(() => false)) { trace.log('карта Ozon', 'на карте ошибка — перезагружаю'); await mapReloadWait(); }
+async function mapSearchOnce(wc, q, seq, reloadFn = mapReloadWait, seqRef = () => mapSeq) {
+  if (await wc.executeJavaScript(MAP_ERR, true).catch(() => false)) { trace.log('карта', 'на карте ошибка — перезагружаю'); await reloadFn(); }
   const f = await wc.executeJavaScript(FIND_INPUT, true);
-  if (seq !== mapSeq) return { ok: false, why: 'отменено' };
+  if (seq !== seqRef()) return { ok: false, why: 'отменено' };
   trace.log('карта Ozon', 'поле поиска: ' + JSON.stringify(f));
   if (!f.ok) return { ok: false, why: f.why, reload: true };
   clickAt(wc, f.x, f.y);
@@ -487,7 +491,7 @@ async function mapSearchOnce(wc, q, seq) {
   await new Promise(r => setTimeout(r, 250));
   await wc.insertText(q);
   const o = await wc.executeJavaScript(FIND_OPTION(q, mapLastText), true);
-  if (seq !== mapSeq) return { ok: false, why: 'отменено' };
+  if (seq !== seqRef()) return { ok: false, why: 'отменено' };
   trace.log('карта Ozon', 'подсказка: ' + JSON.stringify(o));
   if (o.ok) {
     clickAt(wc, o.x, o.y); mapLastText = o.text;
@@ -512,6 +516,52 @@ ipcMain.handle('ozonMapShow', async (_e, rect, q) => {
     return res;
   } catch (e) { trace.log('карта Ozon', 'ошибка: ' + e.message); return { ok: false, why: e.message }; }
 });
+// ---------- другие карты и сайт объявления (вкладка «Результаты») ----------
+// map-слот: одна из карт (Ozon — выше, остальные здесь); listing-слот: сайт выбранного объявления
+const EXT = {
+  yandex: { part: 'persist:maps', url: q => `https://yandex.ru/maps/213/moscow/?text=${encodeURIComponent(q)}&z=17` },
+  '2gis': { part: 'persist:maps', url: q => `https://2gis.ru/moscow/search/${encodeURIComponent(q)}` },
+  osm: { part: 'persist:maps', url: (q, p) => p && p.lat != null ? `https://www.openstreetmap.org/?mlat=${p.lat}&mlon=${p.lon}#map=18/${p.lat}/${p.lon}` : `https://www.openstreetmap.org/search?query=${encodeURIComponent(q)}` },
+  wb: { part: 'persist:wb', base: 'https://map.wb.ru/' },
+  ym: { part: 'persist:maps', base: 'https://logistics.market.yandex.ru/lp/market-pvz' },
+  listing: { part: 'persist:avito' }
+};
+const ext = {};
+function extView(key) {
+  if (ext[key]) return ext[key];
+  const v = new WebContentsView({ webPreferences: { partition: EXT[key].part, contextIsolation: true, backgroundThrottling: false } });
+  win.contentView.addChildView(v); v.setVisible(false);
+  v.webContents.setWindowOpenHandler(({ url }) => { v.webContents.loadURL(url).catch(() => {}); return { action: 'deny' }; });
+  v.webContents.on('did-navigate', () => applyZoom(v.webContents));
+  const e = ext[key] = { view: v, seq: 0, ready: null };
+  if (EXT[key].base) e.ready = v.webContents.loadURL(EXT[key].base).catch(() => {});
+  return e;
+}
+const setB = (v, rect) => { if (rect && rect.width > 50) { v.setBounds({ x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) }); v.setVisible(true); } else v.setVisible(false); };
+ipcMain.handle('extRect', (_e, key, rect) => {
+  // показать key в его слоте, остальные карты слота спрятать
+  const slot = key === 'listing' ? ['listing'] : Object.keys(EXT).filter(k => k !== 'listing');
+  for (const k of slot) if (ext[k] && k !== key) ext[k].view.setVisible(false);
+  if (key && ext[key]) setB(ext[key].view, rect);
+});
+ipcMain.handle('extHideAll', (_e, slot) => { for (const [k, e] of Object.entries(ext)) if (!slot || (slot === 'listing') === (k === 'listing')) e.view.setVisible(false); });
+ipcMain.handle('extShow', async (_e, key, rect, q, pt) => {
+  const e = extView(key), wc = e.view.webContents, seq = ++e.seq;
+  setB(e.view, rect);
+  trace.log('карта ' + key, 'показать: ' + (q || ''));
+  try {
+    if (key === 'listing') { if (q && wc.getURL() !== q) await wc.loadURL(q).catch(() => {}); return { ok: true }; }
+    if (EXT[key].url) { await wc.loadURL(EXT[key].url(q, pt)).catch(() => {}); applyZoom(wc); return { ok: true }; }
+    await e.ready; applyZoom(wc);
+    await new Promise(r => setTimeout(r, 1500));
+    const reload = async () => { e.ready = wc.loadURL(EXT[key].base).catch(() => {}); await e.ready; await new Promise(r => setTimeout(r, 3500)); };
+    let res = await mapSearchOnce(wc, q, seq, reload, () => e.seq);
+    if (!res.ok && res.reload && seq === e.seq) { await reload(); res = await mapSearchOnce(wc, q, seq, reload, () => e.seq); }
+    return res;
+  } catch (err) { return { ok: false, why: err.message }; }
+});
+ipcMain.handle('extReload', (_e, key) => { if (ext[key]) ext[key].view.webContents.reload(); });
+ipcMain.handle('extExternal', (_e, key) => { if (ext[key]) shell.openExternal(ext[key].view.webContents.getURL()); });
 ipcMain.handle('ozonMapReload', () => { if (mapView) { mapReady = mapView.webContents.loadURL(ozon.OZON_URL).catch(() => {}); } });
 ipcMain.handle('ozonNow', () => { ozonSkip = true; trace.log('проверка', 'нажато «Попробовать сейчас»'); return true; });
 ipcMain.handle('exportRows', async (_e, rows) => {
@@ -612,6 +662,11 @@ async function selfTest(dir) {
     await J(`openPage('results'); 1`); await W8(1500);
     await J(`(()=>{const z=['голубой','синий','зелёный'];const rows=Array.from({length:14},(_,i)=>({platform:'Ozon',zone:z[i%3],address:'Москва, ул. Тестовая, '+(i%10+1),metro:'м. Пример',note:'',areaMin:30+(i%10),price:50000+i*5000,checked:Date.now()-Math.floor(i/6)*864e5-(i%2)*3600e3,url:'https://x/'+i,lat:55.7+i*0.01,lon:37.5+i*0.01,file:'OZON export_excel ЦИАН 13 '+(1+i%2)+'.xlsx'}));rows.push({platform:'Яндекс',zone:'синий',address:'ул. Тестовая, 2',metro:'',note:'',areaMin:31,price:55000,checked:Date.now(),url:'https://x/y',lat:55.71,lon:37.51,file:'ЯНДЕКС export_excel ЦИАН 13 1.xlsx'});R.marks={};R.seen={'https://x/3':1};R.watch={};prepRows(rows);R.day=dayKey(Date.now());renderDays();renderResults(true);})(); 1`);
     await W8(1500); await shot('09-results-fake');
+    if (process.env.PVZ_EXT) {
+      await J(`selectRow(1,true); setMapMode('yandex'); R.showLst=true; applyLst(); 1`); await W8(14000);
+      if (ext.yandex) fs.writeFileSync(path.join(dir, '12-yandex.png'), (await ext.yandex.view.webContents.capturePage()).toPNG());
+      console.log('LST', await J(`JSON.stringify([rectOf('rLstHost'), R.showLst, R.sel, document.querySelector('.r-body').className])`)); console.log('EXT', JSON.stringify(Object.fromEntries(Object.entries(ext).map(([k, e]) => [k, { url: e.view.webContents.getURL(), vis: e.view.getVisible(), b: e.view.getBounds() }]))));
+    }
     if (process.env.PVZ_OZMAP) {
       await J(`selectRow(3,true); setMapMode('ozon'); 1`); await W8(30000); await shot('10-ozon-map');
       if (mapView) { fs.writeFileSync(path.join(dir, '11-ozon-view.png'), (await mapView.webContents.capturePage()).toPNG()); if (process.env.PVZ_OZDUMP) await ozDump(); }
