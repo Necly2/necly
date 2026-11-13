@@ -672,3 +672,12 @@ body.r-full .fs-exit{display:block}
 .toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);opacity:0;pointer-events:none;z-index:200;background:var(--strong);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:13px;max-width:70vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:.2s}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 #rYmMap{flex:1;min-height:0}
+/* окна по центру — всегда поверх карты; без размытия фона (оно тормозило на больших экранах с картой) */
+.modal{z-index:5000;backdrop-filter:none;background:rgba(5,7,10,.55)}
+html[data-theme="light"] .modal{background:rgba(20,26,36,.35)}
+.modal.on{animation:fade .14s ease-out}
+.m-box{animation:popFast .18s ease-out;will-change:transform,opacity}
+@keyframes popFast{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:none}}
+.leaflet-container{isolation:isolate;z-index:0}
+.ticon{backdrop-filter:none}
+.toast{z-index:6000}
