@@ -620,3 +620,15 @@ td.flats{white-space:nowrap}
 .r-table td.addr{overflow-wrap:anywhere}
 .r-table th:nth-child(2){width:64px}.r-table th:nth-child(3){width:96px}.r-table th:nth-child(6){width:58px}.r-table th:nth-child(9){width:116px}
 .r-table td.acts{overflow:visible}
+
+/* настройки: кнопки одинаковые и на одном уровне */
+.set-wrap .set-row{align-items:center}
+.set-wrap .set-row > span:last-child,.set-wrap .set-row > button,.set-wrap .set-row > select{flex:none}
+.set-wrap .set-row button.ghost.sm,.set-wrap .set-row select{height:34px;min-width:180px;padding:0 14px !important;display:inline-flex;align-items:center;justify-content:center;font-size:12.5px;border-radius:9px}
+.set-wrap .set-row.btns{align-items:flex-start}
+.set-wrap .set-row.btns > span:last-child{display:flex;flex-direction:column;gap:6px}
+.set-wrap .fold-row > span:last-child{flex-direction:row}
+.set-wrap .fold-row button.ghost.sm{min-width:0}
+.map-sel{opacity:.75}
+.map-sel.active{opacity:1;border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--field))}
+.r-maptools .tgl span{white-space:nowrap}

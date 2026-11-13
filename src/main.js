@@ -156,6 +156,9 @@ function saveRows(rows, cfg, site) {
   return { dir, saved };
 }
 
+// Новая Москва (НАО, ТАО): округа, поселения и города по адресу объявления
+const NEW_MSK = /(НАО|ТАО|Новомосковск|Троицк(ий|\b)|Щербинк|Коммунарк|Сосенск|Внуковск|Московский(?! пр)|поселени|пос\.|п\. ?[А-ЯЁ]|Десёновск|Десеновск|Воскресенск|Филимонковск|Марушкинск|Кокошкин|Рязановск|Мосрентген|Краснопахорск|Вороновск|Киевский(?! (пр|ш|вокз))|Новофёдоровск|Новофедоровск|Первомайское|Роговск|Михайлово-Ярцевск|Кл[её]новск|Щаповск|Румянцево|Саларьево|Ватутинки|Мамыри|Сапроново|Летово|Остафьево|Газопровод)/i;
+const isNewMoscow = a => NEW_MSK.test(String(a || ''));
 // журнал уже выгруженных объявлений Циана (чтобы в следующий раз брать только новые)
 // журнал уже выгруженных объявлений (Циан, Авито): {site: {id: время}} в папке данных программы.
 // Старый журнал Циана (cian_seen.json в папке АДРЕСА ЦИАН) подхватывается один раз.
@@ -295,6 +298,13 @@ ipcMain.handle('start', async (_e, c) => {
     const res = await view.webContents.executeJavaScript(code, true);
     clearInterval(timer);
     let out = { dir: '', saved: [] };
+    // «Без новой Москвы»: убираем объявления из Новомосковского и Троицкого округов (по адресу)
+    if (cfg.noNewMoscow && res.rows.length) {
+      const before = res.rows.length, keep = [], keepIds = [];
+      res.rows.forEach((r, i) => { if (!isNewMoscow(r[4] + ' ' + r[2])) { keep.push(r); if (res.ids) keepIds.push(res.ids[i]); } });
+      res.rows = keep; if (res.ids) res.ids = keepIds;
+      if (before > keep.length) res.extra = (res.extra ? res.extra + ' ' : '') + `Без новой Москвы: убрано ${before - keep.length}.`;
+    }
     if (res.rows.length) {
       out = saveRows(res.rows, cfg, site);
       if (res.ids) addSeen(cfg, res.ids, site);

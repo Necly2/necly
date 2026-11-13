@@ -45,7 +45,8 @@ function readExport(file) {
   for (let r = range.s.r + 1; r <= range.e.r; r++) {
     const d = {};
     head.forEach((h, i) => { if (!h) return; const x = cell(r, range.s.c + i); let v = x ? x.v : null; if (v instanceof Date) v = fmtDate(v); d[h] = v; });
-    if (!d['Адрес'] || !pc(d['Координаты'])) continue;            // строки-описания и пустые
+    if (!d['Адрес']) continue;                                     // строки-описания и пустые
+    if (!pc(d['Координаты'])) { rows.noCoords = (rows.noCoords || 0) + 1; continue; }   // без координат — проверить нельзя
     const li = head.indexOf('Ссылка на первоисточник');
     const lc = li >= 0 ? cell(r, range.s.c + li) : null;
     d._url = (lc && lc.l && lc.l.Target) || (lc && /^https?:/.test(String(lc.v)) ? String(lc.v) : null);
@@ -128,7 +129,8 @@ async function run(files, ctx) {
   for (const f of files) {
     try { data.push({ f, rows: readExport(f.path) }); } catch (e) { errors.push(e.message); }
   }
-  const addrOf = {};
+  const addrOf = {}; let noCoords = 0, rowsTotal = 0;
+  for (const { rows } of data) { noCoords += rows.noCoords || 0; rowsTotal += rows.length + (rows.noCoords || 0); }
   for (const { rows } of data) for (const d of rows) if (!addrOf[d._key]) addrOf[d._key] = String(d['Адрес']).replace(/[\t\n]/g, ' ');
 
   // 2. кэш результатов по координатам
@@ -141,7 +143,7 @@ async function run(files, ctx) {
   let blockedGaveUp = false, stoppedByUser = false;
 
   if (todo.length) {
-    status(`Открываю карту Ozon… (адресов к проверке: ${todo.length}${total > todo.length ? `, из кэша: ${total - todo.length}` : ''})`, { done: 0, total: todo.length });
+    status(`Открываю карту Ozon… Объявлений ${rowsTotal}: разных адресов ${total}` + (total > todo.length ? `, уже проверены за последние дни ${total - todo.length}` : '') + (noCoords ? `, без координат ${noCoords}` : '') + `. Проверяю ${todo.length}.`, { done: 0, total: todo.length });
     await wc.loadURL(OZON_URL).catch(() => {});
     await sleep(4000);
     const lg = ctx.log || (() => {});
@@ -201,7 +203,7 @@ async function run(files, ctx) {
         if (!p) continue;
         const done = p.done, el = (Date.now() - t0) / 1000;
         const eta = done > 3 ? Math.round((todo.length - done) * el / done / 60) : null;
-        status(`Проверено ${done} из ${todo.length}` + (eta !== null ? ` · осталось ~${eta} мин` : '') + (p.failed ? ` · без ответа ${p.failed}` : ''), { done, total: todo.length });
+        status(`Проверено ${done} из ${todo.length}` + (total > todo.length ? ` (ещё ${total - todo.length} — из памяти)` : '') + (eta !== null ? ` · осталось ~${eta} мин` : '') + (p.failed ? ` · без ответа ${p.failed}` : ''), { done, total: todo.length });
         if (Date.now() - lastSave > 30000) { await merge(); lastSave = Date.now(); }
         if (p.stopped && p.blocked) {
           lg(`страница остановила очередь: подряд без ответа (вероятно, 404) — проверено ${done} из ${todo.length}, без ответа ${p.failed || 0}`);
@@ -252,7 +254,7 @@ async function run(files, ctx) {
   writeJson(journalPath(outDir), j);
 
   const reason = stoppedByUser ? 'остановлено вручную' : blockedGaveUp ? 'Ozon ограничил запросы — часть адресов не проверена, нажмите «Продолжить проверку»' : 'проверка завершена';
-  return { ok: true, reason, saved, errors, stats, manual, odd, files: data.length, addresses: total, greenMin: cfg.ozonGreenMin || GREEN_MIN_AREA_DEF };
+  return { ok: true, reason, saved, errors, stats, manual, odd, files: data.length, addresses: total, rowsTotal, noCoords, fromCache: total - todo.length, greenMin: cfg.ozonGreenMin || GREEN_MIN_AREA_DEF };
 }
 
 module.exports = { scan, run, readExport, OZON_URL };

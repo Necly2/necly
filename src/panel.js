@@ -146,7 +146,7 @@ pvz.onOzonStatus(s => {
 });
 function ozonText(r) {
   const z = r.stats;
-  let t = `Ozon — ${r.reason}. Файлов: ${r.files}, адресов: ${r.addresses}.\n` +
+  let t = `Ozon — ${r.reason}. Файлов: ${r.files}` + (r.rowsTotal != null ? `, объявлений: ${r.rowsTotal}` : '') + `, разных адресов: ${r.addresses}` + (r.fromCache ? ` (из них ${r.fromCache} уже проверялись за последние дни — взяты из памяти)` : '') + (r.noCoords ? `; без координат, не проверялись: ${r.noCoords}` : '') + `.\n` +
     `Подходящих: зелёных ≥ ${r.greenMin || 60} м² ${z['зелёный']}, синих ${z['синий']}, голубых ${z['голубой']}, < 3 млн ${z['гарантия < 3 млн']}, ошибка запроса ${z['ошибка запроса']}.\n` +
     `Не подошли: вне зоны/недоступно ${z.out_zone}, зелёных < ${r.greenMin || 60} м² ${z.green_small}` + (z.unchecked ? `; не проверено ${z.unchecked}` : '') + '.';
   if (r.odd && r.odd.length) t += `\nСтранные цены (${r.odd.length}): ` + r.odd.slice(0, 5).join('; ');
@@ -399,7 +399,7 @@ async function loadResults() {
   $('rCount').textContent = 'загрузка…';
   const r = await pvz.results();
   const cfg = await pvz.getCfg();
-  if (R.showLst === undefined) { R.showLst = cfg.resShowLst != null ? (cfg.resShowLst && lstAuto()) || (cfg.resShowLst && window.innerWidth >= 1400) : lstAuto(); R.base = cfg.resBase || '2gis'; $('rBase').value = R.base; R.mapMode = cfg.resMap || 'res'; $('rMapSel').value = R.mapMode; }
+  if (R.showLst === undefined) { R.showLst = cfg.resShowLst != null ? (cfg.resShowLst && lstAuto()) || (cfg.resShowLst && window.innerWidth >= 1400) : lstAuto(); R.base = cfg.resBase || '2gis'; $('rBase').value = R.base; R.mapMode = cfg.resMap || 'res'; }
   R.testSup = !!cfg.testSupport;
   R.marks = cfg.resMarks || {}; R.seen = cfg.resSeen || {}; R.watch = cfg.resWatch || {}; if (cfg.resDedup === false) R.dedup = false;
   prepRows(r.rows);
@@ -414,7 +414,7 @@ async function loadResults() {
   }
   setTimeout(() => R.map.invalidateSize(), 50);
   renderResults(true);
-  applyLst(); if (R.mapMode !== 'res') setMapMode(R.mapMode);
+  applyLst(); setMapMode(R.mapMode);
   if (r.errors.length) pvz.logError('результаты', r.errors.join('; '));
 }
 function filteredResults() {
@@ -475,7 +475,7 @@ const MAP_NAMES = { yandex: 'Яндекс.Карты', '2gis': '2ГИС', osm: '
 const extPoint = x => x && x.lat != null ? { lat: x.lat, lon: x.lon } : null;
 function mapQuery(x, mode) { return mode === 'ozon' ? ozQuery(x) : ozQuery(x); }
 function setMapMode(m) {
-  R.mapMode = m; R.ozon = m === 'ozon'; $('rMapSel').value = m; pvz.setCfg({ resMap: m }); $('rMapZoom').dataset.zoom = m === 'ozon' ? 'ozonmap' : m;
+  R.mapMode = m; R.ozon = m === 'ozon'; const agg = ['ozon', 'wb', 'ym'].includes(m); if (agg) { $('rAggSel').value = m; R.lastAgg = m; } else { $('rMapSel').value = m; R.lastMap = m; } $('rAggSel').classList.toggle('active', agg); $('rMapSel').classList.toggle('active', !agg); pvz.setCfg({ resMap: m }); $('rMapZoom').dataset.zoom = m === 'ozon' ? 'ozonmap' : m;
   const live = m !== 'res';
   $('rMap').style.display = live ? 'none' : ''; $('rOzHost').style.display = live ? 'block' : 'none';
   $('rOzReload').style.display = live ? '' : 'none'; $('rBase').style.display = live ? 'none' : ''; $('rMapZoom').style.display = live ? '' : 'none';
@@ -499,6 +499,10 @@ async function showOnMap(x) {
 }
 const showOnOzon = x => showOnMap(x);
 $('rMapSel').onchange = () => setMapMode($('rMapSel').value);
+$('rAggSel').onchange = () => setMapMode($('rAggSel').value);
+// щелчок по неактивному списку — сразу переключиться на выбранную в нём карту
+$('rMapSel').addEventListener('mousedown', () => { if (!$('rMapSel').classList.contains('active')) setMapMode($('rMapSel').value); });
+$('rAggSel').addEventListener('mousedown', () => { if (!$('rAggSel').classList.contains('active')) setMapMode($('rAggSel').value); });
 $('rOzReload').onclick = async () => { if (R.mapMode === 'ozon') await pvz.ozonMapReload(); else await pvz.extReload(R.mapMode); const x = R.rows[R.sel]; if (x) setTimeout(() => showOnMap(x), 1800); };
 $('rMapZoom').querySelectorAll('[data-z]').forEach(b => b.addEventListener('click', () => ($('rMapZoom').dataset.zoom = R.mapMode === 'ozon' ? 'ozonmap' : R.mapMode), true));
 // сайт объявления — средняя колонка

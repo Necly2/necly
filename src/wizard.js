@@ -109,7 +109,7 @@ function paramChips(p) {
   const t = TYPES.filter(x => p.types.includes(x.k)).map(x => x.name).join(', ') || 'все виды';
   const a = (p.areaFrom !== '' || p.areaTo !== '') ? `${p.areaFrom !== '' ? fmtNum(p.areaFrom) : '…'}–${p.areaTo !== '' ? fmtNum(p.areaTo) : '…'} м²` : 'любая площадь';
   const pr = (p.priceFrom !== '' || p.priceTo !== '') ? `${p.priceFrom !== '' ? 'от ' + fmtNum(p.priceFrom) + ' ' : ''}${p.priceTo !== '' ? 'до ' + fmtNum(p.priceTo) : ''} ₽/мес` : 'любая цена';
-  return [p.region === 'msk_mo' ? 'Москва и МО' : 'Москва', t, a, pr, p.floor1 ? '1-й этаж' : null, p.floorsFrom !== '' ? `дом от ${p.floorsFrom} эт.` : null, p.days ? `не старше ${p.days} дн.` : 'любая дата'].filter(Boolean);
+  return [p.region === 'msk_mo' ? 'Москва и МО' : p.region === 'msk_nonew' ? 'Москва без новой Москвы' : 'Москва', t, a, pr, p.floor1 ? '1-й этаж' : null, p.floorsFrom !== '' ? `дом от ${p.floorsFrom} эт.` : null, p.days ? `не старше ${p.days} дн.` : 'любая дата'].filter(Boolean);
 }
 function renderBar() {
   const ps = paramsStep(), s = cur();
@@ -215,7 +215,7 @@ function applyScenario(name) {
 // ---------------- параметры поиска (общие для Циана и Авито) ----------------
 function paramsForm() {
   const p = W.params;
-  return `<div class="o-seg" id="fRegion"><button data-v="msk"${p.region === 'msk' ? ' class="on"' : ''}>Москва</button><button data-v="msk_mo"${p.region === 'msk_mo' ? ' class="on"' : ''}>Москва и МО</button></div>
+  return `<div class="o-seg" id="fRegion"><button data-v="msk"${p.region === 'msk' ? ' class="on"' : ''}>Москва</button><button data-v="msk_nonew"${p.region === 'msk_nonew' ? ' class="on"' : ''}>Москва без новой Москвы</button><button data-v="msk_mo"${p.region === 'msk_mo' ? ' class="on"' : ''}>Москва и МО</button></div>
     <h3>Вид помещения</h3><div class="o-types" id="fTypes">${TYPES.map(t => `<label><input type="checkbox" value="${t.k}"${p.types.includes(t.k) ? ' checked' : ''}><span>${t.name}</span></label>`).join('')}</div>
     <h3>Параметры</h3><div class="fgrid">
       <label class="field">Площадь от, м²<input id="fAreaFrom" type="text" class="num" inputmode="numeric" autocomplete="off"></label>
@@ -240,7 +240,7 @@ function bindParams(onChange) {
 // ---------------- шаг: Циан ----------------
 function cianList() {
   const p = W.params, items = [];
-  items.push(['auto', 'Регион: ' + (p.region === 'msk_mo' ? 'Москва и Московская область — два поиска подряд' : 'Москва')]);
+  items.push(['auto', 'Регион: ' + (p.region === 'msk_mo' ? 'Москва и Московская область — два поиска подряд' : p.region === 'msk_nonew' ? 'Москва; объявления новой Москвы (НАО, ТАО) программа уберёт сама' : 'Москва')]);
   items.push(['auto', 'Вид помещения: ' + (TYPES.filter(x => p.types.includes(x.k)).map(x => x.name).join(', ') || 'все')]);
   items.push(['auto', 'Площадь, цена, «только 1-й этаж», этажность дома, сортировка по дате — подставляются в поиск']);
   items.push(['auto', p.days ? `Объявления старше ${p.days} дн. программа отбросит сама` : 'Все объявления, без ограничения по дате']);
@@ -472,7 +472,7 @@ const rerender = () => { if (cur() === 'center') renderCenter(); renderRibbon();
 
 async function baseCfg(extra) {
   const c = await pvz.getCfg();
-  return Object.assign({ pages: c.pages || 40, delay: Math.max(3, c.delay || 4), part: c.part || 300, days: W.params.days === '' ? 0 : W.params.days }, extra);
+  return Object.assign({ pages: c.pages || 40, delay: Math.max(3, c.delay || 4), part: c.part || 300, days: W.params.days === '' ? 0 : W.params.days, noNewMoscow: W.params.region === 'msk_nonew' && !(extra && extra.bw) }, extra);
 }
 const isBad = r => !r.ok || /ошибк|робот|войти|не удалось|не найден/i.test(r.reason || '');
 const isRobot = r => /робот|captcha|Доступ ограничен|проблема с IP|ответил 403|ответил 429/i.test((r.error || '') + ' ' + (r.reason || ''));

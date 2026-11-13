@@ -88,9 +88,11 @@
           <option value="yandex">Яндекс.Карты</option>
           <option value="2gis">2ГИС</option>
           <option value="osm">OpenStreetMap</option>
-          <option value="ozon">Карта Ozon</option>
-          <option value="wb">Карта WB</option>
-          <option value="ym">Карта Яндекс Маркета</option>
+        </select>
+        <select id="rAggSel" class="map-sel" title="Карты площадок">
+          <option value="ozon">Ozon</option>
+          <option value="wb">Wildberries</option>
+          <option value="ym">Яндекс Маркет</option>
         </select>
         <select id="rBase" class="map-sel" title="Подложка карты с точками"><option value="2gis">подложка 2ГИС</option><option value="osm">подложка OSM</option></select>
         <span class="hint grow" id="rOzQ"></span>
@@ -170,7 +172,7 @@
     </div>
     <div class="box"><div class="box-h">О программе</div>
       <div class="set-row"><span>Сборка <b class="ver">?</b></span><button class="ghost sm upd">Проверить обновления</button></div>
-      <div class="set-row"><span>Журналы и ошибки</span><span><button class="ghost sm" data-page="history">История и ошибки</button> <button class="ghost sm" id="setLogs">Папка журналов</button> <button class="ghost sm" id="setZip">📦 Отчёт для разбора</button></span></div>
+      <div class="set-row btns"><span>Журналы и ошибки</span><span><button class="ghost sm" data-page="history">История и ошибки</button><button class="ghost sm" id="setLogs">Папка журналов</button><button class="ghost sm" id="setZip">📦 Отчёт для разбора</button></span></div>
     </div>
   </div>
 </section>
