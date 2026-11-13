@@ -447,7 +447,7 @@ function renderResults(fit) {
   $('rRows').innerHTML = shown.map((x, i) => `<tr data-id="${x.id}" class="${x.mark ? 'marked' : ''}${R.seen[markKey(x)] ? '' : ' unseen'}${x.also && x.also.length ? ' multi' : ''}">
     <td class="num-c">${i + 1}</td><td>${esc(x.platform)}</td>
     <td>${zoneCell(x)}</td>
-    <td class="addr">${R.seen[markKey(x)] ? '' : '<b class="new-dot" title="Ещё не просмотрено">●</b>'}<span class="addr-t" title="Щёлкните, чтобы скопировать адрес">${esc(x.address)}</span>${x.also && x.also.length ? x.also.map(y => `<span class="also" title="Это помещение есть и в проверке ${esc(y.platform)}"><i style="background:${zoneColor(y)}"></i>${esc(y.platform)}: ${esc(y.zone)}</span>`).join('') : ''}${x.archived ? '<span class="also">из архива</span>' : ''}${x.metro ? `<small>${esc(x.metro)}</small>` : ''}${x.note ? `<small>${esc(x.note)}</small>` : ''}</td>
+    <td class="addr">${R.seen[markKey(x)] ? '' : '<b class="new-dot" title="Ещё не просмотрено">●</b>'}<span class="addr-t">${esc(x.address)}</span><button class="copy-a" title="Скопировать адрес"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>${x.also && x.also.length ? x.also.map(y => `<span class="also" title="Это помещение есть и в проверке ${esc(y.platform)}"><i style="background:${zoneColor(y)}"></i>${esc(y.platform)}: ${esc(y.zone)}</span>`).join('') : ''}${x.archived ? '<span class="also">из архива</span>' : ''}${x.metro ? `<small>${esc(x.metro)}</small>` : ''}${x.note ? `<small>${esc(x.note)}</small>` : ''}</td>
     <td class="n">${area(x)}</td><td class="n flats" data-flats="${x.id}">${flatsCell(x)}</td><td class="n">${x.price != null ? fmtNum(x.price) + ' ₽' : ''}${x.money ? `<small class="pay">выплата ${fmtNum(x.money)} ₽</small>` : ''}</td>
     <td>${fmtTime(x.checked)}</td><td class="acts">${x.url ? '<a class="open" href="#">Открыть ↗</a>' : ''}<button class="star${R.watch[markKey(x)] ? ' on' : ''}" title="${R.watch[markKey(x)] ? 'Убрать из отслеживаемых' : 'Отслеживать'}">${R.watch[markKey(x)] ? '★' : '☆'}</button></td><td class="mk"><label class="mbox"><input type="checkbox"${x.mark ? ' checked' : ''}><span></span></label></td></tr>`).join('');
   $('rMore').textContent = list.length > shown.length ? `Показаны первые ${fmtNum(shown.length)} — уточните фильтры.` : (list.length ? '' : 'Ничего не найдено — измените фильтры или день.');
@@ -524,6 +524,11 @@ function layoutMaps() {
   $('rOzReload').style.display = live ? '' : 'none'; $('rBase').style.display = s.gen === 'res' ? '' : 'none'; $('rMapZoom').style.display = live ? '' : 'none';
   $('rMapZoom').dataset.zoom = s.agg === 'ozon' ? 'ozonmap' : (s.agg && s.agg !== 'ym' ? s.agg : s.gen);
   if (s.agg === 'ym' && !GEN_EXT.includes(s.gen)) { $('rMapZoom').style.display = 'none'; $('rOzReload').style.display = 'none'; }
+  // «Разделить»: у верхней карты (площадка) и нижней (Яндекс / 2ГИС / OSM) — свой масштаб
+  const both = R.split && s.agg && s.agg !== 'ym' && GEN_EXT.includes(s.gen);
+  $('rMapZoom2').style.display = both ? '' : 'none'; $('rMapZoom2').dataset.zoom = s.gen;
+  if (both) { $('rMapZoom').dataset.zoom = s.agg === 'ozon' ? 'ozonmap' : s.agg; $('rMapZoom').title = 'Масштаб верхней карты'; }
+  else if (R.split && s.agg === 'ym' && GEN_EXT.includes(s.gen)) { $('rMapZoom').style.display = ''; $('rMapZoom').dataset.zoom = s.gen; }
   if (!live) $('rOzQ').textContent = '';
   setTimeout(() => { R.map && R.map.invalidateSize(); syncRects(); }, 40);
 }
@@ -539,7 +544,7 @@ async function showOnMap(x) {
   if (GEN_EXT.includes(s.gen)) jobs.push(pvz.extShow(s.gen, rectOf('rGenHost'), q, extPoint(x)));
   const res = (await Promise.all(jobs))[0];
   if (R.rows[R.sel] !== x) return;
-  zoomShow($('rMapZoom').dataset.zoom); syncRects();
+  zoomShow($('rMapZoom').dataset.zoom); if ($('rMapZoom2').style.display !== 'none') zoomShow($('rMapZoom2').dataset.zoom); syncRects();
   if (!res || res.ok) $('rOzQ').textContent = q + (res && res.how === 'enter' ? ' (подсказка не появилась — нажат Enter)' : '');
   else { $('rOzQ').textContent = 'Не удалось ввести адрес (' + (res.why || 'ошибка') + ') — он скопирован, вставьте в поиск Ctrl+V'; navigator.clipboard && navigator.clipboard.writeText(q).catch(() => {}); }
 }
@@ -550,7 +555,6 @@ $('rMapSel').addEventListener('mousedown', () => { if (!$('rMapSel').classList.c
 $('rAggSel').addEventListener('mousedown', () => { if (!$('rAggSel').classList.contains('active')) setMapMode($('rAggSel').value); });
 $('rSplit').onclick = () => { R.split = !R.split; pvz.setCfg({ resSplit: R.split }); layoutMaps(); const x = R.rows[R.sel]; if (x) showOnMap(x); };
 $('rOzReload').onclick = async () => { const s = shown(); if (s.agg === 'ozon') await pvz.ozonMapReload(); else if (s.agg) await pvz.extReload(s.agg); if (GEN_EXT.includes(s.gen)) await pvz.extReload(s.gen); const x = R.rows[R.sel]; if (x) setTimeout(() => showOnMap(x), 1800); };
-$('rMapZoom').querySelectorAll('[data-z]').forEach(b => b.addEventListener('click', () => ($('rMapZoom').dataset.zoom = shown().agg === 'ozon' ? 'ozonmap' : shown().agg || shown().gen), true));
 // сайт объявления — средняя колонка
 function lstAuto() { return window.innerWidth >= 1700; }
 function applyLst() {
@@ -683,7 +687,12 @@ $('rRows').addEventListener('click', e => {
     if (R.watch[k]) delete R.watch[k]; else { const row = Object.assign({}, x); delete row.also; delete row.id; R.watch[k] = { added: Date.now(), row }; }
     pvz.setCfg({ resWatch: R.watch }); renderDays(); renderResults(false); return;
   }
-  if (e.target.closest('.addr-t')) { navigator.clipboard.writeText(x.address).then(() => toast('Адрес скопирован: ' + x.address)).catch(() => {}); }
+  const cb = e.target.closest('.copy-a');
+  if (cb) {
+    navigator.clipboard.writeText(x.address).catch(() => {});
+    const t = document.createElement('span'); t.className = 'copied'; t.textContent = 'Скопировано в буфер обмена'; cb.appendChild(t); setTimeout(() => t.remove(), 1500);
+    return;
+  }
   markSeen(x, tr);
   if (e.target.closest('a.open')) { e.preventDefault(); pvz.openExternal(x.url); return; }
   selectRow(x.id, true);

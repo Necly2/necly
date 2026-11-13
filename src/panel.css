@@ -681,3 +681,14 @@ html[data-theme="light"] .modal{background:rgba(20,26,36,.35)}
 .leaflet-container{isolation:isolate;z-index:0}
 .ticon{backdrop-filter:none}
 .toast{z-index:6000}
+
+.addr-t{cursor:inherit}.addr-t:hover{text-decoration:none}
+.copy-a{position:relative;border:none;background:none;padding:0 2px;margin-left:5px;color:var(--muted);cursor:pointer;vertical-align:-2px}
+.copy-a svg{width:14px;height:14px}
+.copy-a:hover{color:var(--accent)}
+.copied{position:absolute;left:50%;top:100%;transform:translateX(-50%);margin-top:4px;white-space:nowrap;font-size:11px;font-weight:600;background:var(--strong);color:var(--bg);padding:3px 8px;border-radius:6px;z-index:10;animation:copied 1.5s ease forwards;pointer-events:none}
+@keyframes copied{0%{opacity:0;transform:translate(-50%,-3px)}12%{opacity:1;transform:translate(-50%,0)}75%{opacity:1}100%{opacity:0}}
+.r-table td.addr{overflow:visible}
+.icon-sq{padding:5px 8px !important;display:inline-flex;align-items:center}
+.icon-sq svg{width:16px;height:16px}
+.zoom .zl{font-size:11px;color:var(--muted);margin-right:2px}

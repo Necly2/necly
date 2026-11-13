@@ -110,6 +110,9 @@ const procs = {};
 const SITE_NAMES = { cian: 'Циан', avito: 'Авито', winner: 'Winner' };
 function pctOf(text) { const m = String(text || '').match(/(\d[\d\s]*)\s*из\s*(?:максимум\s*)?(\d[\d\s]*)/); if (!m) return null; const a = +m[1].replace(/\s/g, ''), b = +m[2].replace(/\s/g, ''); return b ? Math.min(100, Math.round(100 * a / b)) : null; }
 function procUpdate() { try { scheduler.setProgress(Object.values(procs)); } catch {} }
+// прямоугольники приходят из окна программы в CSS-пикселях; если окно увеличено ⌘+ / ⌘− — пересчитать
+const Z = () => (win && !win.isDestroyed() ? win.webContents.getZoomFactor() : 1) || 1;
+const rb = r => { const z = Z(); return { x: Math.round(r.x * z), y: Math.round(r.y * z), width: Math.round(r.width * z), height: Math.round(r.height * z) }; };
 const send = (ch, data) => {
   if (ch === 'status' && running) { procs.export = { name: 'Выгрузка · ' + (SITE_NAMES[currentSite] || 'сайт'), text: String(data).split('\n')[0], pct: pctOf(data) }; procUpdate(); }
   if (ch === 'ozonStatus' && data) { procs.check = { name: 'Проверка зон', text: String(data.text || '').split('\n')[0], pct: data.total ? Math.round(100 * (data.done || 0) / data.total) : pctOf(data.text) }; procUpdate(); }
@@ -247,7 +250,7 @@ ipcMain.handle('currentUrl', () => view.webContents.getURL());
 // мастер: где показывать сайт (null — скрыть); режим 'wizard'
 ipcMain.handle('siteRect', (_e, r) => {
   mode = 'wizard';
-  siteRect = r ? { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) } : null;
+  siteRect = r ? rb(r) : null;
   layout(); return true;
 });
 ipcMain.handle('siteBack', () => { if (view.webContents.navigationHistory.canGoBack()) view.webContents.navigationHistory.goBack(); });
@@ -508,7 +511,7 @@ function clickAt(wc, x, y) {
 }
 ipcMain.handle('ozonMapRect', (_e, rect) => {
   if (!mapView) return;
-  if (rect && rect.width > 50) { mapView.setBounds({ x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) }); mapView.setVisible(true); }
+  if (rect && rect.width > 50) { mapView.setBounds(rb(rect)); mapView.setVisible(true); }
   else mapView.setVisible(false);
 });
 async function mapReloadWait() {
@@ -554,7 +557,7 @@ async function mapSearchOnce(wc, q, seq, reloadFn = mapReloadWait, seqRef = () =
 ipcMain.handle('ozonMapShow', async (_e, rect, q) => {
   const seq = ++mapSeq;
   ensureMapView();
-  if (rect) { mapView.setBounds({ x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) }); mapView.setVisible(true); }
+  if (rect) { mapView.setBounds(rb(rect)); mapView.setVisible(true); }
   const wc = mapView.webContents;
   trace.log('карта Ozon', 'поиск: ' + q); mapLastQuery = q;
   try {
@@ -586,7 +589,7 @@ function extView(key) {
   if (EXT[key].base) e.ready = v.webContents.loadURL(EXT[key].base).catch(() => {});
   return e;
 }
-const setB = (v, rect) => { if (rect && rect.width > 50) { v.setBounds({ x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) }); v.setVisible(true); } else v.setVisible(false); };
+const setB = (v, rect) => { if (rect && rect.width > 50) { v.setBounds(rb(rect)); v.setVisible(true); } else v.setVisible(false); };
 ipcMain.handle('extRect', (_e, key, rect) => {
   if (key && ext[key]) setB(ext[key].view, rect);
 });
