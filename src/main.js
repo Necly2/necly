@@ -486,6 +486,7 @@ const FIND_OPTION = (q, prev) => `(async () => {
   }
   if (!best) return { ok: false };
   const e = best[1], r = e.getBoundingClientRect();
+  document.querySelectorAll('[data-pvz-opt]').forEach(x => x.removeAttribute('data-pvz-opt')); e.setAttribute('data-pvz-opt', '1');
   return { ok: true, x: r.left + Math.min(r.width / 2, 120), y: r.top + r.height / 2, text: e.textContent.trim().slice(0, 140), score: best[0] };
 })()`;
 // карта Ozon показала ошибку («Что-то пошло не так», «Не смогли отобразить…») — обычно помогает перезагрузка
@@ -499,8 +500,11 @@ setInterval(async () => {
   mapFixing = true; trace.log('карта Ozon', 'ошибка на карте — автообновление');
   try { await mapReloadWait(); if (mapLastQuery) await mapSearchOnce(mapView.webContents, mapLastQuery, mapSeq); } catch {} finally { mapFixing = false; }
 }, 6000);
+// координаты из страницы — в CSS-пикселях; при масштабе сайта (75 %, 125 %…) их нужно пересчитать,
+// иначе щелчок уходит мимо (на карту) и точка «прыгает» рядом, а не на адрес
 function clickAt(wc, x, y) {
-  for (const type of ['mouseMove', 'mouseDown', 'mouseUp']) wc.sendInputEvent({ type, x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 });
+  const z = wc.getZoomFactor() || 1;
+  for (const type of ['mouseMove', 'mouseDown', 'mouseUp']) wc.sendInputEvent({ type, x: Math.round(x * z), y: Math.round(y * z), button: 'left', clickCount: 1 });
 }
 ipcMain.handle('ozonMapRect', (_e, rect) => {
   if (!mapView) return;
@@ -536,6 +540,10 @@ async function mapSearchOnce(wc, q, seq, reloadFn = mapReloadWait, seqRef = () =
   trace.log('карта Ozon', 'подсказка: ' + JSON.stringify(o));
   if (o.ok) {
     clickAt(wc, o.x, o.y); mapLastText = o.text;
+    // если подсказка всё ещё на экране (щелчок не сработал) — нажать её из страницы
+    await new Promise(r => setTimeout(r, 500));
+    await wc.executeJavaScript(`(() => { const e = document.querySelector('[data-pvz-opt]'); if (!e || !e.isConnected || e.getBoundingClientRect().height < 5) return 0;
+      ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(t => e.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }))); return 1; })()`, true).catch(() => {});
     await new Promise(r => setTimeout(r, 1800));
     if (await wc.executeJavaScript(MAP_ERR, true).catch(() => false)) return { ok: false, why: 'карта показала ошибку', reload: true };
     return { ok: true, how: 'suggest', text: o.text };
