@@ -77,3 +77,21 @@ pvz.getCfg().then(c => zoneNote(c.zonesChange));
 pvz.onZonesChanged(zoneNote);
 $('zoneNoteHide').onclick = () => { pvz.zonesSeen(); $('zoneNote').style.display = 'none'; };
 $('zoneNoteRes').onclick = () => { pvz.zonesSeen(); $('zoneNote').style.display = 'none'; openPage('results'); };
+
+// ---------- анекдоты в углу главного экрана (anekdot.ru, только короткие); щелчок — следующий ----------
+let jokes = [], jokeI = 0, jokeT = null;
+function showJoke(step) {
+  if (!jokes.length) return;
+  jokeI = (jokeI + (step || 0) + jokes.length) % jokes.length;
+  const j = jokes[jokeI], el = $('jokeT');
+  el.classList.remove('in'); void el.offsetWidth; el.textContent = j.t; el.classList.add('in');
+  $('jokeSrc').dataset.href = j.link || 'https://www.anekdot.ru/';
+}
+async function loadJokes() {
+  jokes = await pvz.jokes().catch(() => []);
+  if (!jokes.length) return;
+  jokeI = Math.floor(Math.random() * jokes.length); $('joke').style.display = ''; showJoke(0);
+  clearInterval(jokeT); jokeT = setInterval(() => { if (document.body.dataset.mode === 'welcome') showJoke(1); }, 25000);
+}
+$('joke').onclick = e => { if (e.target.id === 'jokeSrc') { e.preventDefault(); pvz.openExternal(e.target.dataset.href); return; } showJoke(1); };
+loadJokes(); setInterval(loadJokes, 3 * 3600e3);

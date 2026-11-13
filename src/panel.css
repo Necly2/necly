@@ -717,3 +717,13 @@ html[data-theme="light"] .modal{background:rgba(20,26,36,.35)}
 .r-table.hide-c7 th:nth-child(7),.r-table.hide-c7 td:nth-child(7){display:none}
 .r-table.hide-c8 th:nth-child(8),.r-table.hide-c8 td:nth-child(8){display:none}
 .r-table.hide-cnote small.note{display:none}
+
+/* анекдот в левом нижнем углу главного экрана */
+.joke{position:absolute;left:28px;bottom:28px;width:min(340px,30vw);min-height:110px;max-height:190px;padding:14px 16px 12px;border-radius:14px;border:1px solid var(--line);background:color-mix(in srgb,var(--card) 85%,transparent);cursor:pointer;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.joke:hover{border-color:var(--line2)}
+.joke-t{flex:1;font-size:13px;line-height:1.45;color:var(--sub);white-space:pre-line;overflow:hidden;display:-webkit-box;-webkit-line-clamp:7;-webkit-box-orient:vertical}
+.joke-t.in{animation:jokeIn .4s ease}
+@keyframes jokeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.joke a{font-size:11px;color:var(--muted);align-self:flex-end}
+#welcome{position:relative}
+@media (max-width:1100px){.joke{display:none !important}}

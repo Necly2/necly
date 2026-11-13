@@ -697,6 +697,24 @@ async function zoneWatch() {
 setTimeout(() => { zoneWatch(); setInterval(zoneWatch, 6 * 3600e3); }, 120e3);
 ipcMain.handle('zonesSeen', () => { const c = loadCfg(); if (c.zonesChange) { c.zonesChange.seen = true; saveCfg(c); } return true; });
 ipcMain.handle('zonesCheckNow', () => zoneWatch());
+// анекдоты для главного экрана: свежая десятка с anekdot.ru (RSS), только короткие; кэш на 3 часа
+let jokesCache = null;
+ipcMain.handle('jokes', async () => {
+  if (jokesCache && Date.now() - jokesCache.t < 3 * 3600e3) return jokesCache.list;
+  const list = [];
+  for (const u of ['https://www.anekdot.ru/rss/export_j.xml', 'https://www.anekdot.ru/rss/export_bestday.xml']) {
+    try {
+      const x = await (await net.fetch(u)).text();
+      for (const it of x.split('<item>').slice(1)) {
+        const d = (it.match(/<description>([\s\S]*?)<\/description>/) || [])[1] || '', link = (it.match(/<link>([^<]+)<\/link>/) || [])[1] || '';
+        const t = d.replace(/<!\[CDATA\[|\]\]>/g, '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&quot;/g, '"').replace(/&laquo;/g, '«').replace(/&raquo;/g, '»').replace(/&mdash;/g, '—').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n)).trim();
+        if (t && t.length <= 260 && t.split('\n').length <= 6) list.push({ t, link });
+      }
+    } catch {}
+  }
+  if (list.length) jokesCache = { t: Date.now(), list };
+  return list;
+});
 ipcMain.handle('vpnCheck', () => require('./vpn').check());
 ipcMain.handle('flats', (_e, lat, lon, addr) => require('./flats').lookup(lat, lon, addr));
 ipcMain.handle('flatsCached', (_e, pts) => { const f = require('./flats'); return pts.map(([a, b]) => f.cached(a, b)); });
