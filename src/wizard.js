@@ -375,6 +375,7 @@ function renderCenter() {
       <select id="ccSeenDays" title="За какой период"><option value="3">за 3 дня</option><option value="7">за 7 дней</option><option value="14">за 14 дней</option><option value="30">за 30 дней</option><option value="0">за всё время</option></select>
       <label class="switch"><input type="checkbox" id="ccAuto"><span></span><span class="lbl">Проверять сразу после выгрузки</span></label>
     </div>
+    <div class="cc-eta" id="ccEta"></div>
     <div class="cc-grid">
       ${Object.entries(R.src).map(([k, s]) => `<div class="cc-card ${SRC[k].cls || ''}" style="--b:${SRC[k].color}" id="cc_${k}">
         <div class="h"><b>${SRC[k].name}</b><span class="st ${ST[s.st][1]}">${s.st === 'run' ? 'идёт…' : s.st === 'ok' ? 'готово · ' + fmtNum(s.total) : ST[s.st][0]}</span></div>
@@ -454,6 +455,7 @@ function renderCenter() {
     });
     sum();
   });
+  if (!exporting && !checking) showEta();
   on('ccSave', saveScenario);
   on('ccLive', async () => {
     if (W.siteOpen) { W.liveSite = false; closeSiteView(); }
@@ -472,6 +474,29 @@ function renderCenter() {
 }
 const rerender = () => { if (cur() === 'center') renderCenter(); renderRibbon(); };
 
+// сколько примерно займёт: по прошлым запускам (История хранит длительность); проверка — по скорости прошлых проверок
+const fmtMin = ms => ms < 60e3 ? 'меньше минуты' : ms < 3600e3 ? `~${Math.round(ms / 60e3)} мин` : `~${Math.floor(ms / 3600e3)} ч ${Math.round(ms % 3600e3 / 60e3)} мин`;
+const median = a => { if (!a.length) return null; const b = [...a].sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; };
+async function showEta() {
+  const el = $('ccEta'); if (!el || !W.run) return;
+  const [h, c] = await Promise.all([pvz.history(), pvz.getCfg()]);
+  const R = W.run, parts = []; let exp = 0, known = true;
+  for (const k of Object.keys(R.src)) {
+    const d = median(h.filter(x => x.type === 'export' && x.site === k && x.ok !== false && x.dur > 0).slice(0, 7).map(x => x.dur));
+    const n = k === 'winner' ? Math.max(1, chosenOrders().length) : k === 'cian' && W.params.region === 'msk_mo' ? 2 : 1;
+    if (d == null) { known = false; parts.push(`${SRC[k].name} — нет данных`); continue; }
+    exp += d * n; parts.push(`${SRC[k].name} ${fmtMin(d * n)}`);
+  }
+  const checks = Object.values(W.checks).some(Boolean);
+  const rates = h.filter(x => x.type === 'check' && x.dur > 0 && x.done > 0).slice(0, 7).map(x => x.dur / x.done);
+  // без истории: на адрес уходит ~3 запроса с паузой, потоки работают параллельно
+  const perAddr = median(rates) || (3 * Math.max(1, c.ozonPause || 2) * 1000 + 1500) / Math.max(1, c.ozonThreads || 2);
+  const objs = R.phase === 'exported' ? Object.values(R.src).reduce((a, s) => a + (s.total || 0), 0) : median(h.filter(x => x.type === 'check' && x.done > 0).slice(0, 7).map(x => x.done));
+  let t = '';
+  if (R.phase === 'idle') t = (exp ? `Выгрузка ${known ? '' : 'не меньше '}${fmtMin(exp)}` : 'Выгрузка — оценка появится после первых запусков') + (parts.length > 1 || !known ? ` (${parts.join(', ')})` : '');
+  if (checks && (R.phase === 'idle' || (R.phase === 'exported' && R.check.st === 'wait'))) t += (t ? ' · ' : '') + (objs ? `проверка зон ${fmtMin(objs * perAddr)}${R.phase === 'exported' ? ` для ${fmtNum(objs)} объявлений (адреса из памяти — быстрее)` : ''}` : 'проверка зон — зависит от числа объявлений');
+  el.textContent = t ? '⏱ По прошлым запускам: ' + t : '';
+}
 async function baseCfg(extra) {
   const c = await pvz.getCfg();
   return Object.assign({ pages: c.pages || 40, delay: Math.max(3, c.delay || 4), part: c.part || 300, days: W.params.days === '' ? 0 : W.params.days, noNewMoscow: W.params.region === 'msk_nonew' && !(extra && extra.bw) }, extra);
@@ -633,6 +658,8 @@ async function goHome() {
   document.body.dataset.mode = 'welcome'; $('welcome').classList.remove('leave');
   pvz.nav('welcome');
 }
+// идёт выгрузка в мастере — задания по расписанию не должны забирать сайт
+window.wizBusy = () => !!(W.run && W.run.phase === 'export');
 window.wizResume = () => { document.body.dataset.mode = 'wizard'; pvz.siteRect(null); setTimeout(sendRect, 60); render(); };
 window.openWizard = async function () {
   const c = await pvz.getCfg();

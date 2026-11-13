@@ -88,7 +88,8 @@ function scan(roots, outDir, days, journalName) {
 // поддержка Ozon для площади объявления: ступень, в которую попадает площадь
 function supportFor(tiers, area) {
   if (!tiers || !tiers.length || !area) return null;
-  const t = tiers.find(([a, b]) => area >= a && (b == null || area < b)) || (area >= tiers[tiers.length - 1][0] ? tiers[tiers.length - 1] : null);
+  // ступень, в которую попадает площадь; если между ступенями «дыра» (25–39, 40–59…) — ближайшая ступень снизу
+  const t = tiers.find(([a, b]) => area >= a && (b == null || area < b)) || [...tiers].reverse().find(([a]) => area >= a) || null;
   if (!t) return { month: 0, total: 0, note: `меньше ${tiers[0][0]} м² — поддержки нет` };
   return { month: t[2], total: t[3], note: `${t[0]}${t[1] ? '–' + t[1] : '+'} м²` };
 }
@@ -137,7 +138,8 @@ async function run(files, ctx) {
   // «Запоминать результаты на 3 дня» (выключаемо): без неё используются только результаты этого запуска
   const cache = readJson(ctx.cachePath, {});
   const runStart = Date.now(), useCache = cfg.ozonCache !== false;
-  const fresh = k => cache[k] && (useCache ? Date.now() - cache[k][2] < CACHE_DAYS * 864e5 : cache[k][2] >= runStart);
+  // «ошибка запроса» из прошлых запусков не берём из памяти — такие адреса проверяются заново
+  const fresh = k => cache[k] && (useCache && cache[k][0] !== 'ошибка запроса' ? Date.now() - cache[k][2] < CACHE_DAYS * 864e5 : cache[k][2] >= runStart);
   const todo = Object.keys(addrOf).filter(k => !fresh(k));
   const total = Object.keys(addrOf).length;
   let blockedGaveUp = false, stoppedByUser = false;

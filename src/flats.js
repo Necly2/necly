@@ -28,7 +28,8 @@ async function mingkh(address) {
   const wc = mkWin.webContents, sleep = ms => new Promise(r => setTimeout(r, ms));
   const q = String(address || '').replace(/^\s*(г\.?\s*)?москва[, ]*/i, '');
   if (!q) return null;
-  await wc.loadURL('https://dom.mingkh.ru/search?searchtype=house&address=' + encodeURIComponent('Москва, ' + q)).catch(() => {});
+  const full = /област|обл\.|г\.о\.|гор\. ?округ/i.test(q) ? q : 'Москва, ' + q;   // адреса Подмосковья — без «Москва,»
+  await wc.loadURL('https://dom.mingkh.ru/search?searchtype=house&address=' + encodeURIComponent(full)).catch(() => {});
   let link = null;
   for (let i = 0; i < 12 && !link; i++) {
     await sleep(1500);
@@ -46,14 +47,15 @@ async function mingkh(address) {
 }
 async function lookup(lat, lon, address) {
   const k = key(lat, lon), c = load();
-  if (c[k] && Date.now() - c[k].t < 90 * 864e5 && (c[k].n != null || c[k].tried)) return c[k];
+  if (c[k] && Date.now() - c[k].t < 90 * 864e5 && (c[k].n != null || c[k].tried) && (c[k].exact || c[k].v === 2)) return c[k];   // старые оценки (подъезды соседних домов) — пересчитать
   const run = async () => {
-    const q = `[out:json][timeout:20];way(around:25,${lat},${lon})["building"]->.b;.b out tags center;node(w.b)["entrance"];out ids;`;
+    // здания рядом (с узлами контура) и подъезды — подъезды считаются только у выбранного здания
+    const q = `[out:json][timeout:20];way(around:25,${lat},${lon})["building"]->.b;.b out body center;node(w.b)["entrance"];out ids;`;
     const j = await overpass(q);
     if (!j && !address) return { k, n: null, err: 'OpenStreetMap не ответил' };
     const els = (j && j.elements) || [];
-    const ways = els.filter(e => e.type === 'way');
-    const entrances = els.filter(e => e.type === 'node').length;
+    const ways = els.filter(e => e.type === 'way' && e.center);
+    const entIds = new Set(els.filter(e => e.type === 'node').map(e => e.id));
     // ближайшее здание с данными: сначала с building:flats, потом с этажностью
     ways.sort((a, b) => dist(lat, lon, a.center.lat, a.center.lon) - dist(lat, lon, b.center.lat, b.center.lon));
     const withFlats = ways.find(w => +w.tags['building:flats'] > 0);
@@ -61,12 +63,14 @@ async function lookup(lat, lon, address) {
     if (withFlats) res = { n: +withFlats.tags['building:flats'], exact: true };
     else {
       const w = ways.find(x => /apartments|residential|house|yes/.test(x.tags.building) && +x.tags['building:levels'] > 0) || null;
-      const lv = w ? +w.tags['building:levels'] : 0;
+      const lv = w ? +w.tags['building:levels'] : 0, entrances = w ? (w.nodes || []).filter(id => entIds.has(id)).length : 0;
       res = lv >= 3 && /apartments|residential/.test(w.tags.building) ? { n: Math.round(lv * Math.max(1, entrances) * 4), exact: false, levels: lv, entrances } : { n: null };
     }
     if ((res.n == null || !res.exact) && address) { try { const m = await mingkh(address); if (m) res = m; } catch {} }
-    c[k] = Object.assign({ t: Date.now(), tried: true, src: res.src || (res.n != null ? 'OpenStreetMap' : '') }, res); save(); return c[k];
+    // OpenStreetMap не ответил и запасной источник ничего не дал — не запоминаем «нет данных», повторим позже
+    if (!j && res.n == null) return { k, n: null, err: 'OpenStreetMap не ответил' };
+    c[k] = Object.assign({ t: Date.now(), tried: true, v: 2, src: res.src || (res.n != null ? 'OpenStreetMap' : '') }, res); save(); return c[k];
   };
   const p = queue.then(run, run); queue = p.then(() => new Promise(r => setTimeout(r, 1100)), () => {}); return p;
 }
-module.exports = { lookup, cached: (lat, lon) => load()[key(lat, lon)] || null };
+module.exports = { lookup, cached: (lat, lon) => { const x = load()[key(lat, lon)]; return x && (x.exact || x.v === 2) ? x : null; } };

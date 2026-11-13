@@ -719,11 +719,42 @@ html[data-theme="light"] .modal{background:rgba(20,26,36,.35)}
 .r-table.hide-cnote small.note{display:none}
 
 /* анекдот в левом нижнем углу главного экрана */
-.joke{position:absolute;left:28px;bottom:28px;width:min(340px,30vw);min-height:110px;max-height:190px;padding:14px 16px 12px;border-radius:14px;border:1px solid var(--line);background:color-mix(in srgb,var(--card) 85%,transparent);cursor:pointer;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.joke-wrap{position:absolute;left:28px;bottom:28px;width:min(340px,30vw);display:flex;flex-direction:column;gap:8px}
+.joke-sw{font-size:12px;color:var(--muted);align-self:flex-start}
+.joke{width:100%;box-sizing:border-box;min-height:110px;max-height:190px;padding:14px 16px 12px;border-radius:14px;border:1px solid var(--line);background:color-mix(in srgb,var(--card) 85%,transparent);cursor:pointer;display:flex;flex-direction:column;gap:8px;overflow:hidden}
 .joke:hover{border-color:var(--line2)}
 .joke-t{flex:1;font-size:13px;line-height:1.45;color:var(--sub);white-space:pre-line;overflow:hidden;display:-webkit-box;-webkit-line-clamp:7;-webkit-box-orient:vertical}
 .joke-t.in{animation:jokeIn .4s ease}
 @keyframes jokeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 .joke a{font-size:11px;color:var(--muted);align-self:flex-end}
 #welcome{position:relative}
-@media (max-width:1100px){.joke{display:none !important}}
+@media (max-width:1100px){.joke-wrap{display:none !important}}
+
+/* меню «⋯» в «Результатах» — редкие действия */
+.more-wrap{position:relative}
+.more-btn{font-size:18px;line-height:1;padding:6px 12px;letter-spacing:1px}
+.more-menu{display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:60;background:var(--card);border:1px solid var(--line2);border-radius:12px;box-shadow:var(--shadow);padding:6px;min-width:270px;flex-direction:column;gap:2px}
+.more-menu.on{display:flex}
+.more-menu>button{display:flex;align-items:center;gap:10px;text-align:left;border:0;background:none;color:var(--text);padding:9px 12px;border-radius:8px;font-size:13px;cursor:pointer}
+.more-menu>button i{font-style:normal;width:16px;text-align:center;color:var(--muted)}
+.more-menu>button:hover:not(:disabled){background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.more-menu>button:disabled{opacity:.55;cursor:default}
+.more-sw{display:flex;align-items:center;gap:10px;padding:9px 12px;border-top:1px solid var(--line);margin-top:4px;font-size:13px;cursor:pointer}
+.more-sw input{display:none}
+.more-sw .sw{width:28px;height:16px;border-radius:9px;background:var(--line2);position:relative;flex:none;transition:background .15s}
+.more-sw .sw::after{content:"";position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;background:#fff;transition:left .15s}
+.more-sw input:checked + .sw{background:var(--accent)}
+.more-sw input:checked + .sw::after{left:14px}
+.more-sw em{font-style:normal;color:var(--muted)}
+.r-busy{font-size:12px;max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.more-btn.busy{border-color:var(--accent);color:var(--accent)}
+
+/* сводка за день под «Начать работу» */
+.home-sum{margin-top:16px;border:1px solid var(--line);background:color-mix(in srgb,var(--card) 80%,transparent);color:var(--sub);border-radius:999px;padding:8px 16px;font-size:13px;cursor:pointer;display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center}
+.home-sum:hover{border-color:var(--accent);color:var(--text)}
+.home-sum b{color:var(--text);font-weight:600}
+.home-sum .g{color:#22c55e}
+.home-sum .u{color:var(--accent)}
+
+.cc-eta{font-size:12.5px;color:var(--muted);margin:-4px 0 12px}
+.cc-eta:empty{display:none}

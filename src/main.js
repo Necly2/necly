@@ -263,6 +263,7 @@ ipcMain.handle('bwOrder', () => {
 
 ipcMain.handle('start', async (_e, c) => {
   if (running) return { ok: false, error: 'Выгрузка уже идёт' };
+  const t0 = Date.now();   // длительность — для оценки времени в мастере
   const cfg = Object.assign(loadCfg(), c);
   cfg.delay = Math.max(3, cfg.delay);
   saveCfg(cfg);
@@ -282,7 +283,7 @@ ipcMain.handle('start', async (_e, c) => {
       const q = autoOzon(cfg, r.saved, c.forceCheck);
       if (!r.ok) journal.logError('Winner', r.error);
       else if (/ошибк/i.test(r.reason || '')) journal.logError('Winner', r.reason);
-      journal.addHistory({ type: 'export', site, title: c.title || (r.extra || '').replace(/^Заказ: /, '').split(';')[0], ok: !!r.ok, total: r.total || 0, files: r.saved || [], reason: r.reason || r.error });
+      journal.addHistory({ type: 'export', site, dur: Date.now() - t0, title: c.title || (r.extra || '').replace(/^Заказ: /, '').split(';')[0], ok: !!r.ok, total: r.total || 0, files: r.saved || [], reason: r.reason || r.error });
       return Object.assign({ site, withCoords: r.total, ozonQueued: q }, r);
     } catch (e) { journal.logError('Winner', e); journal.addHistory({ type: 'export', site, ok: false, total: 0, files: [], reason: String(e && e.message || e) }); return { ok: false, error: String(e && e.message || e) }; }
     finally { running = false; delete procs.export; procUpdate(); }
@@ -313,12 +314,12 @@ ipcMain.handle('start', async (_e, c) => {
       if (res.ids) addSeen(cfg, res.ids, site);
     }
     const q = autoOzon(cfg, out.saved, c.forceCheck);
-    journal.addHistory({ type: 'export', site, title: c.title || '', ok: true, total: res.rows.length, files: out.saved, reason: res.reason });
+    journal.addHistory({ type: 'export', site, dur: Date.now() - t0, title: c.title || '', ok: true, total: res.rows.length, files: out.saved, reason: res.reason });
     return { ok: true, site, reason: res.reason, extra: res.extra || '', total: res.rows.length, withCoords: res.withCoords, ozonQueued: q, ...out };
   } catch (e) {
     clearInterval(timer);
     journal.logError(site === 'cian' ? 'Циан' : 'Авито', e);
-    journal.addHistory({ type: 'export', site, title: c.title || '', ok: false, total: 0, files: [], reason: String(e && e.message || e) });
+    journal.addHistory({ type: 'export', site, dur: Date.now() - t0, title: c.title || '', ok: false, total: 0, files: [], reason: String(e && e.message || e) });
     return { ok: false, error: String(e && e.message || e) };
   } finally { running = false; delete procs.export; procUpdate(); }
 });
@@ -361,10 +362,12 @@ async function pumpOzon() {
   if (ozonRunning) { send('ozonStatus', { text: `В очереди ещё файлов: ${ozonQueue.length}`, running: true, queued: ozonQueue.length }); return; }
   ozonRunning = true; ozonStop = false; ozonSkip = false;
   try {
+    // слежение за зонами пользуется той же вкладкой Ozon — дождаться, чтобы не мешать проверке
+    for (let i = 0; i < 30 && zwBusy; i++) await new Promise(r => setTimeout(r, 1000));
     while (ozonQueue.length && !ozonStop) {
       const cfg = loadCfg();
       if (ozonFresh) { cfg.ozonCache = false; ozonFresh = false; }
-      const paths = ozonQueue.splice(0);
+      const paths = ozonQueue.splice(0), t0 = Date.now();
       const results = [];
       for (const p of enabledPlatforms(cfg)) {
         if (ozonStop) break;
@@ -386,7 +389,7 @@ async function pumpOzon() {
       }
       send('ozonDone', { ok: true, results });
       if (results.length && (!win.isVisible() || !win.isFocused())) scheduler.notify('PVZ Master — проверка зон завершена', results.map(r => `${r.label}: ${r.kind === 'ozon' ? 'файлов ' + r.saved.length : 'в «Результат» ' + r.main}`).join(' · '));
-      if (results.length) journal.addHistory({ type: 'check', ok: true, title: results.map(r => r.label).join(', '),
+      if (results.length) journal.addHistory({ type: 'check', ok: true, dur: Date.now() - t0, done: results.reduce((a, r) => a + Math.max(0, (r.addresses || 0) - (r.fromCache || 0)), 0), title: results.map(r => r.label).join(', '),
         total: results.reduce((a, r) => a + (r.addresses || 0), 0), files: results.flatMap(r => r.saved || []),
         reason: results.map(r => `${r.label}: ${r.reason}`).join('; '),
         details: results.map(r => ({ label: r.label, addresses: r.addresses, suitable: r.kind === 'ozon' ? Object.entries(r.stats || {}).filter(([k]) => !['green_small', 'out_zone', 'unchecked'].includes(k)).reduce((a, [, v]) => a + v, 0) : r.main, unchecked: r.unchecked || (r.stats && r.stats.unchecked) || 0 })) });
@@ -417,7 +420,7 @@ ipcMain.handle('ozonStart', (_e, paths, opts) => {
     const cfg = loadCfg();
     for (const p of PLATFORMS) {
       const jp = path.join(cfg.ozonOut, p.journal);
-      try { const j = JSON.parse(fs.readFileSync(jp, 'utf8')); for (const f of paths) delete j.files[f]; fs.writeFileSync(jp, JSON.stringify(j, null, 1)); } catch {}
+      try { const j = JSON.parse(fs.readFileSync(jp, 'utf8')); for (const f of paths) if (j.files[f]) j.files[f] = { size: -1, result: j.files[f].result, forced: true }; fs.writeFileSync(jp, JSON.stringify(j, null, 1)); } catch {}
     }
     ozonFresh = true;
   }
@@ -662,9 +665,11 @@ ipcMain.handle('notify', (_e, t, b) => scheduler.notify(t, b));
 // если поменялось 2+ участка — Ozon обновил зоны: сообщение на главном экране и уведомление
 const ZW_TILES = (() => { const out = [], z = 13, n = 2 ** z; const tx = lon => Math.floor((lon + 180) / 360 * n); const ty = lat => { const s = Math.sin(lat * Math.PI / 180); return Math.floor((0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n); };
   for (const lat of [55.58, 55.65, 55.72, 55.79, 55.86]) for (const lon of [37.40, 37.53, 37.66, 37.79]) out.push([tx(lon), ty(lat), z]); return out; })();
+let zwBusy = false;
 async function zoneWatch() {
-  if (ozonRunning || !win || win.isDestroyed()) return;
+  if (ozonRunning || zwBusy || !win || win.isDestroyed()) return;
   const wc = ozonView.webContents;
+  zwBusy = true;
   try {
     if (!/pvz-map\.ozon\.ru/.test(wc.getURL())) { await wc.loadURL(ozon.OZON_URL).catch(() => {}); await new Promise(r => setTimeout(r, 6000)); }
     if (ozonRunning) return;
@@ -692,17 +697,19 @@ async function zoneWatch() {
       }
     } else trace.log('зоны Ozon', 'первый снимок карты зон сохранён');
     c.zoneHashes = res; c.zoneHashesAt = Date.now(); saveCfg(c);
-  } catch (e) { trace.log('зоны Ozon', 'ошибка: ' + e.message); }
+  } catch (e) { trace.log('зоны Ozon', 'ошибка: ' + e.message); } finally { zwBusy = false; }
 }
 setTimeout(() => { zoneWatch(); setInterval(zoneWatch, 6 * 3600e3); }, 120e3);
 ipcMain.handle('zonesSeen', () => { const c = loadCfg(); if (c.zonesChange) { c.zonesChange.seen = true; saveCfg(c); } return true; });
 ipcMain.handle('zonesCheckNow', () => zoneWatch());
 // анекдоты для главного экрана: свежая десятка с anekdot.ru (RSS), только короткие; кэш на 3 часа
-let jokesCache = null;
-ipcMain.handle('jokes', async () => {
-  if (jokesCache && Date.now() - jokesCache.t < 3 * 3600e3) return jokesCache.list;
+// «Только смешные» — лучшие за день по оценкам читателей (export_bestday)
+const jokesCache = {};
+ipcMain.handle('jokes', async (_e, best) => {
+  const ck = best ? 'best' : 'all', hit = jokesCache[ck];
+  if (hit && Date.now() - hit.t < 3 * 3600e3) return hit.list;
   const list = [];
-  for (const u of ['https://www.anekdot.ru/rss/export_j.xml', 'https://www.anekdot.ru/rss/export_bestday.xml']) {
+  for (const u of best ? ['https://www.anekdot.ru/rss/export_bestday.xml'] : ['https://www.anekdot.ru/rss/export_j.xml', 'https://www.anekdot.ru/rss/export_bestday.xml']) {
     try {
       const x = await (await net.fetch(u)).text();
       for (const it of x.split('<item>').slice(1)) {
@@ -712,7 +719,7 @@ ipcMain.handle('jokes', async () => {
       }
     } catch {}
   }
-  if (list.length) jokesCache = { t: Date.now(), list };
+  if (list.length) jokesCache[ck] = { t: Date.now(), list };
   return list;
 });
 ipcMain.handle('vpnCheck', () => require('./vpn').check());
@@ -791,11 +798,25 @@ async function selfTest(dir) {
         "document.querySelectorAll('#rHead th[data-k]').forEach(t=>t.click())", "$('rSearch').value='Тест';$('rSearch').dispatchEvent(new Event('input'))", "$('rSearch').value='';$('rSearch').dispatchEvent(new Event('input'))",
         "$('rExport').click()", "document.querySelector('#modal.on .m-btns button') && document.querySelector('#modal.on .m-btns button').click()",
         "document.querySelector('[data-settings]').click()", "document.querySelector('#settings .back-home').click()",
-        "openPage('settings')", "$('setSeenDays').value='7';$('setSeenDays').onchange()", "$('setTestSup').click()", "$('setTestSplit').click()", "document.querySelector('#setTheme [data-v=light]').click()", "document.querySelector('#setTheme [data-v=dark]').click()",
+        "openPage('settings')", "$('setSeenDays').value='7';$('setSeenDays').onchange()", "$('setTestSup').click()", "document.querySelector('#setTheme [data-v=light]').click()", "document.querySelector('#setTheme [data-v=dark]').click()",
         "openPage('history')", "openPage('schedule')", "openWatch()", "openPage('results')"
       ];
       for (const s of steps) { const r = await J(`(()=>{try{${s};return 'ok'}catch(e){return 'ERR '+e.message}})()`); if (r !== 'ok') console.log('DEEPFAIL', s, r); await W8(350); }
       await shot('13-deep');
+      // меню «⋯», клавиши, сводка дня, оценка времени в мастере, «Только смешные»
+      await J(`openPage('results'); 1`); await W8(1200);
+      await J(`$('rMoreBtn').click(); 1`); await W8(400); await shot('14-more-menu');
+      console.log('MORE', await J(`JSON.stringify({open: $('rMoreMenu').classList.contains('on'), dedup: $('rDedup').checked})`));
+      await J(`document.body.click(); 1`); await W8(300);
+      await J(`(()=>{const z=['голубой','синий','зелёный'];const rows=Array.from({length:14},(_,i)=>({platform:'Ozon',zone:z[i%3],address:'Москва, ул. Тестовая, '+(i%10+1),metro:'м. Пример',note:'',areaMin:30+(i%10),price:50000+i*5000,checked:Date.now()-Math.floor(i/6)*864e5-(i%2)*3600e3,url:'https://x/'+i,lat:55.7+i*0.01,lon:37.5+i*0.01,file:'OZON export_excel ЦИАН 13 '+(1+i%2)+'.xlsx'}));rows.push({platform:'Яндекс',zone:'синий',address:'ул. Тестовая, 2',metro:'',note:'',areaMin:31,price:55000,checked:Date.now(),url:'https://x/y',lat:55.71,lon:37.51,file:'ЯНДЕКС export_excel ЦИАН 13 1.xlsx'});R.marks={};R.seen={'https://x/3':1};R.watch={};prepRows(rows);R.day=dayKey(Date.now());renderDays();renderResults(true);})(); 1`); await W8(500);
+      const key = k => J(`document.dispatchEvent(new KeyboardEvent('keydown', { key: '${k}', code: '${k === ' ' ? 'Space' : k === 's' ? 'KeyS' : k}', bubbles: true })); R.sel`);
+      console.log('KEYS', await key('ArrowDown'), await key('ArrowDown'), await key('ArrowUp'), await key(' '), await key('s'), await J(`JSON.stringify({sel: R.sel, seen: !!R.seen[markKey(R.rows[R.sel])], watch: !!R.watch[markKey(R.rows[R.sel])], selRow: !!document.querySelector('#rRows tr.sel')})`));
+      await J(`document.body.dataset.mode='welcome'; 1`); await W8(1500); await shot('15-home-sum');
+      console.log('HOMESUM', await J(`$('homeSum').style.display + '|' + $('homeSum').textContent`));
+      await J(`$('jokeBest') && $('jokeBest').click(); 1`); await W8(3000); console.log('JOKE', await J(`$('jokeBest').checked + '|' + $('jokeWrap').style.display + '|' + $('jokeT').textContent.slice(0, 60)`));
+      await J(`$('jokeBest').click(); 1`); await W8(800);
+      await J(`openWizard(); 1`); await W8(800); for (let i = 0; i < 4; i++) { await J(`$('wzNext') && !$('wzNext').disabled && $('wzNext').click(); document.querySelector('#mBtns button') && [...document.querySelectorAll('#mBtns button')].find(b=>/без них/.test(b.textContent)) && [...document.querySelectorAll('#mBtns button')].find(b=>/без них/.test(b.textContent)).click(); document.querySelector('#oList .on') && (document.querySelector('#oList .on').checked = true, document.querySelector('#oList .on').onchange({target:{checked:true}})); 1`); await W8(900); }
+      await W8(800); await shot('16-center-eta'); console.log('ETA', await J(`($('ccEta')||{}).textContent`));
       console.log('DEEPDONE');
     }
     if (process.env.PVZ_EXT) {

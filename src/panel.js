@@ -203,7 +203,7 @@ async function runExport(extra) {
   if (c.delay < 3) { c.delay = 3; setNum($('delay'), 3); }
   if (!c.pages) c.pages = 1;
   if (!c.part) c.part = 300;
-  if (bwGuid) {
+  if (bwGuid && !(extra && extra.bw)) {
     const nm = ($('bwName').textContent || '').split(' · ')[0];
     c.bw = { tag: $('bwTag').value.trim(), hide: $('bwHide').checked, name: nm };
     c.title = nm;
@@ -279,7 +279,7 @@ function waitManual(lines, hint) {
 }
 
 async function runOrder(p, presetName, opt = {}) {
-  const extra = { days: p.days === '' ? 0 : p.days, forceCheck: !!opt.forceCheck };
+  const extra = { days: p.days === '' ? 0 : p.days, forceCheck: !!opt.forceCheck, noNewMoscow: p.region === 'msk_nonew' };
   const report = [];
   document.body.dataset.mode = 'work';
   if (p.cian) {
@@ -311,6 +311,18 @@ async function runOrder(p, presetName, opt = {}) {
       report.push('Авито: ' + (r.ok ? `${r.total} объявл., файлов ${r.saved.length}` : 'ошибка — ' + r.error));
       setStatus(text, r.ok ? 'done' : 'err');
     } else if (!opt.unattended) report.push('Авито: пропущено');
+  }
+  // сценарий из мастера может включать заказы Baza Winner — по расписанию выгружаются и они
+  if (p.winner && p.orders) {
+    for (const [guid, o] of Object.entries(p.orders)) {
+      if (!o || !o.on) continue;
+      setSite('winner'); setStatus(`Winner: ${o.name || 'заказ'}…`);
+      await pvz.navUrl('winner', `https://w7.baza-winner.ru/search/${guid}/params`);
+      await wait(6000); bwGuid = null; await refreshBw();
+      const { r, text } = await runExport({ title: o.name, forceCheck: !!opt.forceCheck, bw: { tag: o.tag || '', hide: o.hide !== false, name: o.name || '' } });
+      report.push(`Winner «${o.name || guid.slice(0, 8)}»: ` + (r.ok ? `${r.total} объявл., файлов ${r.saved.length}` : 'ошибка — ' + r.error));
+      setStatus(text, r.ok ? 'done' : 'err');
+    }
   }
   const summary = 'Итог по заказу' + (presetName ? ` «${presetName}»` : '') + ':\n' + report.map(x => '• ' + x).join('\n');
   setStatus(summary + (exportStatus.text.includes('Ozon') ? '\n\n→ Новые файлы отправлены на проверку зон.' : ''), 'done');
@@ -348,32 +360,32 @@ const dayKey = t => { const d = new Date(t); return d.getFullYear() + '-' + Stri
 const markKey = x => x.url || (x.platform + '|' + x.address);
 // одинаковые помещения: тот же адрес и та же площадь в один день (в рамках выгрузки и между выгрузками)
 const normAddr = a => String(a || '').toLowerCase().replace(/ё/g, 'е').replace(/^\s*(россия|москва|г\.? ?москва)[, ]+/g, '').replace(/(улица|ул\.?|проспект|пр-т|переулок|пер\.?|шоссе|ш\.?|дом|д\.?)(?=[\s,]|$)/g, '').replace(/[^0-9a-zа-я/]+/g, '');
-const dupKey = x => x.platform + '|' + dayKey(x.checked) + '|' + normAddr(x.address) + '|' + (x.areaMin ?? '');
+// день — по времени выгрузки (перепроверка зон не переносит строки в «Сегодня»)
+const upDay = x => dayKey(x.exported || x.checked);
+const dupKey = x => x.platform + '|' + upDay(x) + '|' + normAddr(x.address) + '|' + (x.areaMin ?? '');
 const matchKey = x => normAddr(x.address) + '|' + (x.areaMin ?? '');
 const upKey = x => x.file.replace(/^(OZON|ЯНДЕКС|WB) /i, '');
 function renderDays() {
   const cnt = {}; let marked = 0, watched = 0, unseen = 0, matched = 0;
-  for (const x of R.rows) { if ((x.dupHidden && R.dedup) || x.archived) continue; const k = dayKey(x.checked); cnt[k] = (cnt[k] || 0) + 1; if (x.mark) marked++; if (!R.seen[markKey(x)]) unseen++; if (x.also && x.also.length) matched++; }
+  for (const x of R.rows) { if ((x.dupHidden && R.dedup) || x.archived) continue; const k = upDay(x); cnt[k] = (cnt[k] || 0) + 1; if (x.mark) marked++; if (!R.seen[markKey(x)]) unseen++; if (x.also && x.also.length) matched++; }
   watched = Object.keys(R.watch).length;
   const days = [];
   for (let i = 0; i < 5; i++) { const d = new Date(); d.setDate(d.getDate() - i); days.push([dayKey(d), i === 0 ? 'Сегодня' : i === 1 ? 'Вчера' : d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) + ', ' + d.toLocaleDateString('ru-RU', { weekday: 'short' })]); }
   const b = (k, label, n) => `<button data-day="${k}" class="${R.day === k ? 'on' : ''}${n ? '' : ' empty'}">${label}<span>${fmtNum(n)}</span></button>`;
   const total = R.rows.filter(x => !(x.dupHidden && R.dedup) && !x.archived).length;
   $('rDays').innerHTML = b('all', 'Все', total) + days.map(([k, l]) => b(k, l, cnt[k] || 0)).join('') + '<i></i>' + b('marked', '✓ Отмеченные', marked) + b('watch', '★ Отслеживаемые', watched)
-    + `<span class="grow"></span><button class="mark-all" id="rSeenAll" title="Отметить просмотренными все объявления, которые сейчас в списке (выбранный день / выгрузка)">✓ Все просмотрены</button><label class="tgl"><input type="checkbox" id="rNew"${R.onlyNew ? ' checked' : ''}><span>● Непросмотренные ${fmtNum(unseen)}</span></label>`
-    + `<label class="tgl"><input type="checkbox" id="rMatch"${R.onlyMatch ? ' checked' : ''}><span>⇄ Есть в нескольких проверках ${fmtNum(matched)}</span></label>`
-    + `<label class="tgl"><input type="checkbox" id="rDedup"${R.dedup ? ' checked' : ''}><span>Скрыть одинаковые${R.dupCount ? ' (' + fmtNum(R.dupCount) + ')' : ''}</span></label>`;
+    + `<span class="grow"></span><label class="tgl"><input type="checkbox" id="rNew"${R.onlyNew ? ' checked' : ''}><span>● Непросмотренные ${fmtNum(unseen)}</span></label>`
+    + `<label class="tgl"><input type="checkbox" id="rMatch"${R.onlyMatch ? ' checked' : ''}><span>⇄ Есть в нескольких проверках ${fmtNum(matched)}</span></label>`;
+  $('rDedup').checked = R.dedup; $('rDupN').textContent = R.dupCount ? '(' + fmtNum(R.dupCount) + ')' : '';
   $('rDays').querySelectorAll('button').forEach(x => (x.onclick = () => { R.day = x.dataset.day; R.up = 'all'; renderDays(); renderResults(true); }));
   $('rNew').onchange = e => { R.onlyNew = e.target.checked; renderResults(true); };
-  $('rSeenAll').onclick = markAllSeen;
   $('rMatch').onchange = e => { R.onlyMatch = e.target.checked; renderResults(true); };
-  $('rDedup').onchange = e => { R.dedup = e.target.checked; pvz.setCfg({ resDedup: R.dedup }); renderDays(); renderResults(true); };
   // выгрузки выбранного дня: «Все выгрузки за день» + по кнопке на каждую выгрузку
   const isDay = /^\d{4}-/.test(R.day);
   let ups = [];
   if (isDay) {
     const m = new Map();
-    for (const x of R.rows) { if (dayKey(x.checked) !== R.day || (x.dupHidden && R.dedup)) continue; const k = upKey(x); const u = m.get(k) || { k, t: x.checked, n: 0 }; u.n++; u.t = Math.min(u.t, x.checked); m.set(k, u); }
+    for (const x of R.rows) { if (upDay(x) !== R.day || (x.dupHidden && R.dedup) || x.archived) continue; const k = upKey(x); const t = x.exported || x.checked, u = m.get(k) || { k, t, n: 0 }; u.n++; u.t = Math.min(u.t, t); m.set(k, u); }
     ups = [...m.values()].sort((a, b) => a.t - b.t);
   }
   $('rUps').classList.toggle('on', isDay && ups.length > 0);
@@ -395,7 +407,7 @@ function prepRows(rows) {
   for (const [k, w] of Object.entries(R.watch)) if (!have.has(k) && w.row) R.rows.push(Object.assign({}, w.row, { id: R.rows.length, mark: R.marks[k] ? 1 : 0, archived: true }));
   // одинаковые помещения в один день: первое оставляем, остальные скрываем (переключатель «Скрыть одинаковые»)
   const firstOf = new Map(); R.dupCount = 0;
-  [...R.rows].sort((a, b) => a.checked - b.checked).forEach(x => { const k = dupKey(x); if (firstOf.has(k)) { x.dupHidden = true; R.dupCount++; } else firstOf.set(k, x); });
+  [...R.rows].sort((a, b) => (a.exported || a.checked) - (b.exported || b.checked)).forEach(x => { const k = dupKey(x); if (firstOf.has(k)) { x.dupHidden = true; R.dupCount++; } else firstOf.set(k, x); });
   // одно и то же помещение в проверке Ozon и другой площадки
   const byMatch = new Map();
   for (const x of R.rows) { const k = matchKey(x); if (!byMatch.has(k)) byMatch.set(k, []); byMatch.get(k).push(x); }
@@ -407,8 +419,8 @@ async function loadResults() {
   const r = await pvz.results();
   const cfg = await pvz.getCfg();
   if (R.showLst === undefined) { R.showLst = cfg.resShowLst != null ? (cfg.resShowLst && lstAuto()) || (cfg.resShowLst && window.innerWidth >= 1400) : lstAuto(); R.base = cfg.resBase || '2gis'; $('rBase').value = R.base; R.mapMode = cfg.resMap || 'res'; }
-  R.testSplit = !!cfg.testSplit; $('rSplit').style.display = R.testSplit ? '' : 'none'; R.split = R.testSplit && !!cfg.resSplit;
-  R.testSup = !!cfg.testSupport;
+  R.split = !!cfg.resSplit;   // «Разделить» — постоянная функция (была тестовой)
+  R.testSup = cfg.testSupport !== false;
   R.marks = cfg.resMarks || {}; R.seen = cfg.resSeen || {}; R.watch = cfg.resWatch || {}; if (cfg.resDedup === false) R.dedup = false;
   prepRows(r.rows);
   renderDays();
@@ -434,7 +446,7 @@ function filteredResults() {
     && (R.up === 'all' || !/^\d{4}-/.test(day) || upKey(x) === R.up)
     && (day !== 'watch' || R.watch[markKey(x)]) && (day === 'watch' || !x.archived)
     && (area === '' || (x.areaMax ?? x.areaMin ?? 0) >= area) && (price === '' || x.price == null || x.price <= price)
-    && (day === 'all' || day === 'watch' || (day === 'marked' ? x.mark : dayKey(x.checked) === day)) && (!q || (x.address + ' ' + x.metro + ' ' + x.source + ' ' + x.note).toLowerCase().includes(q)));
+    && (day === 'all' || day === 'watch' || (day === 'marked' ? x.mark : upDay(x) === day)) && (!q || (x.address + ' ' + x.metro + ' ' + x.source + ' ' + x.note).toLowerCase().includes(q)));
 }
 function renderResults(fit) {
   const list = filteredResults();
@@ -445,7 +457,7 @@ function renderResults(fit) {
   const shown = list.slice(0, 1000);
   $('rCount').textContent = `${fmtNum(list.length)} из ${fmtNum(R.rows.length)}`;
   const area = x => x.areaMin == null ? '' : (x.areaMax && x.areaMax !== x.areaMin ? `${fmtNum(x.areaMin)}–${fmtNum(x.areaMax)}` : fmtNum(x.areaMin)) + ' м²';
-  $('rRows').innerHTML = shown.map((x, i) => `<tr data-id="${x.id}" class="${x.mark ? 'marked' : ''}${R.seen[markKey(x)] ? '' : ' unseen'}${x.also && x.also.length ? ' multi' : ''}">
+  $('rRows').innerHTML = shown.map((x, i) => `<tr data-id="${x.id}" class="${x.mark ? 'marked' : ''}${x.id === R.sel ? ' sel' : ''}${R.seen[markKey(x)] ? '' : ' unseen'}${x.also && x.also.length ? ' multi' : ''}">
     <td class="num-c">${i + 1}</td><td>${esc(x.platform)}</td>
     <td>${zoneCell(x)}</td>
     <td class="addr">${R.seen[markKey(x)] ? '' : '<b class="new-dot" title="Ещё не просмотрено">●</b>'}<span class="addr-t">${esc(x.address)}</span><button class="copy-a" title="Скопировать адрес"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>${x.also && x.also.length ? x.also.map(y => `<span class="also" title="Это помещение есть и в проверке ${esc(y.platform)}"><i style="background:${zoneColor(y)}"></i>${esc(y.platform)}: ${esc(y.zone)}</span>`).join('') : ''}${x.archived ? '<span class="also">из архива</span>' : ''}${x.metro ? `<small>${esc(x.metro)}</small>` : ''}${x.note ? `<small class="note">${esc(x.note)}</small>` : ''}</td>
@@ -578,7 +590,7 @@ $('rLstExt').onclick = () => { const x = R.rows[R.sel]; if (x && x.url) pvz.open
 const modalIsOpen = () => $('modal').classList.contains('on');
 const visRect = id => { const e = $(id); if (!e || e.offsetParent === null) return null; const r = rectOf(id); return r.width > 50 && r.height > 50 ? r : null; };
 function syncRects() {
-  const away = document.body.dataset.mode !== 'results' || modalIsOpen() || R.dragging;
+  const away = document.body.dataset.mode !== 'results' || modalIsOpen() || R.dragging || $('rMoreMenu').classList.contains('on');
   const s = shown(), has = R.sel != null && !away;
   const full = document.querySelector('.r-body .full');
   const vis = id => has && (!full || full.contains($(id))) ? visRect(id) : null;
@@ -655,6 +667,14 @@ async function restoreSizes() {
 }
 new ResizeObserver(() => placeSplitters()).observe(document.querySelector('.r-body'));
 // отметить все видимые (вкладка дня / выгрузка / фильтры) как просмотренные
+$('rSeenAll').onclick = () => { closeMore(); markAllSeen(); };
+$('rDedup').onchange = e => { R.dedup = e.target.checked; pvz.setCfg({ resDedup: R.dedup }); renderDays(); renderResults(true); };
+// меню «⋯»: пока открыто, встроенные карты и сайт прячутся (иначе они перекрыли бы меню)
+const moreOpen = () => $('rMoreMenu').classList.contains('on');
+function closeMore() { if (moreOpen()) { $('rMoreMenu').classList.remove('on'); syncRects(); } }
+$('rMoreBtn').onclick = e => { e.stopPropagation(); $('rMoreMenu').classList.toggle('on'); syncRects(); };
+document.addEventListener('click', e => { if (!e.target.closest('.more-wrap')) closeMore(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMore(); });
 function markAllSeen() {
   const now = Date.now(); let n = 0;
   for (const x of R.list) { const k = markKey(x); if (!R.seen[k]) { R.seen[k] = now; n++; } }
@@ -748,6 +768,7 @@ function markSeen(x, tr) {
 window.openWatch = () => { R.day = 'watch'; openPage('results'); };
 // перепроверка зон: заново (без памяти результатов) для выгрузок, строки которых сейчас в списке
 $('rRecheck').onclick = async () => {
+  closeMore();
   const files = [...new Set(R.list.filter(x => !x.archived).map(x => x.filePath))];
   const src = files.length ? await pvz.resultSources(files) : [];
   if (!src.length) { showModal({ kind: 'info', title: 'Нечего перепроверять', text: 'Не нашёл исходные выгрузки для строк в списке (возможно, файлы перенесены).' }); return; }
@@ -755,12 +776,13 @@ $('rRecheck').onclick = async () => {
   if (!v) return;
   const r = await pvz.ozonStart(src, { fresh: true });
   if (!r.ok) { showModal({ kind: 'err', title: 'Не запустилось', text: r.error }); return; }
-  $('rRecheck').disabled = true; $('rRecheck').textContent = '↻ Перепроверяю…';
+  $('rRecheck').disabled = true; $('rMoreBtn').classList.add('busy'); $('rBusy').textContent = '↻ Перепроверяю зоны…';
 };
-pvz.onOzonStatus(s => { if (document.body.dataset.mode === 'results' && $('rRecheck').disabled) $('rRecheck').textContent = '↻ ' + String(s.text || '').split('\n')[0].slice(0, 40); });
-pvz.onOzonDone(() => { if ($('rRecheck').disabled) { $('rRecheck').disabled = false; $('rRecheck').textContent = '↻ Перепроверить зоны'; if (document.body.dataset.mode === 'results') loadResults(); } });
+pvz.onOzonStatus(s => { if ($('rRecheck').disabled) $('rBusy').textContent = '↻ ' + prettyNums(String(s.text || '').split('\n')[0]); });
+pvz.onOzonDone(() => { if ($('rRecheck').disabled) { $('rRecheck').disabled = false; $('rMoreBtn').classList.remove('busy'); $('rBusy').textContent = ''; if (document.body.dataset.mode === 'results') loadResults(); } });
 // экспорт отмеченных
 $('rExport').onclick = async () => {
+  closeMore();
   const list = R.rows.filter(x => x.mark && !(R.dedup && x.dupHidden));
   if (!list.length) { showModal({ kind: 'info', title: 'Нет отмеченных', text: 'Отметьте объявления галочкой справа в таблице.' }); return; }
   const v = await showModal({ kind: 'info', title: `Экспорт отмеченных (${fmtNum(list.length)})`, text: 'Как выгрузить?',
@@ -852,7 +874,7 @@ $('sAdd').onclick = () => {
 // запуск задания по расписанию
 const wait = ms => new Promise(r => setTimeout(r, ms));
 pvz.onRunSchedule(async s => {
-  if (running) { pvz.notify('PVZ Master', `Задание «${s.name || ''}» пропущено: идёт другая выгрузка.`); return; }
+  if (running || (window.wizBusy && wizBusy())) { pvz.notify('PVZ Master', `Задание «${s.name || ''}» (${s.time}) пропущено: идёт другая выгрузка.`); return; }
   let report = [];
   try {
     if (s.kind === 'winner') {
@@ -904,3 +926,49 @@ $('rColsBtn').onclick = e => {
 };
 document.addEventListener('click', e => { if (!e.target.closest('#rColsMenu')) $('rColsMenu').classList.remove('on'); });
 pvz.getCfg().then(c => { hiddenCols = (c.resHiddenCols || []).map(String); applyCols(); });
+
+// ---------- клавиши в «Результатах»: ↑/↓ — соседнее объявление, Пробел — просмотрено / не просмотрено, S — отслеживать ----------
+document.addEventListener('keydown', e => {
+  if (document.body.dataset.mode !== 'results' || modalIsOpen() || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target.closest && e.target.closest('input, select, textarea, [contenteditable]')) return;
+  const list = R.list.slice(0, 1000); if (!list.length) return;
+  const i = list.findIndex(x => x.id === R.sel);
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const j = i < 0 ? 0 : Math.max(0, Math.min(list.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)));
+    if (j === i) return;
+    const x = list[j]; selectRow(x.id, false);
+    const m = R.markers.get(x.id); if (m && R.map) { R.map.panTo(m.getLatLng(), { animate: true, duration: .3 }); m.openPopup(); }
+    return;
+  }
+  if (i < 0) return;
+  const x = list[i], tr = document.querySelector(`#rRows tr[data-id="${x.id}"]`), k = markKey(x);
+  if (e.key === ' ' || e.code === 'Space') {
+    e.preventDefault();
+    if (R.seen[k]) { delete R.seen[k]; if (tr) { tr.classList.add('unseen'); const a = tr.querySelector('.addr-t'); if (a && !tr.querySelector('.new-dot')) a.insertAdjacentHTML('beforebegin', '<b class="new-dot" title="Ещё не просмотрено">●</b>'); } pvz.setCfg({ resSeen: R.seen }); renderDays(); toast('Не просмотрено'); }
+    else { markSeen(x, tr); toast('Просмотрено'); }
+  } else if (e.code === 'KeyS') {
+    e.preventDefault(); const st = tr && tr.querySelector('.star'); if (st) st.click(); toast(R.watch[k] ? '★ В отслеживаемых' : 'Убрано из отслеживаемых');
+  }
+});
+$('rCount').title = 'Клавиши: ↑/↓ — соседнее объявление, Пробел — просмотрено / не просмотрено, S — отслеживать';
+
+// ---------- сводка за сегодня на главном экране: выгружено · подходящих (зелёных) · не просмотрено ----------
+async function homeSummary() {
+  try {
+    const today = dayKey(Date.now());
+    const [h, r, c] = await Promise.all([pvz.history(), pvz.results(), pvz.getCfg()]);
+    const exported = h.filter(x => x.type === 'export' && x.ok !== false && dayKey(x.time) === today).reduce((a, x) => a + (x.total || 0), 0);
+    const seen = c.resSeen || {}, rows = new Map();
+    for (const x of r.rows) if (dayKey(x.exported || x.checked) === today) rows.set(markKey(x), x);
+    const list = [...rows.values()], green = list.filter(x => x.platform === 'Ozon' && x.zone === 'зелёный').length, unseen = list.filter(x => !seen[markKey(x)]).length;
+    const el = $('homeSum');
+    if (!exported && !list.length) { el.style.display = 'none'; return; }
+    el.innerHTML = `Сегодня: выгружено <b>${fmtNum(exported)}</b> · подходящих <b>${fmtNum(list.length)}</b>` + (green ? `, из них <b class="g">${fmtNum(green)} зелёных</b>` : '') + (unseen ? ` · не просмотрено <b class="u">${fmtNum(unseen)}</b>` : list.length ? ' · всё просмотрено ✓' : '');
+    el.style.display = '';
+  } catch (e) { pvz.logError('сводка дня', String(e && e.message || e)); }
+}
+$('homeSum').onclick = () => { R.day = dayKey(Date.now()); R.up = 'all'; openPage('results'); };
+new MutationObserver(() => { if (document.body.dataset.mode === 'welcome') homeSummary(); }).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
+pvz.onOzonDone(() => { if (document.body.dataset.mode === 'welcome') setTimeout(homeSummary, 500); });
+homeSummary();

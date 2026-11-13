@@ -36,8 +36,7 @@ async function loadSettings() {
   setNum($('setGreenMin'), c.ozonGreenMin || 60);
   $('setCache').value = c.ozonCache === false ? '0' : '1';
   $('setExpert').checked = !!c.showExpert;
-  $('setTestSup').checked = !!c.testSupport;
-  $('setTestSplit').checked = !!c.testSplit;
+  $('setTestSup').checked = c.testSupport !== false;
   $('sTray').checked = c.tray !== false; $('sAuto').checked = !!c.autostart;
   const mode = window.getThemeMode ? getThemeMode() : 'auto';
   $('setTheme').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === mode));
@@ -55,7 +54,6 @@ $('setGreenMin').onchange = () => { const v = Math.max(1, numOf($('setGreenMin')
 $('setCache').onchange = () => pvz.setCfg({ ozonCache: $('setCache').value === '1' });
 $('setExpert').onchange = () => { pvz.setCfg({ showExpert: $('setExpert').checked }); $('expertBtn').style.display = $('setExpert').checked ? '' : 'none'; };
 $('setTestSup').onchange = () => pvz.setCfg({ testSupport: $('setTestSup').checked });
-$('setTestSplit').onchange = () => pvz.setCfg({ testSplit: $('setTestSplit').checked, resSplit: false });
 $('setOpenExpert').onclick = () => $('expertBtn').click();
 $('setTheme').querySelectorAll('button').forEach(b => (b.onclick = () => { window.setThemeMode && setThemeMode(b.dataset.v); $('setTheme').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); }));
 $('sTray').onchange = () => pvz.setCfg({ tray: $('sTray').checked });
@@ -88,10 +86,12 @@ function showJoke(step) {
   $('jokeSrc').dataset.href = j.link || 'https://www.anekdot.ru/';
 }
 async function loadJokes() {
-  jokes = await pvz.jokes().catch(() => []);
-  if (!jokes.length) return;
-  jokeI = Math.floor(Math.random() * jokes.length); $('joke').style.display = ''; showJoke(0);
+  const best = !!(await pvz.getCfg()).jokesBest; $('jokeBest').checked = best;
+  const list = await pvz.jokes(best).catch(() => []);
+  if (!list.length) { if (!jokes.length) return; } else jokes = list;
+  jokeI = Math.floor(Math.random() * jokes.length); $('jokeWrap').style.display = ''; showJoke(0);
   clearInterval(jokeT); jokeT = setInterval(() => { if (document.body.dataset.mode === 'welcome') showJoke(1); }, 25000);
 }
 $('joke').onclick = e => { if (e.target.id === 'jokeSrc') { e.preventDefault(); pvz.openExternal(e.target.dataset.href); return; } showJoke(1); };
+$('jokeBest').onchange = async () => { await pvz.setCfg({ jokesBest: $('jokeBest').checked }); loadJokes(); };
 loadJokes(); setInterval(loadJokes, 3 * 3600e3);

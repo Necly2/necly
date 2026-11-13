@@ -21,6 +21,7 @@
     <h1>PVZ Master</h1>
     <p class="muted">Поиск помещений под пункты выдачи</p>
     <button class="start" id="startBtn">Начать работу</button>
+    <button class="home-sum" id="homeSum" style="display:none" title="Открыть результаты за сегодня"></button>
     <div class="zone-note" id="zoneNote" style="display:none"><b>Ozon обновил карту зон</b><span id="zoneNoteT"></span>
       <div class="zn-act"><button class="ghost sm" id="zoneNoteRes">Открыть результаты</button><button class="ghost sm" id="zoneNoteHide">Понятно</button></div></div>
     <div class="brands">
@@ -28,7 +29,7 @@
       <span>Ozon</span><span>Яндекс Маркет</span><span>Wildberries</span>
     </div>
   </div>
-  <div class="joke" id="joke" style="display:none" title="Щёлкните — следующий"><div class="joke-t" id="jokeT"></div><a href="#" id="jokeSrc">anekdot.ru</a></div>
+  <div class="joke-wrap" id="jokeWrap" style="display:none"><label class="switch joke-sw" title="Только лучшие анекдоты дня по оценкам читателей anekdot.ru"><input type="checkbox" id="jokeBest"><span></span>Только смешные</label><div class="joke" id="joke" title="Щёлкните — следующий"><div class="joke-t" id="jokeT"></div><a href="#" id="jokeSrc">anekdot.ru</a></div></div>
 </section>
 
 <!-- ================= МАСТЕР ================= -->
@@ -63,9 +64,15 @@
     <button class="icon-btn back-home" title="На главный экран"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
     <h1>Результаты</h1><span class="muted" id="rCount"></span>
     <span class="grow"></span>
-    <button class="ghost" id="rRecheck" title="Проверить зоны заново для выгрузок, которые сейчас в списке (без памяти результатов)">↻ Перепроверить зоны</button>
-    <button class="ghost" id="rExport">⬇ Экспорт отмеченных</button>
+    <span class="muted r-busy" id="rBusy"></span>
     <button class="ghost" id="rReload"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>Обновить</button>
+    <div class="more-wrap"><button class="ghost more-btn" id="rMoreBtn" title="Ещё действия">⋯</button>
+      <div class="more-menu" id="rMoreMenu">
+        <button id="rExport"><i>⬇</i>Экспорт отмеченных</button>
+        <button id="rSeenAll" title="Все объявления, которые сейчас в списке (выбранный день / выгрузка / фильтры)"><i>✓</i>Отметить все просмотренными</button>
+        <button id="rRecheck" title="Проверить зоны заново для выгрузок, которые сейчас в списке (без памяти результатов)"><i>↻</i>Перепроверить зоны</button>
+        <label class="more-sw"><input type="checkbox" id="rDedup"><span class="sw"></span>Скрыть одинаковые <em id="rDupN"></em></label>
+      </div></div>
       <button class="ghost gear-btn" data-settings title="Настройки"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   </div>
   <div class="r-filters">
@@ -100,7 +107,7 @@
           <option value="wb">Wildberries</option>
           <option value="ym">Яндекс Маркет</option>
         </select>
-        <button class="ghost sm icon-sq" id="rSplit" title="Разделить: сверху карта площадки, снизу обычная карта" style="display:none"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 12h18"/></svg></button>
+        <button class="ghost sm icon-sq" id="rSplit" title="Разделить: сверху карта площадки, снизу обычная карта"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 12h18"/></svg></button>
         <select id="rBase" class="map-sel" title="Подложка карты с точками"><option value="2gis">подложка 2ГИС</option><option value="osm">подложка OSM</option></select>
         <span class="hint grow" id="rOzQ"></span>
         <div class="zoom" data-zoom="map" id="rMapZoom" style="display:none" title="Масштаб верхней карты"><button class="ghost sm" data-z="-1">−</button><span class="zv">100 %</span><button class="ghost sm" data-z="1">+</button></div>
@@ -126,6 +133,13 @@
     <button class="icon-btn back-home" title="На главный экран"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
     <h1>История</h1><span class="grow"></span>
     <button class="ghost" id="hReload"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>Обновить</button>
+    <div class="more-wrap"><button class="ghost more-btn" id="rMoreBtn" title="Ещё действия">⋯</button>
+      <div class="more-menu" id="rMoreMenu">
+        <button id="rExport"><i>⬇</i>Экспорт отмеченных</button>
+        <button id="rSeenAll" title="Все объявления, которые сейчас в списке (выбранный день / выгрузка / фильтры)"><i>✓</i>Отметить все просмотренными</button>
+        <button id="rRecheck" title="Проверить зоны заново для выгрузок, которые сейчас в списке (без памяти результатов)"><i>↻</i>Перепроверить зоны</button>
+        <label class="more-sw"><input type="checkbox" id="rDedup"><span class="sw"></span>Скрыть одинаковые <em id="rDupN"></em></label>
+      </div></div>
       <button class="ghost gear-btn" data-settings title="Настройки"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   </div>
   <div class="h-grid">
@@ -173,12 +187,7 @@
     <div class="box"><div class="box-h">Проверка Ozon</div>
       <div class="set-row"><span>Зелёная зона — площадь от, м²<small class="muted"> (Ozon сейчас пишет «от 60 м²»)</small></span><input type="text" class="num" id="setGreenMin" inputmode="numeric" style="width:90px"></div>
       <div class="set-row"><span>Помнить результаты проверки</span><select id="setCache"><option value="1">3 дня</option><option value="0">не помнить</option></select></div>
-    </div>
-    <div class="box"><div class="box-h">Тестовые функции</div>
-      <label class="switch"><input type="checkbox" id="setTestSup"><span></span><span class="lbl">Ozon: вместо цвета зоны — поддержка под площадь объявления <small>сумма в месяц для ступени площади (25–40, 40–60, 60+ м²); если площади нет или адрес проверялся раньше — цвет зоны, как прежде. Работает для проверок, сделанных с этой версии (или после «Перепроверить зоны»)</small></span></label>
-    </div>
-    <div class="box"><div class="box-h">Тестовые функции · карты</div>
-      <label class="switch"><input type="checkbox" id="setTestSplit"><span></span><span class="lbl">«Результаты»: кнопка «⬒ Разделить» <small>сверху — карта площадки (Ozon / WB / Яндекс Маркет), снизу — обычная карта (Яндекс, 2ГИС, OSM или точки)</small></span></label>
+      <label class="switch"><input type="checkbox" id="setTestSup"><span></span><span class="lbl">В «Результатах» вместо цвета зоны — поддержка Ozon под площадь объявления <small>сумма в месяц для ступени площади (25–40, 40–60, 60+ м²), цвет зоны — кружок рядом; если площади нет или адрес проверялся старой версией — название зоны</small></span></label>
     </div>
     <div class="box"><div class="box-h">Внешний вид</div>
       <div class="set-row"><span>Тема</span><div class="o-seg" id="setTheme"><button data-v="auto">Как в системе</button><button data-v="light">Светлая</button><button data-v="dark">Тёмная</button></div></div>
