@@ -124,6 +124,9 @@ jobs:
             cat README.md; } > release-notes.md
           cp WHATSNEW.md notes.txt
           TAG="avito-mac-latest"
+          # машина Mac могла достаться с большой задержкой — не откатывать более новое обновление, выложенное запасным путём
+          CUR=$(gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p version.txt -O - 2>/dev/null || echo 0)
+          if [ "${CUR:-0}" -gt "${{ github.run_number }}" ]; then echo "На Mac уже сборка $CUR — эту не выкладываю"; exit 0; fi
           gh release delete "$TAG" --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
           gh release create "$TAG" PVZ-Master-Mac-arm64.zip PVZ-Master-Mac-x64.zip app.asar version.txt notes.txt -R "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
