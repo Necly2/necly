@@ -578,3 +578,21 @@ body.site-open .wz-site{padding:12px 14px 12px 12px}
 .fold-row > span:last-child{display:flex;gap:6px;align-items:center;flex-wrap:nowrap;flex:none}
 .fold-row > span:first-child{min-width:0}
 #setupRows,#setFolders{display:flex;flex-direction:column;gap:10px}
+
+/* результаты: выгрузки дня, отметки, совпадения, отслеживаемые */
+.r-ups{display:none;padding-left:14px;border-left:2px solid var(--line2);margin-left:6px}
+.r-ups.on{display:flex}
+.r-days .grow{flex:1}
+.tgl{display:inline-flex;align-items:center;cursor:pointer}
+.tgl input{display:none}
+.tgl span{padding:6px 11px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--muted);font-size:12px;font-weight:600}
+.tgl input:checked + span{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.r-table tr.unseen td.addr{font-weight:650}
+.new-dot{color:var(--accent);font-size:10px;margin-right:6px;vertical-align:1px}
+.also{display:inline-flex;align-items:center;gap:5px;margin-left:8px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid var(--line2);color:var(--sub);vertical-align:1px;white-space:nowrap}
+.also i{width:8px;height:8px;border-radius:50%}
+.r-table tr.multi td:first-child{box-shadow:inset 3px 0 0 #a855f7}
+.r-table td.acts{white-space:nowrap}
+.star{border:none;background:none;color:var(--muted);font-size:16px;cursor:pointer;padding:0 0 0 8px;vertical-align:-1px}
+.star.on{color:#f5b301}
+.star:hover{color:#f5b301}

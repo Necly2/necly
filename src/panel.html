@@ -58,6 +58,7 @@
     <button class="icon-btn back-home" title="На главный экран"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
     <h1>Результаты</h1><span class="muted" id="rCount"></span>
     <span class="grow"></span>
+    <button class="ghost" id="rExport">⬇ Экспорт отмеченных</button>
     <button class="ghost" id="rReload"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>Обновить</button>
   </div>
   <div class="r-filters">
@@ -68,6 +69,7 @@
     <label class="field grow">Поиск<input id="rSearch" type="text" placeholder="адрес, метро, источник"></label>
   </div>
   <div class="r-days" id="rDays"></div>
+  <div class="r-days r-ups" id="rUps"></div>
   <div class="r-body">
     <div class="r-table-wrap"><table class="r-table"><thead><tr>
       <th class="num-c">№</th><th data-k="platform">Площадка</th><th data-k="zone">Зона</th><th data-k="address">Адрес</th><th data-k="areaMin" class="n">Площадь</th><th data-k="price" class="n">Цена</th><th data-k="checked">Проверено</th><th></th><th class="mk" data-k="mark" title="Отмеченные — щёлкните, чтобы отсортировать">✓</th>
