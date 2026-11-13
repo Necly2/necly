@@ -445,7 +445,15 @@ const FIND_INPUT = `(async () => {
   for (let i = 0; i < 40 && !inp; i++) {
     all = [...document.querySelectorAll('input:not([type=hidden]):not([type=checkbox]):not([type=radio]),textarea')].filter(vis);
     inp = all.find(e => /адрес|поиск|найти|search|город|улиц/i.test((e.placeholder || '') + ' ' + (e.getAttribute('aria-label') || '') + ' ' + (e.name || ''))) || all[0];
-    if (!inp) await sleep(500);
+    if (!inp) {
+      // поле поиска спрятано за кнопкой-лупой (как на карте WB) — нажать её
+      if (i === 4 || i === 12) {
+        const b = [...document.querySelectorAll('[aria-label*="оиск" i], [aria-label*="search" i], [title*="оиск" i], [data-testid*="search" i], button[class*="search" i], [class*="search" i] button, [class*="Search" i][role="button"], div[class*="search" i]')]
+          .find(e => { const r = e.getBoundingClientRect(); return r.width > 10 && r.width < 400 && r.height > 10 && r.height < 120; });
+        if (b) { b.click(); ['pointerdown', 'mousedown', 'pointerup', 'mouseup'].forEach(t => b.dispatchEvent(new MouseEvent(t, { bubbles: true }))); }
+      }
+      await sleep(500);
+    }
   }
   if (!inp) return { ok: false, why: 'на странице нет поля поиска', title: document.title, url: location.href };
   inp.scrollIntoView({ block: 'center' }); inp.focus(); inp.select && inp.select();
