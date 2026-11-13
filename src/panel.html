@@ -33,6 +33,7 @@
   <header class="wz-top">
     <button class="ghost home-btn" id="wzHome" title="На главный экран"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>Главная</button>
     <ol class="steps" id="wzSteps"></ol>
+    <button class="ghost home-btn gear-btn" data-settings title="Настройки"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>Настройки</button>
   </header>
   <div class="wz-bar" id="wzBar"></div>
   <div class="wz-main">
@@ -61,6 +62,7 @@
     <button class="ghost" id="rRecheck" title="Проверить зоны заново для выгрузок, которые сейчас в списке (без памяти результатов)">↻ Перепроверить зоны</button>
     <button class="ghost" id="rExport">⬇ Экспорт отмеченных</button>
     <button class="ghost" id="rReload"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>Обновить</button>
+      <button class="ghost gear-btn" data-settings title="Настройки"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></button>
   </div>
   <div class="r-filters">
     <div class="r-chips" id="rPlat"><label><input type="checkbox" value="Ozon" checked><span>Ozon</span></label><label><input type="checkbox" value="Яндекс" checked><span>Яндекс</span></label><label><input type="checkbox" value="WB" checked><span>WB</span></label></div>
@@ -78,10 +80,10 @@
     <div class="r-lst" id="rLstCol">
       <div class="r-maptools"><b>Объявление</b><span class="hint grow" id="rLstQ"></span>
         <div class="zoom" data-zoom="listing"><button class="ghost sm" data-z="-1">−</button><span class="zv">100 %</span><button class="ghost sm" data-z="1">+</button></div>
-        <button class="ghost sm" id="rLstExt" title="Открыть в браузере">↗</button></div>
+        <button class="ghost sm" id="rLstExt" title="Открыть в браузере">↗</button><button class="ghost sm fs-btn" data-fs="rLstCol" title="Во весь экран">⤢</button></div>
       <div class="r-map oz-host" id="rLstHost"><div class="oz-wait">Выберите объявление в таблице</div></div>
     </div>
-    <div class="r-mapcol">
+    <div class="r-mapcol" id="rMapCol">
       <div class="r-maptools">
         <select id="rMapSel" class="map-sel">
           <option value="res">Точки результатов</option>
@@ -94,15 +96,21 @@
           <option value="wb">Wildberries</option>
           <option value="ym">Яндекс Маркет</option>
         </select>
+        <button class="ghost sm" id="rSplit" title="Тест: сверху карта площадки, снизу обычная карта" style="display:none">⬒ Разделить</button>
         <select id="rBase" class="map-sel" title="Подложка карты с точками"><option value="2gis">подложка 2ГИС</option><option value="osm">подложка OSM</option></select>
         <span class="hint grow" id="rOzQ"></span>
         <div class="zoom" data-zoom="map" id="rMapZoom" style="display:none"><button class="ghost sm" data-z="-1">−</button><span class="zv">100 %</span><button class="ghost sm" data-z="1">+</button></div>
         <button class="ghost sm" id="rOzReload" title="Перезагрузить карту" style="display:none">↻</button>
         <label class="tgl" title="Показывать сайт объявления рядом с картой"><input type="checkbox" id="rShowLst"><span>Сайт объявления</span></label>
+        <button class="ghost sm fs-btn" data-fs="rMapCol" title="Во весь экран">⤢</button>
       </div>
-      <div class="r-map" id="rMap"></div>
-      <div class="r-map oz-host" id="rOzHost"><div class="oz-wait">Загружаю карту…</div></div>
+      <div class="map-area" id="rMapArea">
+        <div class="r-map oz-host" id="rOzHost"><div class="oz-wait">Загружаю карту…</div></div>
+        <div class="r-map" id="rMap"></div>
+        <div class="r-map oz-host" id="rGenHost"><div class="oz-wait">Загружаю карту…</div></div>
+      </div>
     </div>
+    <button class="fs-exit" id="fsExit">✕ Выйти из полноэкранного режима <small>Esc</small></button>
   </div>
 </section>
 
@@ -112,6 +120,7 @@
     <button class="icon-btn back-home" title="На главный экран"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
     <h1>История</h1><span class="grow"></span>
     <button class="ghost" id="hReload"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>Обновить</button>
+      <button class="ghost gear-btn" data-settings title="Настройки"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></button>
   </div>
   <div class="h-grid">
     <div class="h-list" id="hList"></div>
@@ -131,6 +140,7 @@
     <button class="icon-btn back-home" title="На главный экран"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
     <h1>Расписание</h1><span class="grow"></span>
     <button class="primary small-p" id="sAdd" style="padding:10px 18px !important">+ Добавить задание</button>
+      <button class="ghost gear-btn" data-settings title="Настройки"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></button>
   </div>
   <div class="s-wrap">
     <div class="box">
@@ -160,6 +170,9 @@
     </div>
     <div class="box"><div class="box-h">Тестовые функции</div>
       <label class="switch"><input type="checkbox" id="setTestSup"><span></span><span class="lbl">Ozon: вместо цвета зоны — поддержка под площадь объявления <small>сумма в месяц для ступени площади (25–40, 40–60, 60+ м²); если площади нет или адрес проверялся раньше — цвет зоны, как прежде. Работает для проверок, сделанных с этой версии (или после «Перепроверить зоны»)</small></span></label>
+    </div>
+    <div class="box"><div class="box-h">Тестовые функции · карты</div>
+      <label class="switch"><input type="checkbox" id="setTestSplit"><span></span><span class="lbl">«Результаты»: кнопка «⬒ Разделить» <small>сверху — карта площадки (Ozon / WB / Яндекс Маркет), снизу — обычная карта (Яндекс, 2ГИС, OSM или точки)</small></span></label>
     </div>
     <div class="box"><div class="box-h">Внешний вид</div>
       <div class="set-row"><span>Тема</span><div class="o-seg" id="setTheme"><button data-v="auto">Как в системе</button><button data-v="light">Светлая</button><button data-v="dark">Тёмная</button></div></div>

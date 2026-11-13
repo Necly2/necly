@@ -37,6 +37,7 @@ async function loadSettings() {
   $('setCache').value = c.ozonCache === false ? '0' : '1';
   $('setExpert').checked = !!c.showExpert;
   $('setTestSup').checked = !!c.testSupport;
+  $('setTestSplit').checked = !!c.testSplit;
   $('sTray').checked = c.tray !== false; $('sAuto').checked = !!c.autostart;
   const mode = window.getThemeMode ? getThemeMode() : 'auto';
   $('setTheme').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === mode));
@@ -54,6 +55,7 @@ $('setGreenMin').onchange = () => { const v = Math.max(1, numOf($('setGreenMin')
 $('setCache').onchange = () => pvz.setCfg({ ozonCache: $('setCache').value === '1' });
 $('setExpert').onchange = () => { pvz.setCfg({ showExpert: $('setExpert').checked }); $('expertBtn').style.display = $('setExpert').checked ? '' : 'none'; };
 $('setTestSup').onchange = () => pvz.setCfg({ testSupport: $('setTestSup').checked });
+$('setTestSplit').onchange = () => pvz.setCfg({ testSplit: $('setTestSplit').checked, resSplit: false });
 $('setOpenExpert').onclick = () => $('expertBtn').click();
 $('setTheme').querySelectorAll('button').forEach(b => (b.onclick = () => { window.setThemeMode && setThemeMode(b.dataset.v); $('setTheme').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); }));
 $('sTray').onchange = () => pvz.setCfg({ tray: $('sTray').checked });

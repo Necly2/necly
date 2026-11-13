@@ -565,9 +565,6 @@ function extView(key) {
 }
 const setB = (v, rect) => { if (rect && rect.width > 50) { v.setBounds({ x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) }); v.setVisible(true); } else v.setVisible(false); };
 ipcMain.handle('extRect', (_e, key, rect) => {
-  // показать key в его слоте, остальные карты слота спрятать
-  const slot = key === 'listing' ? ['listing'] : Object.keys(EXT).filter(k => k !== 'listing');
-  for (const k of slot) if (ext[k] && k !== key) ext[k].view.setVisible(false);
   if (key && ext[key]) setB(ext[key].view, rect);
 });
 ipcMain.handle('extHideAll', (_e, slot) => { for (const [k, e] of Object.entries(ext)) if (!slot || (slot === 'listing') === (k === 'listing')) e.view.setVisible(false); });
@@ -698,7 +695,7 @@ async function selfTest(dir) {
     await J(`(()=>{const z=['голубой','синий','зелёный'];const rows=Array.from({length:14},(_,i)=>({platform:'Ozon',zone:z[i%3],address:'Москва, ул. Тестовая, '+(i%10+1),metro:'м. Пример',note:'',areaMin:30+(i%10),price:50000+i*5000,checked:Date.now()-Math.floor(i/6)*864e5-(i%2)*3600e3,url:'https://x/'+i,lat:55.7+i*0.01,lon:37.5+i*0.01,file:'OZON export_excel ЦИАН 13 '+(1+i%2)+'.xlsx'}));rows.push({platform:'Яндекс',zone:'синий',address:'ул. Тестовая, 2',metro:'',note:'',areaMin:31,price:55000,checked:Date.now(),url:'https://x/y',lat:55.71,lon:37.51,file:'ЯНДЕКС export_excel ЦИАН 13 1.xlsx'});R.marks={};R.seen={'https://x/3':1};R.watch={};prepRows(rows);R.day=dayKey(Date.now());renderDays();renderResults(true);})(); 1`);
     await W8(1500); await shot('09-results-fake');
     if (process.env.PVZ_EXT) {
-      await J(`selectRow(1,true); setMapMode('yandex'); R.showLst=true; applyLst(); 1`); await W8(14000);
+      await J(`selectRow(1,true); R.split=true; setMapMode('yandex'); setMapMode('wb'); R.showLst=true; applyLst(); 1`); await W8(14000); await shot('11-split');
       if (ext.yandex) fs.writeFileSync(path.join(dir, '12-yandex.png'), (await ext.yandex.view.webContents.capturePage()).toPNG());
       console.log('LST', await J(`JSON.stringify([rectOf('rLstHost'), R.showLst, R.sel, document.querySelector('.r-body').className])`)); console.log('EXT', JSON.stringify(Object.fromEntries(Object.entries(ext).map(([k, e]) => [k, { url: e.view.webContents.getURL(), vis: e.view.getVisible(), b: e.view.getBounds() }]))));
     }

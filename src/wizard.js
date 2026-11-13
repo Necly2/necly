@@ -631,6 +631,7 @@ async function goHome() {
   document.body.dataset.mode = 'welcome'; $('welcome').classList.remove('leave');
   pvz.nav('welcome');
 }
+window.wizResume = () => { document.body.dataset.mode = 'wizard'; pvz.siteRect(null); setTimeout(sendRect, 60); render(); };
 window.openWizard = async function () {
   const c = await pvz.getCfg();
   if (c.wizard) { Object.assign(W, { sources: c.wizard.sources || W.sources, checks: c.wizard.checks || W.checks, params: Object.assign({}, DEF_PARAMS, c.wizard.params || {}), avitoUrl: c.wizard.avitoUrl || null, orders: c.wizard.orders || {}, scenario: c.wizard.scenario || '' }); }

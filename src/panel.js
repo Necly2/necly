@@ -331,7 +331,12 @@ function openPage(page) {
 document.querySelectorAll('[data-page]').forEach(el => (el.onclick = e => { e.preventDefault(); if (el.dataset.page === 'watch') { window.openWatch && openWatch(); return; } openPage(el.dataset.page); }));
 // при возврате на главный экран центр всегда видим (раньше оставался класс анимации ухода — кнопки пропадали)
 new MutationObserver(() => { if (document.body.dataset.mode === 'welcome') $('welcome').classList.remove('leave'); }).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
-document.querySelectorAll('.back-home').forEach(b => (b.onclick = () => { document.body.dataset.mode = 'welcome'; }));
+let backTo = 'welcome';
+document.querySelectorAll('.back-home').forEach(b => (b.onclick = () => {
+  if (b.closest('#settings') && backTo !== 'welcome' && backTo !== 'settings') { const t = backTo; backTo = 'welcome'; if (t === 'wizard') { window.wizResume && wizResume(); } else openPage(t); return; }
+  document.body.dataset.mode = 'welcome';
+}));
+document.querySelectorAll('[data-settings]').forEach(b => (b.onclick = () => { backTo = document.body.dataset.mode; openPage('settings'); }));
 pvz.onOpenPage(p => openPage(p));
 window.addEventListener('error', e => pvz.logError('интерфейс', `${e.message} @ ${String(e.filename).split('/').pop()}:${e.lineno}`));
 window.addEventListener('unhandledrejection', e => pvz.logError('интерфейс', String(e.reason && (e.reason.stack || e.reason.message) || e.reason)));
@@ -355,11 +360,12 @@ function renderDays() {
   const b = (k, label, n) => `<button data-day="${k}" class="${R.day === k ? 'on' : ''}${n ? '' : ' empty'}">${label}<span>${fmtNum(n)}</span></button>`;
   const total = R.rows.filter(x => !(x.dupHidden && R.dedup)).length;
   $('rDays').innerHTML = b('all', 'Все', total) + days.map(([k, l]) => b(k, l, cnt[k] || 0)).join('') + '<i></i>' + b('marked', '✓ Отмеченные', marked) + b('watch', '★ Отслеживаемые', watched)
-    + `<span class="grow"></span><label class="tgl"><input type="checkbox" id="rNew"${R.onlyNew ? ' checked' : ''}><span>● Непросмотренные ${fmtNum(unseen)}</span></label>`
+    + `<span class="grow"></span><button class="mark-all" id="rSeenAll" title="Отметить просмотренными все объявления, которые сейчас в списке (выбранный день / выгрузка)">✓ Все просмотрены</button><label class="tgl"><input type="checkbox" id="rNew"${R.onlyNew ? ' checked' : ''}><span>● Непросмотренные ${fmtNum(unseen)}</span></label>`
     + `<label class="tgl"><input type="checkbox" id="rMatch"${R.onlyMatch ? ' checked' : ''}><span>⇄ Есть в нескольких проверках ${fmtNum(matched)}</span></label>`
     + `<label class="tgl"><input type="checkbox" id="rDedup"${R.dedup ? ' checked' : ''}><span>Скрыть одинаковые${R.dupCount ? ' (' + fmtNum(R.dupCount) + ')' : ''}</span></label>`;
   $('rDays').querySelectorAll('button').forEach(x => (x.onclick = () => { R.day = x.dataset.day; R.up = 'all'; renderDays(); renderResults(true); }));
   $('rNew').onchange = e => { R.onlyNew = e.target.checked; renderResults(true); };
+  $('rSeenAll').onclick = markAllSeen;
   $('rMatch').onchange = e => { R.onlyMatch = e.target.checked; renderResults(true); };
   $('rDedup').onchange = e => { R.dedup = e.target.checked; pvz.setCfg({ resDedup: R.dedup }); renderDays(); renderResults(true); };
   // выгрузки выбранного дня: «Все выгрузки за день» + по кнопке на каждую выгрузку
@@ -400,6 +406,7 @@ async function loadResults() {
   const r = await pvz.results();
   const cfg = await pvz.getCfg();
   if (R.showLst === undefined) { R.showLst = cfg.resShowLst != null ? (cfg.resShowLst && lstAuto()) || (cfg.resShowLst && window.innerWidth >= 1400) : lstAuto(); R.base = cfg.resBase || '2gis'; $('rBase').value = R.base; R.mapMode = cfg.resMap || 'res'; }
+  R.testSplit = !!cfg.testSplit; $('rSplit').style.display = R.testSplit ? '' : 'none'; R.split = R.testSplit && !!cfg.resSplit;
   R.testSup = !!cfg.testSupport;
   R.marks = cfg.resMarks || {}; R.seen = cfg.resSeen || {}; R.watch = cfg.resWatch || {}; if (cfg.resDedup === false) R.dedup = false;
   prepRows(r.rows);
@@ -469,48 +476,63 @@ function ozQuery(x) {
 }
 const rectOf = id => { const b = $(id).getBoundingClientRect(); return { x: b.left, y: b.top, width: b.width, height: b.height }; };
 const ozRect = () => rectOf('rOzHost');
-// какая карта выбрана справа: «res» — точки (Leaflet), «ozon» — карта Ozon, остальные — сайты карт
-R.mapMode = 'res';
-const MAP_NAMES = { yandex: 'Яндекс.Карты', '2gis': '2ГИС', osm: 'OpenStreetMap', ozon: 'Карта Ozon', wb: 'Карта WB', ym: 'Карта Яндекс Маркета' };
+// справа карты: обычная (точки / Яндекс / 2ГИС / OSM) или карта площадки (Ozon / WB / Яндекс Маркет);
+// тест «Разделить»: сверху карта площадки, снизу обычная
+const AGG = ['ozon', 'wb', 'ym'], GEN_EXT = ['yandex', '2gis', 'osm'];
+R.mapMode = 'res'; R.gen = 'res'; R.agg = 'ozon'; R.split = false;
 const extPoint = x => x && x.lat != null ? { lat: x.lat, lon: x.lon } : null;
-function mapQuery(x, mode) { return mode === 'ozon' ? ozQuery(x) : ozQuery(x); }
+const shown = () => R.split ? { agg: R.agg, gen: R.gen } : AGG.includes(R.mapMode) ? { agg: R.mapMode, gen: null } : { agg: null, gen: R.mapMode };
 function setMapMode(m) {
-  R.mapMode = m; R.ozon = m === 'ozon'; const agg = ['ozon', 'wb', 'ym'].includes(m); if (agg) { $('rAggSel').value = m; R.lastAgg = m; } else { $('rMapSel').value = m; R.lastMap = m; } $('rAggSel').classList.toggle('active', agg); $('rMapSel').classList.toggle('active', !agg); pvz.setCfg({ resMap: m }); $('rMapZoom').dataset.zoom = m === 'ozon' ? 'ozonmap' : m;
-  const live = m !== 'res';
-  $('rMap').style.display = live ? 'none' : ''; $('rOzHost').style.display = live ? 'block' : 'none';
-  $('rOzReload').style.display = live ? '' : 'none'; $('rBase').style.display = live ? 'none' : ''; $('rMapZoom').style.display = live ? '' : 'none';
-  if (m !== 'ozon') pvz.ozonMapRect(null);
-  if (m === 'ozon' || m === 'res') pvz.extRect(null, null); else pvz.extRect(m, null);
-  if (!live) { $('rOzQ').textContent = ''; pvz.extHideAll('map'); setTimeout(() => R.map && R.map.invalidateSize(), 30); return; }
+  if (AGG.includes(m)) R.agg = m; else R.gen = m;
+  R.mapMode = m; R.ozon = m === 'ozon';
+  $('rAggSel').value = R.agg; $('rMapSel').value = R.gen;
+  pvz.setCfg({ resMap: m });
+  layoutMaps();
   const x = R.sel != null ? R.rows[R.sel] : null;
-  if (!x) { $('rOzQ').textContent = 'Выберите объявление в таблице'; return; }
+  if (!x) { if (shown().agg || GEN_EXT.includes(shown().gen)) $('rOzQ').textContent = 'Выберите объявление в таблице'; return; }
   showOnMap(x);
 }
+function layoutMaps() {
+  const s = shown(), live = !!s.agg || GEN_EXT.includes(s.gen);
+  $('rMapArea').classList.toggle('split', R.split);
+  $('rOzHost').style.display = s.agg ? 'block' : 'none';
+  $('rMap').style.display = s.gen === 'res' ? '' : 'none';
+  $('rGenHost').style.display = GEN_EXT.includes(s.gen) ? 'block' : 'none';
+  $('rAggSel').classList.toggle('active', !!s.agg); $('rMapSel').classList.toggle('active', !!s.gen);
+  $('rSplit').classList.toggle('on', R.split); if (!R.split) { $('rOzHost').style.flex = ''; $('rMap').style.flex = ''; $('rGenHost').style.flex = ''; } setTimeout(restoreSizes, 0);
+  $('rOzReload').style.display = live ? '' : 'none'; $('rBase').style.display = s.gen === 'res' ? '' : 'none'; $('rMapZoom').style.display = live ? '' : 'none';
+  $('rMapZoom').dataset.zoom = s.agg === 'ozon' ? 'ozonmap' : s.agg || s.gen;
+  if (!live) $('rOzQ').textContent = '';
+  setTimeout(() => { R.map && R.map.invalidateSize(); syncRects(); }, 40);
+}
 async function showOnMap(x) {
-  const m = R.mapMode; if (m === 'res') return;
-  const q = mapQuery(x, m);
+  const s = shown(), q = ozQuery(x);
+  if (!s.agg && !GEN_EXT.includes(s.gen)) return;
   $('rOzQ').textContent = 'Ищу: ' + q;
   await new Promise(r => requestAnimationFrame(r));
-  const res = m === 'ozon' ? await pvz.ozonMapShow(ozRect(), q) : await pvz.extShow(m, ozRect(), q, extPoint(x));
-  if (R.mapMode !== m || R.rows[R.sel] !== x) return;
-  zoomShow(m === 'ozon' ? 'ozonmap' : m);
-  if (res && res.ok) $('rOzQ').textContent = q + (res.how === 'enter' ? ' (подсказка не появилась — нажат Enter)' : '');
-  else { $('rOzQ').textContent = 'Не удалось ввести адрес (' + ((res && res.why) || 'ошибка') + ') — он скопирован, вставьте в поиск Ctrl+V'; navigator.clipboard && navigator.clipboard.writeText(q).catch(() => {}); }
+  const jobs = [];
+  if (s.agg === 'ozon') jobs.push(pvz.ozonMapShow(rectOf('rOzHost'), q));
+  else if (s.agg) jobs.push(pvz.extShow(s.agg, rectOf('rOzHost'), q, extPoint(x)));
+  if (GEN_EXT.includes(s.gen)) jobs.push(pvz.extShow(s.gen, rectOf('rGenHost'), q, extPoint(x)));
+  const res = (await Promise.all(jobs))[0];
+  if (R.rows[R.sel] !== x) return;
+  zoomShow($('rMapZoom').dataset.zoom); syncRects();
+  if (!res || res.ok) $('rOzQ').textContent = q + (res && res.how === 'enter' ? ' (подсказка не появилась — нажат Enter)' : '');
+  else { $('rOzQ').textContent = 'Не удалось ввести адрес (' + (res.why || 'ошибка') + ') — он скопирован, вставьте в поиск Ctrl+V'; navigator.clipboard && navigator.clipboard.writeText(q).catch(() => {}); }
 }
 const showOnOzon = x => showOnMap(x);
 $('rMapSel').onchange = () => setMapMode($('rMapSel').value);
 $('rAggSel').onchange = () => setMapMode($('rAggSel').value);
-// щелчок по неактивному списку — сразу переключиться на выбранную в нём карту
 $('rMapSel').addEventListener('mousedown', () => { if (!$('rMapSel').classList.contains('active')) setMapMode($('rMapSel').value); });
 $('rAggSel').addEventListener('mousedown', () => { if (!$('rAggSel').classList.contains('active')) setMapMode($('rAggSel').value); });
-$('rOzReload').onclick = async () => { if (R.mapMode === 'ozon') await pvz.ozonMapReload(); else await pvz.extReload(R.mapMode); const x = R.rows[R.sel]; if (x) setTimeout(() => showOnMap(x), 1800); };
-$('rMapZoom').querySelectorAll('[data-z]').forEach(b => b.addEventListener('click', () => ($('rMapZoom').dataset.zoom = R.mapMode === 'ozon' ? 'ozonmap' : R.mapMode), true));
+$('rSplit').onclick = () => { R.split = !R.split; pvz.setCfg({ resSplit: R.split }); layoutMaps(); const x = R.rows[R.sel]; if (x) showOnMap(x); };
+$('rOzReload').onclick = async () => { const s = shown(); if (s.agg === 'ozon') await pvz.ozonMapReload(); else if (s.agg) await pvz.extReload(s.agg); if (GEN_EXT.includes(s.gen)) await pvz.extReload(s.gen); const x = R.rows[R.sel]; if (x) setTimeout(() => showOnMap(x), 1800); };
+$('rMapZoom').querySelectorAll('[data-z]').forEach(b => b.addEventListener('click', () => ($('rMapZoom').dataset.zoom = shown().agg === 'ozon' ? 'ozonmap' : shown().agg || shown().gen), true));
 // сайт объявления — средняя колонка
 function lstAuto() { return window.innerWidth >= 1700; }
 function applyLst() {
   const on = R.showLst; $('rShowLst').checked = on;
-  document.querySelector('.r-body').classList.toggle('with-lst', on);
-  if (!on) pvz.extRect('listing', null);
+  document.querySelector('.r-body').classList.toggle('with-lst', on); restoreSizes();
   setTimeout(() => { R.map && R.map.invalidateSize(); syncRects(); }, 60);
   if (on && R.sel != null) showListing(R.rows[R.sel]);
 }
@@ -520,34 +542,101 @@ async function showListing(x) {
   $('rLstQ').textContent = x.address;
   await new Promise(r => requestAnimationFrame(r));
   await pvz.extShow('listing', rectOf('rLstHost'), x.url);
-  zoomShow('listing');
+  zoomShow('listing'); syncRects();
 }
 $('rShowLst').onchange = () => { R.showLst = $('rShowLst').checked; pvz.setCfg({ resShowLst: R.showLst }); applyLst(); };
 $('rLstExt').onclick = () => { const x = R.rows[R.sel]; if (x && x.url) pvz.openExternal(x.url); };
-function syncRects() {
-  if (document.body.dataset.mode !== 'results' || modalIsOpen()) return;
-  if (R.sel == null) return;
-  if (R.mapMode === 'ozon') pvz.ozonMapRect(ozRect()); else if (R.mapMode !== 'res') pvz.extRect(R.mapMode, ozRect());
-  if (R.showLst) pvz.extRect('listing', rectOf('rLstHost'));
-}
+// встроенные сайты — точно на свои места (или спрятать)
 const modalIsOpen = () => $('modal').classList.contains('on');
-new ResizeObserver(syncRects).observe($('rOzHost'));
-new ResizeObserver(syncRects).observe($('rLstHost'));
-// уход со страницы или окно по центру — спрятать встроенные сайты
-new MutationObserver(() => {
-  if (document.body.dataset.mode !== 'results') { pvz.ozonMapRect(null); pvz.extHideAll(); }
-  else setTimeout(syncRects, 50);
-}).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
-new MutationObserver(() => { if (modalIsOpen()) { pvz.ozonMapRect(null); pvz.extHideAll(); } else syncRects(); }).observe($('modal'), { attributes: true, attributeFilter: ['class'] });
+const visRect = id => { const e = $(id); if (!e || e.offsetParent === null) return null; const r = rectOf(id); return r.width > 50 && r.height > 50 ? r : null; };
+function syncRects() {
+  const away = document.body.dataset.mode !== 'results' || modalIsOpen() || R.dragging;
+  const s = shown(), has = R.sel != null && !away;
+  const full = document.querySelector('.r-body .full');
+  const vis = id => has && (!full || full.contains($(id))) ? visRect(id) : null;
+  pvz.ozonMapRect(s.agg === 'ozon' ? vis('rOzHost') : null);
+  for (const k of ['wb', 'ym']) pvz.extRect(k, s.agg === k ? vis('rOzHost') : null);
+  for (const k of GEN_EXT) pvz.extRect(k, s.gen === k ? vis('rGenHost') : null);
+  pvz.extRect('listing', R.showLst ? vis('rLstHost') : null);
+}
+['rOzHost', 'rGenHost', 'rLstHost', 'rMapArea'].forEach(id => new ResizeObserver(syncRects).observe($(id)));
+window.addEventListener('resize', syncRects);
+new MutationObserver(() => setTimeout(syncRects, 50)).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
+new MutationObserver(syncRects).observe($('modal'), { attributes: true, attributeFilter: ['class'] });
+// во весь экран: сайт объявления или карты; выход — кнопкой или Esc
+function setFull(id) {
+  document.querySelectorAll('.r-body .full').forEach(e => e.classList.remove('full'));
+  if (id) $(id).classList.add('full');
+  document.body.classList.toggle('r-full', !!id);
+  setTimeout(() => { R.map && R.map.invalidateSize(); syncRects(); }, 40);
+}
+document.querySelectorAll('.fs-btn').forEach(b => (b.onclick = () => setFull($(b.dataset.fs).classList.contains('full') ? null : b.dataset.fs)));
+$('fsExit').onclick = () => setFull(null);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.body.classList.contains('r-full')) setFull(null); });
 $('rBase').onchange = () => { R.base = $('rBase').value; pvz.setCfg({ resBase: R.base }); if (R.map) { R.map.removeLayer(R.tiles); R.tiles = baseTiles().addTo(R.map); } };
 function baseTiles() {
   return R.base === 'osm' ? L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 })
     : L.tileLayer('https://tile{s}.maps.2gis.com/tiles?x={x}&y={y}&z={z}&v=1', { attribution: '© 2ГИС', subdomains: '0123', maxZoom: 18 });
 }
+// размеры панелей мышкой: ручки между таблицей, сайтом и картой (и между картами при «Разделить»)
+// во время перетаскивания встроенные сайты прячутся, чтобы мышь не «застревала» над ними
+function placeSplitters() {
+  const body = document.querySelector('.r-body'); if (!body || document.body.dataset.mode !== 'results') return;
+  const cols = [body.querySelector('.r-table-wrap'), R.showLst ? $('rLstCol') : null, $('rMapCol')].filter(Boolean);
+  const br = body.getBoundingClientRect();
+  body.querySelectorAll('.split-h').forEach(h => h.remove());
+  for (let i = 0; i < cols.length - 1; i++) {
+    const r = cols[i].getBoundingClientRect(), h = document.createElement('div');
+    h.className = 'split-h'; h.style.left = (r.right - br.left + 1) + 'px'; h.title = 'Потяните, чтобы изменить ширину';
+    h.onmousedown = e => startDrag(e, 'x', i, cols); body.appendChild(h);
+  }
+  const area = $('rMapArea'); area.querySelectorAll('.split-v').forEach(h => h.remove());
+  if (R.split) {
+    const top = $('rOzHost'), ar = area.getBoundingClientRect(), tr = top.getBoundingClientRect(), h = document.createElement('div');
+    h.className = 'split-v'; h.style.top = (tr.bottom - ar.top + 1) + 'px'; h.title = 'Потяните, чтобы изменить высоту';
+    h.onmousedown = e => startDrag(e, 'y', 0, [top, top.nextElementSibling.style.display === 'none' ? $('rGenHost') : $('rMap')]); area.appendChild(h);
+  }
+}
+function startDrag(e, axis, i, els) {
+  e.preventDefault(); R.dragging = true; syncRects();
+  const sizes = els.map(el => axis === 'x' ? el.getBoundingClientRect().width : el.getBoundingClientRect().height);
+  const start = axis === 'x' ? e.clientX : e.clientY, MIN = axis === 'x' ? 240 : 120;
+  const ov = document.createElement('div'); ov.className = 'drag-ov ' + axis; document.body.appendChild(ov);
+  const apply = s => {
+    if (axis === 'x') document.querySelector('.r-body').style.gridTemplateColumns = s.map(w => `minmax(0,${w.toFixed(0)}fr)`).join(' ');
+    else { els[0].style.flex = `${s[0].toFixed(0)} 1 0`; els[1].style.flex = `${s[1].toFixed(0)} 1 0`; }
+  };
+  const move = ev => {
+    const d = (axis === 'x' ? ev.clientX : ev.clientY) - start, s = sizes.slice();
+    const dd = Math.max(MIN - s[i], Math.min(s[i + 1] - MIN, d)); s[i] += dd; s[i + 1] -= dd; apply(s); R.sizesNow = s;
+    R.map && R.map.invalidateSize();
+  };
+  const up = () => {
+    document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); ov.remove();
+    R.dragging = false;
+    if (R.sizesNow) { const k = axis === 'y' ? 'resSizesV' : R.showLst ? 'resSizes3' : 'resSizes2'; pvz.setCfg({ [k]: R.sizesNow }); R.sizesNow = null; }
+    placeSplitters(); syncRects(); setTimeout(() => R.map && R.map.invalidateSize(), 30);
+  };
+  document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+}
+async function restoreSizes() {
+  const c = await pvz.getCfg(), s = R.showLst ? c.resSizes3 : c.resSizes2, body = document.querySelector('.r-body');
+  body.style.gridTemplateColumns = s && s.length === (R.showLst ? 3 : 2) ? s.map(w => `minmax(0,${Math.round(w)}fr)`).join(' ') : '';
+  if (c.resSizesV && R.split) { $('rOzHost').style.flex = `${Math.round(c.resSizesV[0])} 1 0`; ($('rMap').style.display === 'none' ? $('rGenHost') : $('rMap')).style.flex = `${Math.round(c.resSizesV[1])} 1 0`; }
+  setTimeout(() => { placeSplitters(); syncRects(); R.map && R.map.invalidateSize(); }, 50);
+}
+new ResizeObserver(() => placeSplitters()).observe(document.querySelector('.r-body'));
+// отметить все видимые (вкладка дня / выгрузка / фильтры) как просмотренные
+function markAllSeen() {
+  const now = Date.now(); let n = 0;
+  for (const x of R.list) { const k = markKey(x); if (!R.seen[k]) { R.seen[k] = now; n++; } }
+  if (!n) return;
+  pvz.setCfg({ resSeen: R.seen }); renderDays(); renderResults(false);
+}
 function selectRow(id, fly) {
   R.sel = id; { const x = R.rows[id]; if (x && x.lat != null && (x.flats === undefined || (x.flats && x.flats.err))) pvz.flats(x.lat, x.lon).then(f => { x.flats = f || { n: null }; paintFlats(x); }).catch(() => {}); }
   if (R.rows[id]) markSeen(R.rows[id], document.querySelector(`#rRows tr[data-id="${id}"]`));
-  if (R.mapMode && R.mapMode !== 'res') showOnMap(R.rows[id]);
+  showOnMap(R.rows[id]);
   if (R.showLst) showListing(R.rows[id]);
   document.querySelectorAll('#rRows tr.sel').forEach(t => t.classList.remove('sel'));
   const tr = document.querySelector(`#rRows tr[data-id="${id}"]`);
