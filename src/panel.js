@@ -353,12 +353,12 @@ const matchKey = x => normAddr(x.address) + '|' + (x.areaMin ?? '');
 const upKey = x => x.file.replace(/^(OZON|ЯНДЕКС|WB) /i, '');
 function renderDays() {
   const cnt = {}; let marked = 0, watched = 0, unseen = 0, matched = 0;
-  for (const x of R.rows) { if (x.dupHidden && R.dedup) continue; const k = dayKey(x.checked); cnt[k] = (cnt[k] || 0) + 1; if (x.mark) marked++; if (!R.seen[markKey(x)]) unseen++; if (x.also && x.also.length) matched++; }
+  for (const x of R.rows) { if ((x.dupHidden && R.dedup) || x.archived) continue; const k = dayKey(x.checked); cnt[k] = (cnt[k] || 0) + 1; if (x.mark) marked++; if (!R.seen[markKey(x)]) unseen++; if (x.also && x.also.length) matched++; }
   watched = Object.keys(R.watch).length;
   const days = [];
   for (let i = 0; i < 5; i++) { const d = new Date(); d.setDate(d.getDate() - i); days.push([dayKey(d), i === 0 ? 'Сегодня' : i === 1 ? 'Вчера' : d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) + ', ' + d.toLocaleDateString('ru-RU', { weekday: 'short' })]); }
   const b = (k, label, n) => `<button data-day="${k}" class="${R.day === k ? 'on' : ''}${n ? '' : ' empty'}">${label}<span>${fmtNum(n)}</span></button>`;
-  const total = R.rows.filter(x => !(x.dupHidden && R.dedup)).length;
+  const total = R.rows.filter(x => !(x.dupHidden && R.dedup) && !x.archived).length;
   $('rDays').innerHTML = b('all', 'Все', total) + days.map(([k, l]) => b(k, l, cnt[k] || 0)).join('') + '<i></i>' + b('marked', '✓ Отмеченные', marked) + b('watch', '★ Отслеживаемые', watched)
     + `<span class="grow"></span><button class="mark-all" id="rSeenAll" title="Отметить просмотренными все объявления, которые сейчас в списке (выбранный день / выгрузка)">✓ Все просмотрены</button><label class="tgl"><input type="checkbox" id="rNew"${R.onlyNew ? ' checked' : ''}><span>● Непросмотренные ${fmtNum(unseen)}</span></label>`
     + `<label class="tgl"><input type="checkbox" id="rMatch"${R.onlyMatch ? ' checked' : ''}><span>⇄ Есть в нескольких проверках ${fmtNum(matched)}</span></label>`
@@ -388,6 +388,7 @@ function zoneColor(r) {
   return /гарантир/.test(r.zone) ? '#d8b4fe' : /без выплат/.test(r.zone) ? '#fde047' : /другой/.test(r.zone) ? '#fdba74' : '#d1d5db';
 }
 function prepRows(rows) {
+  R.sel = null;   // после перезагрузки списка старый номер строки указывал бы на другое объявление
   R.rows = rows.map((x, i) => Object.assign(x, { id: i, mark: R.marks[markKey(x)] ? 1 : 0 }));
   // отслеживаемые, которых уже нет в файлах результатов, — из сохранённой копии
   const have = new Set(R.rows.map(markKey));
@@ -447,7 +448,7 @@ function renderResults(fit) {
   $('rRows').innerHTML = shown.map((x, i) => `<tr data-id="${x.id}" class="${x.mark ? 'marked' : ''}${R.seen[markKey(x)] ? '' : ' unseen'}${x.also && x.also.length ? ' multi' : ''}">
     <td class="num-c">${i + 1}</td><td>${esc(x.platform)}</td>
     <td>${zoneCell(x)}</td>
-    <td class="addr">${R.seen[markKey(x)] ? '' : '<b class="new-dot" title="Ещё не просмотрено">●</b>'}<span class="addr-t">${esc(x.address)}</span><button class="copy-a" title="Скопировать адрес"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>${x.also && x.also.length ? x.also.map(y => `<span class="also" title="Это помещение есть и в проверке ${esc(y.platform)}"><i style="background:${zoneColor(y)}"></i>${esc(y.platform)}: ${esc(y.zone)}</span>`).join('') : ''}${x.archived ? '<span class="also">из архива</span>' : ''}${x.metro ? `<small>${esc(x.metro)}</small>` : ''}${x.note ? `<small>${esc(x.note)}</small>` : ''}</td>
+    <td class="addr">${R.seen[markKey(x)] ? '' : '<b class="new-dot" title="Ещё не просмотрено">●</b>'}<span class="addr-t">${esc(x.address)}</span><button class="copy-a" title="Скопировать адрес"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>${x.also && x.also.length ? x.also.map(y => `<span class="also" title="Это помещение есть и в проверке ${esc(y.platform)}"><i style="background:${zoneColor(y)}"></i>${esc(y.platform)}: ${esc(y.zone)}</span>`).join('') : ''}${x.archived ? '<span class="also">из архива</span>' : ''}${x.metro ? `<small>${esc(x.metro)}</small>` : ''}${x.note ? `<small class="note">${esc(x.note)}</small>` : ''}</td>
     <td class="n">${area(x)}</td><td class="n flats" data-flats="${x.id}">${flatsCell(x)}</td><td class="n">${x.price != null ? fmtNum(x.price) + ' ₽' : ''}${x.money ? `<small class="pay">выплата ${fmtNum(x.money)} ₽</small>` : ''}</td>
     <td>${fmtTime(x.checked)}</td><td class="acts">${x.url ? '<a class="open" href="#">Открыть ↗</a>' : ''}<button class="star${R.watch[markKey(x)] ? ' on' : ''}" title="${R.watch[markKey(x)] ? 'Убрать из отслеживаемых' : 'Отслеживать'}">${R.watch[markKey(x)] ? '★' : '☆'}</button></td><td class="mk"><label class="mbox"><input type="checkbox"${x.mark ? ' checked' : ''}><span></span></label></td></tr>`).join('');
   $('rMore').textContent = list.length > shown.length ? `Показаны первые ${fmtNum(shown.length)} — уточните фильтры.` : (list.length ? '' : 'Ничего не найдено — измените фильтры или день.');
@@ -879,3 +880,27 @@ $('expertBtn').onclick = async () => { const c = await pvz.getCfg(); openSite(c.
 // короткое уведомление внизу
 let toastT = null;
 window.toast = t => { const e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => e.classList.remove('on'), 1800); };
+
+// ---------- столбцы таблицы: скрыть «×» в заголовке, вернуть — кнопкой «Столбцы» ----------
+const COLS = [[2, 'Площадка'], [3, 'Зона'], [4, 'Адрес'], [5, 'Площадь'], [6, 'Квартир'], [7, 'Цена'], [8, 'Проверено'], ['note', 'Сверка адреса (серые строки)']];
+let hiddenCols = [];
+function applyCols() {
+  const t = document.querySelector('.r-table'); if (!t) return;
+  COLS.forEach(([c]) => t.classList.toggle('hide-c' + c, hiddenCols.includes(String(c))));
+  const n = hiddenCols.length; $('rColsBtn').classList.toggle('on', n > 0); $('rColsBtn').title = n ? `Скрыто столбцов: ${n} — нажмите, чтобы вернуть` : 'Столбцы';
+}
+function setHidden(c, hide) { c = String(c); hiddenCols = hide ? [...new Set([...hiddenCols, c])] : hiddenCols.filter(x => x !== c); pvz.setCfg({ resHiddenCols: hiddenCols }); applyCols(); }
+document.querySelectorAll('.r-table thead th').forEach((th, i) => {
+  const c = i + 1; if (!COLS.some(([k]) => k === c)) return;
+  const b = document.createElement('button'); b.className = 'col-x'; b.title = 'Скрыть столбец'; b.textContent = '×';
+  b.onclick = e => { e.stopPropagation(); setHidden(c, true); }; th.appendChild(b);
+});
+$('rColsBtn').onclick = e => {
+  e.stopPropagation();
+  const m = $('rColsMenu'); if (m.classList.contains('on')) { m.classList.remove('on'); return; }
+  m.innerHTML = '<b>Показывать столбцы</b>' + COLS.map(([c, n]) => `<label><input type="checkbox" data-col="${c}"${hiddenCols.includes(String(c)) ? '' : ' checked'}> ${n}</label>`).join('');
+  m.querySelectorAll('input').forEach(i => (i.onchange = () => setHidden(i.dataset.col, !i.checked)));
+  m.classList.add('on');
+};
+document.addEventListener('click', e => { if (!e.target.closest('#rColsMenu')) $('rColsMenu').classList.remove('on'); });
+pvz.getCfg().then(c => { hiddenCols = (c.resHiddenCols || []).map(String); applyCols(); });

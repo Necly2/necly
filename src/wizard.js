@@ -288,7 +288,7 @@ function renderAvito() {
   bindNav(async () => {
     if (W.siteOpen && W.siteKind === 'avito') {
       const s = avitoSearchUrl(await pvz.currentUrl());
-      if (s && W.avitoBase && s !== W.avitoBase) { W.avitoUrl = s; persist(); }
+      if (s && W.avitoBase && avitoSig(s) !== avitoSig(W.avitoBase)) { W.avitoUrl = s; persist(); }
     }
     if (!W.avitoUrl && avitoManual(W.params).length) {
       const v = await showModal({ kind: 'warn', title: 'Фильтры Авито не выставлены',
@@ -306,11 +306,13 @@ function avitoSearchUrl(u) {
   if (!/avito\.ru\/[^?]*kommercheskaya_nedvizhimost/.test(u) || /_\d{8,}(\?|$)/.test(u)) return null;
   const x = new URL(u); x.searchParams.delete('context'); x.searchParams.delete('localPriority'); x.searchParams.delete('p'); return x.href;
 }
+// «подпись» фильтров Авито: путь (вид объекта) + параметр f (площадь, этаж…) + цена
+const avitoSig = u => { try { const x = new URL(u); return x.pathname + '|' + (x.searchParams.get('f') || '') + '|' + (x.searchParams.get('pmin') || '') + '|' + (x.searchParams.get('pmax') || ''); } catch { return u; } };
 pvz.onUrl(u => {
   if (document.body.dataset.mode !== 'wizard' || cur() !== 'avito' || W.siteKind !== 'avito' || !W.siteOpen) return;
   const s = avitoSearchUrl(u); if (!s) return;
   if (!W.avitoBase) { W.avitoBase = s; return; }   // первая загрузка после открытия — исходный адрес (с перенаправлениями Авито)
-  if (s === W.avitoBase) return;
+  if (avitoSig(s) === avitoSig(W.avitoBase)) return;   // перенаправления и служебные параметры — не изменение фильтров
   W.avitoTouched = true; W.avitoUrl = s; persist();
   const h = $('aHint'); if (h) h.textContent = '✓ Фильтры Авито запомнены — можно нажать «Далее» (сайт можно свернуть).';
 });

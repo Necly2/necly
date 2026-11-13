@@ -21,6 +21,8 @@
     <h1>PVZ Master</h1>
     <p class="muted">Поиск помещений под пункты выдачи</p>
     <button class="start" id="startBtn">Начать работу</button>
+    <div class="zone-note" id="zoneNote" style="display:none"><b>Ozon обновил карту зон</b><span id="zoneNoteT"></span>
+      <div class="zn-act"><button class="ghost sm" id="zoneNoteRes">Открыть результаты</button><button class="ghost sm" id="zoneNoteHide">Понятно</button></div></div>
     <div class="brands">
       <span>Циан</span><span>Авито</span><span>Winner</span><i></i>
       <span>Ozon</span><span>Яндекс Маркет</span><span>Wildberries</span>
@@ -76,7 +78,7 @@
   <div class="r-days r-ups" id="rUps"></div>
   <div class="r-body">
     <div class="r-table-wrap"><table class="r-table"><thead><tr>
-      <th class="num-c">№</th><th data-k="platform">Площадка</th><th data-k="zone">Зона</th><th data-k="address">Адрес</th><th data-k="areaMin" class="n">Площадь</th><th class="n" title="Квартир в доме — по данным OpenStreetMap; ≈ — оценка по этажам и подъездам">Квартир</th><th data-k="price" class="n">Цена</th><th data-k="checked">Проверено</th><th></th><th class="mk" data-k="mark" title="Отмеченные — щёлкните, чтобы отсортировать">✓</th>
+      <th class="num-c">№</th><th data-k="platform">Площадка</th><th data-k="zone">Зона</th><th data-k="address">Адрес</th><th data-k="areaMin" class="n">Площадь</th><th class="n" title="Квартир в доме — по данным OpenStreetMap; ≈ — оценка по этажам и подъездам">Квартир</th><th data-k="price" class="n">Цена</th><th data-k="checked">Проверено</th><th></th><th class="mk" data-k="mark" title="Отмеченные — щёлкните, чтобы отсортировать">✓<button class="cols-btn" id="rColsBtn" title="Столбцы">⋮</button><div class="cols-menu" id="rColsMenu"></div></th>
     </tr></thead><tbody id="rRows"></tbody></table><div class="hint" id="rMore"></div></div>
     <div class="r-lst" id="rLstCol">
       <div class="r-maptools"><b>Объявление</b><span class="hint grow" id="rLstQ"></span>

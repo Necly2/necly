@@ -692,3 +692,28 @@ html[data-theme="light"] .modal{background:rgba(20,26,36,.35)}
 .icon-sq{padding:5px 8px !important;display:inline-flex;align-items:center}
 .icon-sq svg{width:16px;height:16px}
 .zoom .zl{font-size:11px;color:var(--muted);margin-right:2px}
+
+.zone-note{margin-top:22px;max-width:560px;text-align:left;padding:14px 16px;border-radius:14px;border:1px solid color-mix(in srgb,var(--warn-t) 45%,transparent);background:color-mix(in srgb,var(--warn-t) 9%,var(--card));display:flex;flex-direction:column;gap:6px}
+.zone-note span{color:var(--sub);font-size:13px;line-height:1.45}
+.zn-act{display:flex;gap:8px;margin-top:4px}
+
+/* скрываемые столбцы */
+.r-table th{position:relative}
+.col-x{display:none;position:absolute;right:2px;top:50%;transform:translateY(-50%);border:none;background:var(--hover);color:var(--muted);width:18px;height:18px;border-radius:5px;font-size:13px;line-height:1;cursor:pointer;padding:0}
+.r-table th:hover .col-x{display:block}
+.col-x:hover{color:var(--err-t)}
+.cols-btn{border:none;background:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0 0 0 4px}
+.cols-btn.on{color:var(--accent)}
+.cols-menu{display:none;position:absolute;right:0;top:100%;z-index:30;background:var(--card);border:1px solid var(--line2);border-radius:10px;box-shadow:var(--shadow);padding:10px 12px;min-width:240px;text-align:left;font-weight:400;flex-direction:column;gap:6px}
+.cols-menu.on{display:flex}
+.cols-menu b{font-size:12px;color:var(--muted);margin-bottom:2px}
+.cols-menu label{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--text);cursor:pointer;text-transform:none}
+.r-table-wrap{overflow:auto visible}
+.r-table.hide-c2 th:nth-child(2),.r-table.hide-c2 td:nth-child(2){display:none}
+.r-table.hide-c3 th:nth-child(3),.r-table.hide-c3 td:nth-child(3){display:none}
+.r-table.hide-c4 th:nth-child(4),.r-table.hide-c4 td:nth-child(4){display:none}
+.r-table.hide-c5 th:nth-child(5),.r-table.hide-c5 td:nth-child(5){display:none}
+.r-table.hide-c6 th:nth-child(6),.r-table.hide-c6 td:nth-child(6){display:none}
+.r-table.hide-c7 th:nth-child(7),.r-table.hide-c7 td:nth-child(7){display:none}
+.r-table.hide-c8 th:nth-child(8),.r-table.hide-c8 td:nth-child(8){display:none}
+.r-table.hide-cnote small.note{display:none}

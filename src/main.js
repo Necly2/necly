@@ -657,6 +657,46 @@ ipcMain.handle('bwOrders', () => {
   return Object.values(out);
 });
 ipcMain.handle('notify', (_e, t, b) => scheduler.notify(t, b));
+// ---------- слежение за картой зон Ozon ----------
+// раз в 6 часов (и через 2 минуты после запуска) берём 20 участков Москвы из слоя зон Ozon и сравниваем с прошлым разом;
+// если поменялось 2+ участка — Ozon обновил зоны: сообщение на главном экране и уведомление
+const ZW_TILES = (() => { const out = [], z = 13, n = 2 ** z; const tx = lon => Math.floor((lon + 180) / 360 * n); const ty = lat => { const s = Math.sin(lat * Math.PI / 180); return Math.floor((0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n); };
+  for (const lat of [55.58, 55.65, 55.72, 55.79, 55.86]) for (const lon of [37.40, 37.53, 37.66, 37.79]) out.push([tx(lon), ty(lat), z]); return out; })();
+async function zoneWatch() {
+  if (ozonRunning || !win || win.isDestroyed()) return;
+  const wc = ozonView.webContents;
+  try {
+    if (!/pvz-map\.ozon\.ru/.test(wc.getURL())) { await wc.loadURL(ozon.OZON_URL).catch(() => {}); await new Promise(r => setTimeout(r, 6000)); }
+    if (ozonRunning) return;
+    await new Promise(r => setTimeout(r, 1500));
+    const run = () => wc.executeJavaScript(`(async () => { const out = {};
+      for (const [x, y, z] of ${JSON.stringify(ZW_TILES)}) {
+        try { const r = await fetch('/p-api/orp-agent-api/map/render-vtile?x=' + x + '&y=' + y + '&z=' + z + '&layerName=RecommendedZone&tt=' + Date.now(), { credentials: 'include' });
+          if (r.status !== 200) { out[x + '/' + y] = 'E' + r.status; continue; }
+          const b = new Uint8Array(await r.arrayBuffer()); const d = new Uint8Array(await crypto.subtle.digest('SHA-1', b));
+          out[x + '/' + y] = [...d].map(v => v.toString(16).padStart(2, '0')).join('') + ':' + b.length;
+        } catch (e) { out[x + '/' + y] = 'E'; }
+        await new Promise(r => setTimeout(r, 400)); }
+      return out; })()`, true);
+    let res; try { res = await run(); } catch { await new Promise(r => setTimeout(r, 8000)); res = await run(); }   // страница ещё перезагружалась
+    const ok = Object.values(res).filter(v => !String(v).startsWith('E'));
+    if (ok.length < 15) { trace.log('зоны Ozon', 'не удалось получить участки карты: ' + JSON.stringify(res).slice(0, 300)); return; }
+    const c = loadCfg(), prev = c.zoneHashes || null;
+    if (prev) {
+      const changed = Object.keys(res).filter(k => !String(res[k]).startsWith('E') && prev[k] && !String(prev[k]).startsWith('E') && prev[k] !== res[k]).length;
+      trace.log('зоны Ozon', `сравнение с ${c.zoneHashesAt ? new Date(c.zoneHashesAt).toLocaleString('ru-RU') : '?'}: изменилось ${changed} из ${ok.length}`);
+      if (changed >= 2) {
+        c.zonesChange = { at: Date.now(), changed, total: ok.length, since: c.zoneHashesAt || null, seen: false };
+        scheduler.notify('PVZ Master: Ozon обновил карту зон', `Изменилось ${changed} из ${ok.length} участков Москвы. Старые результаты могут быть неточными — можно перепроверить зоны.`);
+        send('zonesChanged', c.zonesChange);
+      }
+    } else trace.log('зоны Ozon', 'первый снимок карты зон сохранён');
+    c.zoneHashes = res; c.zoneHashesAt = Date.now(); saveCfg(c);
+  } catch (e) { trace.log('зоны Ozon', 'ошибка: ' + e.message); }
+}
+setTimeout(() => { zoneWatch(); setInterval(zoneWatch, 6 * 3600e3); }, 120e3);
+ipcMain.handle('zonesSeen', () => { const c = loadCfg(); if (c.zonesChange) { c.zonesChange.seen = true; saveCfg(c); } return true; });
+ipcMain.handle('zonesCheckNow', () => zoneWatch());
 ipcMain.handle('vpnCheck', () => require('./vpn').check());
 ipcMain.handle('flats', (_e, lat, lon, addr) => require('./flats').lookup(lat, lon, addr));
 ipcMain.handle('flatsCached', (_e, pts) => { const f = require('./flats'); return pts.map(([a, b]) => f.cached(a, b)); });
@@ -720,6 +760,26 @@ async function selfTest(dir) {
     await J(`openPage('results'); 1`); await W8(1500);
     await J(`(()=>{const z=['голубой','синий','зелёный'];const rows=Array.from({length:14},(_,i)=>({platform:'Ozon',zone:z[i%3],address:'Москва, ул. Тестовая, '+(i%10+1),metro:'м. Пример',note:'',areaMin:30+(i%10),price:50000+i*5000,checked:Date.now()-Math.floor(i/6)*864e5-(i%2)*3600e3,url:'https://x/'+i,lat:55.7+i*0.01,lon:37.5+i*0.01,file:'OZON export_excel ЦИАН 13 '+(1+i%2)+'.xlsx'}));rows.push({platform:'Яндекс',zone:'синий',address:'ул. Тестовая, 2',metro:'',note:'',areaMin:31,price:55000,checked:Date.now(),url:'https://x/y',lat:55.71,lon:37.51,file:'ЯНДЕКС export_excel ЦИАН 13 1.xlsx'});R.marks={};R.seen={'https://x/3':1};R.watch={};prepRows(rows);R.day=dayKey(Date.now());renderDays();renderResults(true);})(); 1`);
     await W8(1500); await shot('09-results-fake');
+    if (process.env.PVZ_ZW) { await zoneWatch(); const c1 = loadCfg(); if (!c1.zoneHashes) { console.log('ZW none'); } else { c1.zoneHashes[Object.keys(c1.zoneHashes)[0]] = 'x'; c1.zoneHashes[Object.keys(c1.zoneHashes)[1]] = 'y'; saveCfg(c1); } await zoneWatch(); console.log('ZW', JSON.stringify(loadCfg().zonesChange)); await J(`openPage('results'); 1`); await W8(300); await J(`document.querySelector('#results .back-home').click(); 1`); await W8(800); await shot('14-zone-note'); }
+    if (process.env.PVZ_DEEP) {
+      const steps = [
+        "document.querySelector('#rDays [data-day=all]').click()", "document.querySelector('#rDays [data-day=watch]').click()", "document.querySelector('#rDays [data-day=marked]').click()",
+        "R.day=dayKey(Date.now());renderDays();renderResults(true)", "document.querySelector('#rUps [data-up]:not([data-up=all])') && document.querySelector('#rUps [data-up]:not([data-up=all])').click()",
+        "$('rDedup').click()", "$('rDedup').click()", "$('rNew').click()", "$('rNew').click()", "$('rMatch').click()", "$('rMatch').click()",
+        "document.querySelector('#rRows tr .star').click()", "document.querySelector('#rRows tr .mbox input').click()", "document.querySelector('#rRows tr .copy-a').click()",
+        "$('rSeenAll').click()", "document.querySelector('#rRows tr').click()",
+        "setMapMode('2gis')", "setMapMode('osm')", "setMapMode('res')", "$('rBase').value='osm';$('rBase').onchange()", "setMapMode('ym')", "R.split=true;layoutMaps()", "setMapMode('yandex')", "R.split=false;layoutMaps()",
+        "document.querySelector('[data-fs=rMapCol]').click()", "$('fsExit').click()", "$('rShowLst').click()", "$('rShowLst').click()",
+        "document.querySelectorAll('#rHead th[data-k]').forEach(t=>t.click())", "$('rSearch').value='Тест';$('rSearch').dispatchEvent(new Event('input'))", "$('rSearch').value='';$('rSearch').dispatchEvent(new Event('input'))",
+        "$('rExport').click()", "document.querySelector('#modal.on .m-btns button') && document.querySelector('#modal.on .m-btns button').click()",
+        "document.querySelector('[data-settings]').click()", "document.querySelector('#settings .back-home').click()",
+        "openPage('settings')", "$('setSeenDays').value='7';$('setSeenDays').onchange()", "$('setTestSup').click()", "$('setTestSplit').click()", "document.querySelector('#setTheme [data-v=light]').click()", "document.querySelector('#setTheme [data-v=dark]').click()",
+        "openPage('history')", "openPage('schedule')", "openWatch()", "openPage('results')"
+      ];
+      for (const s of steps) { const r = await J(`(()=>{try{${s};return 'ok'}catch(e){return 'ERR '+e.message}})()`); if (r !== 'ok') console.log('DEEPFAIL', s, r); await W8(350); }
+      await shot('13-deep');
+      console.log('DEEPDONE');
+    }
     if (process.env.PVZ_EXT) {
       await J(`selectRow(1,true); R.split=true; setMapMode('yandex'); setMapMode('ym'); R.showLst=true; applyLst(); 1`); await W8(14000); await shot('11-split');
       if (ext.yandex) fs.writeFileSync(path.join(dir, '12-yandex.png'), (await ext.yandex.view.webContents.capturePage()).toPNG());

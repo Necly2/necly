@@ -65,3 +65,15 @@ $('setZip').onclick = () => pvz.makeReport();
 window.loadSettings = loadSettings;
 pvz.getCfg().then(c => { if (c.showExpert) $('expertBtn').style.display = ''; });
 })();
+
+// ---------- Ozon обновил карту зон: сообщение на главном экране ----------
+function zoneNote(z) {
+  if (!z || z.seen) { $('zoneNote').style.display = 'none'; return; }
+  const d = new Date(z.at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  $('zoneNoteT').textContent = `Замечено ${d}: изменилось ${z.changed} из ${z.total} проверяемых участков Москвы. Результаты, проверенные раньше, могут быть неточными — в «Результатах» нажмите «↻ Перепроверить зоны».`;
+  $('zoneNote').style.display = '';
+}
+pvz.getCfg().then(c => zoneNote(c.zonesChange));
+pvz.onZonesChanged(zoneNote);
+$('zoneNoteHide').onclick = () => { pvz.zonesSeen(); $('zoneNote').style.display = 'none'; };
+$('zoneNoteRes').onclick = () => { pvz.zonesSeen(); $('zoneNote').style.display = 'none'; openPage('results'); };
