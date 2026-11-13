@@ -129,3 +129,23 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "PVZ Master 🏢 для Mac" \
             --notes-file release-notes.md
+
+  # Запасной путь для Mac: если машина Mac на GitHub недоступна (очередь / «not acquired»),
+  # обновление для Mac всё равно выходит — app.asar одинаковый для обеих систем (только JS),
+  # программа на Mac обновляется именно им (updater.js). Полные .zip для Mac — из задания «Mac», когда оно пройдёт.
+  mac-update:
+    name: Mac (обновление)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Copy app.asar to the Mac release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          R="$GITHUB_REPOSITORY"
+          gh release download avito-windows-latest -R "$R" -p app.asar -p notes.txt -p version.txt
+          test "$(cat version.txt)" = "${{ github.run_number }}"
+          CUR=$(gh release download avito-mac-latest -R "$R" -p version.txt -O - 2>/dev/null || echo 0)
+          if [ "${CUR:-0}" -ge "${{ github.run_number }}" ]; then echo "Mac уже на сборке $CUR"; exit 0; fi
+          gh release upload avito-mac-latest app.asar notes.txt version.txt --clobber -R "$R"
+          echo "Mac: обновление до сборки ${{ github.run_number }} выложено"
