@@ -522,8 +522,15 @@ async function mapSearchOnce(wc, q, seq, reloadFn = mapReloadWait, seqRef = () =
   const mod = process.platform === 'darwin' ? 'meta' : 'control';
   wc.sendInputEvent({ type: 'keyDown', keyCode: 'A', modifiers: [mod] }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'A', modifiers: [mod] });
   wc.sendInputEvent({ type: 'keyDown', keyCode: 'Backspace' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Backspace' });
+  // поле могло остаться со старым адресом (после выбора подсказки сайт держит свой текст) — очистить надёжно
+  const SETV = v => `(() => { const e = document.activeElement; if (!e || !('value' in e)) return null;
+    const set = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(e), 'value').set; set.call(e, ${JSON.stringify(v)});
+    e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); return e.value; })()`;
+  await wc.executeJavaScript(SETV(''), true).catch(() => {});
   await new Promise(r => setTimeout(r, 250));
   await wc.insertText(q);
+  const now = await wc.executeJavaScript(`(document.activeElement && document.activeElement.value) || ''`, true).catch(() => '');
+  if (now.trim() !== q.trim()) { trace.log('карта', 'в поле «' + now + '» вместо адреса — ставлю заново'); await wc.executeJavaScript(SETV(q), true).catch(() => {}); }
   const o = await wc.executeJavaScript(FIND_OPTION(q, mapLastText), true);
   if (seq !== seqRef()) return { ok: false, why: 'отменено' };
   trace.log('карта Ozon', 'подсказка: ' + JSON.stringify(o));
