@@ -2,7 +2,7 @@
 // Классификация зон — проверенный ozon_runner.js проекта PVZ (зелёный / синий / голубой / < 3 млн / ошибка …).
 // Оформление файла — как в GENERALIZED: A пустая, B–O колонки выгрузки, P «Зона Ozon», Q «Сверка адреса»,
 // заливка строки цветом зоны, ссылка «Открыть объявление», закреплён заголовок.
-// Отбор строк — прежние правила: только подходящие зоны; зелёный — только «Мин. площадь» ≥ 49 м².
+// Отбор строк — прежние правила: только подходящие зоны; зелёный — только площадь ≥ порога из настроек (по умолчанию 60 м²).
 // Дубликаты не ищутся, GENERALIZED не трогается.
 const fs = require('fs');
 const path = require('path');
@@ -19,7 +19,7 @@ const GEN_HEAD = [null, 'Онлайн-показ', ' ', ...EXPORT_HEAD.slice(2),
 const WIDTHS = [13, 13, 32, 13, 13, 26, 13, 13, 13, 13, 13, 13, 29, 22, 30, 60, 40];
 const ZONE_COLOR = { 'синий': '8DB4E2', 'голубой': 'BDD7EE', 'зелёный': 'C6EFCE', 'гарантия < 3 млн': 'E4DFEC', 'ошибка запроса': 'FFC000' };
 const KEEP = ['зелёный', 'синий', 'голубой', 'гарантия < 3 млн', 'ошибка запроса'];
-const GREEN_MIN_AREA = 49;
+const GREEN_MIN_AREA_DEF = 60;   // Ozon с ноября 2026 пишет «для ПВЗ от 60 м²»; меняется в настройках
 const CACHE_DAYS = 3;          // результат по точке считается свежим 3 дня (карта Ozon меняется)
 const MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 
@@ -224,7 +224,7 @@ async function run(files, ctx) {
       if (!r) { pending.push([d['Адрес'], d._key]); continue; }
       const [zone, note] = r;
       if (!KEEP.includes(zone)) { stats.out_zone++; continue; }
-      if (zone === 'зелёный' && (num(d['Мин. площадь']) || 0) < GREEN_MIN_AREA) { stats.green_small++; continue; }
+      if (zone === 'зелёный' && Math.max(num(d['Мин. площадь']) || 0, num(d['Макс. площадь']) || 0) < (cfg.ozonGreenMin || GREEN_MIN_AREA_DEF)) { stats.green_small++; continue; }
       stats[zone]++;
       items.push({ d, zone, note });
       if (note && /проверить вручную/.test(note)) manual.push(`${d['Адрес']} — ${note}`);
@@ -244,7 +244,7 @@ async function run(files, ctx) {
   writeJson(journalPath(outDir), j);
 
   const reason = stoppedByUser ? 'остановлено вручную' : blockedGaveUp ? 'Ozon ограничил запросы — часть адресов не проверена, нажмите «Продолжить проверку»' : 'проверка завершена';
-  return { ok: true, reason, saved, errors, stats, manual, odd, files: data.length, addresses: total };
+  return { ok: true, reason, saved, errors, stats, manual, odd, files: data.length, addresses: total, greenMin: cfg.ozonGreenMin || GREEN_MIN_AREA_DEF };
 }
 
 module.exports = { scan, run, readExport, OZON_URL };

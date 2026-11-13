@@ -67,6 +67,7 @@ async function collector(C) {
     }).filter(r => r.id);
   }
 
+  const seen = new Set((C.seen || []).map(String)); let skippedSeen = 0, skippedOld = 0;
   const all = new Map(); let page = 1, emptyRow = 0, reason = 'достигнут лимит страниц';
   while (page <= C.pages) {
     if (window.__pvzStop) { reason = 'остановлено вручную'; break; }
@@ -89,8 +90,10 @@ async function collector(C) {
     }
     const items = parsePage(html); let added = 0;
     for (const it of items) {
-      if (C.days) { const d = parseDate(it.dateTxt); if (d && (today - d) / 864e5 > C.days + 0.5) continue; }
-      if (!all.has(it.id)) { all.set(it.id, it); added++; }
+      if (C.days) { const d = parseDate(it.dateTxt); if (d && (today - d) / 864e5 > C.days + 0.5) { skippedOld++; continue; } }
+      if (all.has(it.id)) continue;
+      if (seen.has(String(it.id))) { skippedSeen++; continue; }
+      all.set(it.id, it); added++;
     }
     if (!items.length) { reason = 'выдача закончилась'; break; }
     if (!added) { if (++emptyRow >= 2) { reason = C.days ? `готово: дальше только объявления старше ${C.days} дн.` : 'готово: дальше только уже собранные объявления'; break; } } else emptyRow = 0;
@@ -106,7 +109,8 @@ async function collector(C) {
             d ? fmt(d) : r.dateTxt, d ? Math.max(0, Math.round((today - d) / 864e5)) : '', 'Авито', r.href, r.coords];
   });
   window.__pvzProg = '';
-  return { rows, reason, withCoords: list.filter(r => r.coords).length };
+  return { rows, reason, ids: list.map(r => String(r.id)), withCoords: list.filter(r => r.coords).length,
+    extra: `Пропущено: уже выгружались ${skippedSeen}, старше ${C.days || '∞'} дн. ${skippedOld}.` };
 }
 module.exports = { collector };
 

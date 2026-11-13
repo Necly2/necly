@@ -39,12 +39,14 @@ let currentSite = null, ozonRunning = false, ozonStop = false, ozonSkip = false;
 const ozonQueue = [];
 const cfgPath = () => path.join(app.getPath('userData'), 'config.json');
 function loadCfg() {
-  const d = { root: DEF_ROOT, cianRoot: DEF_CIAN, ozonOut: DEF_OZON, ozonDays: 3, ozonThreads: 2, ozonPause: 2, ozonWait: 25, ozonTries: 3, ozonAuto: false, ozonCache: true, chkOzon: true, chkYandex: false, chkWb: false,
+  const d = { root: '', cianRoot: '', ozonOut: '', onlyNew: true, seenDays: 0, autoCheck: false, ozonGreenMin: 60, zoom: {}, showExpert: false, ozonDays: 3, ozonThreads: 2, ozonPause: 2, ozonWait: 25, ozonTries: 3, ozonAuto: false, ozonCache: true, chkOzon: true, chkYandex: false, chkWb: false,
     tray: true, autostart: false, schedules: [],
     pages: 40, delay: 4, days: 7, part: 300, cianOnlyNew: true };
   let c; try { c = Object.assign(d, JSON.parse(fs.readFileSync(cfgPath(), 'utf8'))); } catch { c = d; }
   // проверка зон запускается только по кнопке (решение пользователя 11.11.2026) — выключаем старую автопроверку один раз
   if (!c.ozonAutoOff) { c.ozonAuto = false; c.ozonAutoOff = 1; try { saveCfg(c); } catch {} }
+  if (c.cianOnlyNew === false && !c.onlyNewMigrated) { c.onlyNew = false; }
+  c.onlyNewMigrated = 1;
   return c;
 }
 function saveCfg(c) { fs.mkdirSync(path.dirname(cfgPath()), { recursive: true }); fs.writeFileSync(cfgPath(), JSON.stringify(c, null, 2)); }
@@ -95,7 +97,7 @@ function createWindow() {
   win.on('resize', layout);
   // ссылки «в новой вкладке» открываем в том же окне
   view.webContents.setWindowOpenHandler(({ url }) => { view.webContents.loadURL(url); return { action: 'deny' }; });
-  view.webContents.on('did-navigate', (_e, url) => send('url', url));
+  view.webContents.on('did-navigate', (_e, url) => { send('url', url); applyZoom(view.webContents); });
   view.webContents.on('did-navigate-in-page', (_e, url) => send('url', url));
 }
 
@@ -143,12 +145,50 @@ function saveRows(rows, cfg, site) {
 }
 
 // журнал уже выгруженных объявлений Циана (чтобы в следующий раз брать только новые)
-const seenPath = cfg => path.join(cfg.cianRoot, 'cian_seen.json');
-function loadSeen(cfg) { try { return JSON.parse(fs.readFileSync(seenPath(cfg), 'utf8')).ids || []; } catch { return []; } }
-function addSeen(cfg, ids) {
-  const set = new Set(loadSeen(cfg)); ids.forEach(i => set.add(String(i)));
-  fs.writeFileSync(seenPath(cfg), JSON.stringify({ updated: new Date().toISOString(), count: set.size, ids: [...set] }));
+// журнал уже выгруженных объявлений (Циан, Авито): {site: {id: время}} в папке данных программы.
+// Старый журнал Циана (cian_seen.json в папке АДРЕСА ЦИАН) подхватывается один раз.
+const seenFile = () => path.join(app.getPath('userData'), 'seen.json');
+function readSeenAll(cfg) {
+  let s; try { s = JSON.parse(fs.readFileSync(seenFile(), 'utf8')); } catch { s = {}; }
+  if (!s.cian && cfg && cfg.cianRoot) { try { const old = JSON.parse(fs.readFileSync(path.join(cfg.cianRoot, 'cian_seen.json'), 'utf8')); const t = Date.parse(old.updated) || Date.now(); s.cian = Object.fromEntries((old.ids || []).map(i => [String(i), t])); } catch {} }
+  return s;
 }
+function loadSeen(cfg, site = 'cian') {
+  if (cfg.onlyNew === false) return [];
+  const all = readSeenAll(cfg)[site] || {}, lim = cfg.seenDays ? Date.now() - cfg.seenDays * 864e5 : 0;
+  return Object.keys(all).filter(k => all[k] >= lim);
+}
+function addSeen(cfg, ids, site = 'cian') {
+  const s = readSeenAll(cfg), now = Date.now(); s[site] = s[site] || {};
+  ids.forEach(i => (s[site][String(i)] = now));
+  fs.writeFileSync(seenFile(), JSON.stringify(s));
+}
+ipcMain.handle('seenInfo', () => { const c = loadCfg(), s = readSeenAll(c), lim = c.seenDays ? Date.now() - c.seenDays * 864e5 : 0;
+  const n = k => Object.values(s[k] || {}).filter(t => t >= lim).length; return { cian: n('cian'), avito: n('avito') }; });
+ipcMain.handle('forgetSeen', () => { try { fs.writeFileSync(seenFile(), JSON.stringify({ cian: {}, avito: {} })); } catch {} return true; });
+// первый запуск: папки
+ipcMain.handle('folderState', () => { const c = loadCfg(); const ex = p => !!p && fs.existsSync(p);
+  return { root: c.root, cianRoot: c.cianRoot, ozonOut: c.ozonOut, ok: ex(c.root) && ex(c.cianRoot) && ex(c.ozonOut), exists: { root: ex(c.root), cianRoot: ex(c.cianRoot), ozonOut: ex(c.ozonOut) } }; });
+ipcMain.handle('createFolders', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Где создать папку PVZ с подпапками', defaultPath: app.getPath('desktop'), properties: ['openDirectory', 'createDirectory'] });
+  if (r.canceled || !r.filePaths[0]) return null;
+  const base = path.join(r.filePaths[0], 'PVZ'), c = loadCfg();
+  c.root = path.join(base, 'АДРЕСА'); c.cianRoot = path.join(base, 'АДРЕСА ЦИАН'); c.ozonOut = path.join(base, 'ПРОВЕРКА OZON');
+  for (const p of [c.root, c.cianRoot, c.ozonOut]) fs.mkdirSync(p, { recursive: true });
+  saveCfg(c); return c;
+});
+// масштаб встроенных сайтов (по сайту; на каждом компьютере свой)
+const ZOOMS = [0.5, 0.6, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
+const zoomKey = wc => { try { return new URL(wc.getURL()).hostname.replace(/^www\./, '').split('.').slice(-2).join('.'); } catch { return ''; } };
+function applyZoom(wc) { const k = zoomKey(wc), z = (loadCfg().zoom || {})[k]; if (k && z) wc.setZoomFactor(z); }
+function viewOf(which) { return which === 'ozonmap' ? (typeof mapView !== 'undefined' && mapView) : which === 'listing' ? (typeof listView !== 'undefined' && listView) : which === 'extmap' ? (typeof extView !== 'undefined' && extView) : view; }
+ipcMain.handle('zoom', (_e, which, step) => {
+  const v = viewOf(which); if (!v) return 1; const wc = v.webContents, k = zoomKey(wc);
+  let z = wc.getZoomFactor();
+  if (step) { let i = ZOOMS.findIndex(x => x >= z - 0.001); if (i < 0) i = ZOOMS.length - 1; i = Math.max(0, Math.min(ZOOMS.length - 1, i + (step > 0 ? 1 : -1))); z = ZOOMS[i]; wc.setZoomFactor(z);
+    const c = loadCfg(); c.zoom = Object.assign({}, c.zoom, { [k]: z }); saveCfg(c); }
+  return Math.round(z * 100);
+});
 
 ipcMain.handle('getCfg', () => loadCfg());
 ipcMain.handle('setCfg', (_e, c) => { const cur = Object.assign(loadCfg(), c); saveCfg(cur); return cur; });
@@ -237,15 +277,15 @@ ipcMain.handle('start', async (_e, c) => {
   try {
     let code;
     if (site === 'cian') {
-      const c2 = Object.assign({}, cfg, { seen: cfg.cianOnlyNew ? loadSeen(cfg) : [] });
+      const c2 = Object.assign({}, cfg, { seen: loadSeen(cfg, 'cian') });
       code = `(${cianCollector.toString()})(${JSON.stringify(c2)})`;
-    } else code = `(${collector.toString()})(${JSON.stringify(cfg)})`;
+    } else code = `(${collector.toString()})(${JSON.stringify(Object.assign({}, cfg, { seen: loadSeen(cfg, 'avito') }))})`;
     const res = await view.webContents.executeJavaScript(code, true);
     clearInterval(timer);
     let out = { dir: '', saved: [] };
     if (res.rows.length) {
       out = saveRows(res.rows, cfg, site);
-      if (site === 'cian' && res.ids) addSeen(cfg, res.ids);
+      if (res.ids) addSeen(cfg, res.ids, site);
     }
     const q = autoOzon(cfg, out.saved, c.forceCheck);
     journal.addHistory({ type: 'export', site, title: c.title || '', ok: true, total: res.rows.length, files: out.saved, reason: res.reason });
@@ -507,7 +547,7 @@ async function selfTest(dir) {
   await J(`[...document.querySelectorAll('#mBtns button')].find(b=>/без них/.test(b.textContent)).click(); 1`); await W8(1200); await shot('06-winner');
   await J(`document.querySelector('#oList .on') && document.querySelector('#oList .on').click(); 1`); await W8(300);
   await J(`$('wzNext').click(); 1`); await W8(900); await J(`document.querySelectorAll('#wzStep details.fold').forEach(d=>d.open=true); 1`); await W8(400); await shot('07-center');
-  for (const page of ['results', 'history', 'schedule']) { await J(`openPage('${page}'); 1`); await W8(1800); await shot('08-' + page); }
+  for (const page of ['results', 'history', 'schedule', 'settings']) { await J(`openPage('${page}'); 1`); await W8(1800); await shot('08-' + page); }
   if (process.env.PVZ_FAKE) {
     await J(`openPage('results'); 1`); await W8(1500);
     await J(`(()=>{const z=['голубой','синий','зелёный'];R.rows=Array.from({length:14},(_,i)=>({id:i,platform:'Ozon',zone:z[i%3],address:'Москва, ул. Тестовая, '+(i+1),metro:'м. Пример',note:'',areaMin:30+i,price:50000+i*5000,checked:Date.now()-Math.floor(i/3)*864e5,url:'https://x/'+i,lat:55.7+i*0.01,lon:37.5+i*0.01,mark:i%4===0?1:0}));renderDays();renderResults(true);})(); 1`);

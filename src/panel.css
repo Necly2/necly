@@ -531,3 +531,50 @@ html[data-theme="dark"] .leaflet-tile-pane{filter:invert(.92) hue-rotate(180deg)
 .r-maptools .hint{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .oz-host{display:none;position:relative}
 .oz-wait{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted)}
+
+/* ===== сборка 69: главный экран, настройки, первый запуск, мастер ===== */
+.topicons.col{flex-direction:column;align-items:stretch;gap:6px;min-width:170px}
+.topicons.col .ticon{justify-content:flex-start;padding:9px 14px;font-size:13px}
+.start{display:inline-flex;align-items:center;justify-content:center;gap:0;padding:18px 46px}
+body[data-mode="settings"] #settings,body[data-mode="setup"] #setup{display:flex}
+.set-wrap{overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:14px;align-content:start;padding-bottom:20px}
+.set-wrap .box{display:flex;flex-direction:column;gap:12px}
+.set-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:34px}
+.set-row > span:first-child{display:flex;flex-direction:column;gap:2px}
+.set-row small{font-size:11.5px}
+.set-row select{width:auto;min-width:150px}
+.fold-row small{word-break:break-all}
+.fold-row em{font-style:normal;font-size:12px}
+.fold-row em.bad{color:var(--err-t)} .fold-row em.ok{color:var(--ok-t)}
+#setup{align-items:center;justify-content:center}
+.setup-box{width:min(720px,100%);background:var(--card);border:1px solid var(--line);border-radius:18px;padding:30px 32px;display:flex;flex-direction:column;gap:14px;box-shadow:var(--shadow)}
+.setup-box h1{margin:0;font-size:24px}
+.setup-act{display:flex;justify-content:space-between;margin-top:6px}
+/* мастер: нижняя полоса с кнопками — всегда на месте */
+.wz-foot{flex:none;display:block;border-top:1px solid var(--line);background:var(--panel);padding:12px 24px}
+.wz-foot:empty{display:none}
+.wz-foot .wz-nav{position:static;margin:0;padding:0;background:none;max-width:none}
+.wz-step{padding-bottom:40px}
+body.site-open .wz-step{padding-bottom:30px}
+.home-btn{display:inline-flex;align-items:center;gap:7px;padding:8px 14px}
+.home-btn svg{width:16px;height:16px}
+/* сайт — в рамке */
+body.site-open .wz-site{padding:12px 14px 12px 12px}
+.wz-site .site-tools{border:1px solid var(--line);border-bottom:none;border-radius:12px 12px 0 0;background:var(--card);padding:8px 10px}
+.wz-site .site-host{border:1px solid var(--line);border-radius:0 0 12px 12px;background:var(--card);overflow:hidden}
+.zoom{display:inline-flex;align-items:center;gap:4px;margin-right:6px}
+.zoom .zv{font-size:12px;color:var(--muted);min-width:44px;text-align:center}
+.zoom button{padding:4px 10px !important;font-size:15px;line-height:1}
+/* подсказки «⌄» */
+.tip{position:relative;display:inline-flex;align-items:center;gap:4px}
+.tip-b{border:1px solid var(--line2);background:transparent;color:var(--muted);border-radius:6px;width:20px;height:20px;padding:0;font-size:12px;line-height:1;cursor:pointer}
+.tip-b:hover{color:var(--accent);border-color:var(--accent)}
+.tip-t{display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:30;width:280px;padding:10px 12px;border-radius:10px;background:var(--card);border:1px solid var(--line2);box-shadow:var(--shadow);color:var(--sub);font-size:12.5px;font-weight:400;line-height:1.45;text-transform:none;letter-spacing:0;white-space:normal}
+.tip:hover .tip-t,.tip.open .tip-t{display:block}
+.qm{display:none}
+.cc-opts{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;margin:4px 0 16px}
+.cc-opts select{width:auto}
+.pc-card .nm{font-size:16px}
+.fold-row > span:last-child{display:flex;gap:6px;align-items:center;flex-wrap:nowrap;flex:none}
+.fold-row > span:first-child{min-width:0}
+#setupRows,#setFolders{display:flex;flex-direction:column;gap:10px}

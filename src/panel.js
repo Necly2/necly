@@ -147,8 +147,8 @@ pvz.onOzonStatus(s => {
 function ozonText(r) {
   const z = r.stats;
   let t = `Ozon — ${r.reason}. Файлов: ${r.files}, адресов: ${r.addresses}.\n` +
-    `Подходящих: зелёных ≥ 49 м² ${z['зелёный']}, синих ${z['синий']}, голубых ${z['голубой']}, < 3 млн ${z['гарантия < 3 млн']}, ошибка запроса ${z['ошибка запроса']}.\n` +
-    `Не подошли: вне зоны/недоступно ${z.out_zone}, зелёных < 49 м² ${z.green_small}` + (z.unchecked ? `; не проверено ${z.unchecked}` : '') + '.';
+    `Подходящих: зелёных ≥ ${r.greenMin || 60} м² ${z['зелёный']}, синих ${z['синий']}, голубых ${z['голубой']}, < 3 млн ${z['гарантия < 3 млн']}, ошибка запроса ${z['ошибка запроса']}.\n` +
+    `Не подошли: вне зоны/недоступно ${z.out_zone}, зелёных < ${r.greenMin || 60} м² ${z.green_small}` + (z.unchecked ? `; не проверено ${z.unchecked}` : '') + '.';
   if (r.odd && r.odd.length) t += `\nСтранные цены (${r.odd.length}): ` + r.odd.slice(0, 5).join('; ');
   return t;
 }
@@ -326,8 +326,11 @@ function openPage(page) {
   if (page === 'results') loadResults();
   if (page === 'history') loadHistory();
   if (page === 'schedule') loadSchedule();
+  if (page === 'settings') window.loadSettings && loadSettings();
 }
-document.querySelectorAll('[data-page]').forEach(el => (el.onclick = e => { e.preventDefault(); openPage(el.dataset.page); }));
+document.querySelectorAll('[data-page]').forEach(el => (el.onclick = e => { e.preventDefault(); if (el.dataset.page === 'watch') { window.openWatch && openWatch(); return; } openPage(el.dataset.page); }));
+// при возврате на главный экран центр всегда видим (раньше оставался класс анимации ухода — кнопки пропадали)
+new MutationObserver(() => { if (document.body.dataset.mode === 'welcome') $('welcome').classList.remove('leave'); }).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
 document.querySelectorAll('.back-home').forEach(b => (b.onclick = () => { document.body.dataset.mode = 'welcome'; }));
 pvz.onOpenPage(p => openPage(p));
 window.addEventListener('error', e => pvz.logError('интерфейс', `${e.message} @ ${String(e.filename).split('/').pop()}:${e.lineno}`));
@@ -506,8 +509,7 @@ async function loadSchedule() {
   S.list = c.schedules || [];
   S.presets = c.presets && Object.keys(c.presets).length ? c.presets : DEFAULT_PRESETS;
   S.orders = await pvz.bwOrders();
-  $('sTray').checked = c.tray !== false; $('sAuto').checked = !!c.autostart;
-  renderSchedule();
+    renderSchedule();
 }
 const saveSchedule = () => pvz.setCfg({ schedules: S.list });
 function whatOptions(s) {
@@ -548,8 +550,6 @@ $('sAdd').onclick = () => {
     o ? { kind: 'winner', guid: o.guid, name: o.name } : { kind: 'preset', preset: Object.keys(S.presets)[0], name: Object.keys(S.presets)[0] }));
   saveSchedule(); renderSchedule();
 };
-$('sTray').onchange = () => pvz.setCfg({ tray: $('sTray').checked });
-$('sAuto').onchange = () => pvz.setAutostart($('sAuto').checked);
 
 // запуск задания по расписанию
 const wait = ms => new Promise(r => setTimeout(r, ms));

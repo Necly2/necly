@@ -15,6 +15,8 @@
     document.querySelectorAll('[data-theme-btn]').forEach(b => { b.querySelector('svg').innerHTML = ICON[mode]; b.querySelector('span').textContent = NAME[mode]; b.title = 'Тема: ' + NAME[mode] + ' (нажмите, чтобы сменить)'; });
     if (was && was !== t) window.dispatchEvent(new Event('pvz-theme'));
   }
+  window.getThemeMode = () => mode;
+  window.setThemeMode = m => { mode = m; try { localStorage.setItem(K, mode); } catch (e) {} apply(); };
   apply();
   mq.addEventListener('change', () => mode === 'auto' && apply());
   document.addEventListener('DOMContentLoaded', () => {

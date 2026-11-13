@@ -3,14 +3,14 @@
 // «Выгрузка и проверка» (выгрузить объявления; затем отдельной кнопкой — проверка зон).
 (() => {
 const SRC = {
-  cian: { name: 'Циан', color: '#0468FF', desc: 'Всё настраивается автоматически' },
-  avito: { name: 'Авито', color: '#00AAFF', cls: 'avito', desc: 'Часть фильтров — один раз на сайте' },
-  winner: { name: 'Baza Winner', color: '#F97316', desc: 'Ваши сохранённые заказы' }
+  cian: { name: 'Циан', color: '#0468FF', desc: '' },
+  avito: { name: 'Авито', color: '#00AAFF', cls: 'avito', desc: '' },
+  winner: { name: 'Baza Winner', color: '#F97316', desc: '' }
 };
 const CHK = {
-  ozon: { name: 'Ozon', color: '#005BFF', desc: 'Зелёный, синий, голубой' },
-  yandex: { name: 'Яндекс Маркет', color: '#FFCC00', cls: 'ym', desc: 'Группы субсидий 1–4' },
-  wb: { name: 'Wildberries', color: '#CB11AB', cls: 'wb', desc: 'Гарантия и тариф' }
+  ozon: { name: 'Ozon', color: '#005BFF', desc: '' },
+  yandex: { name: 'Яндекс Маркет', color: '#FFCC00', cls: 'ym', desc: '' },
+  wb: { name: 'Wildberries', color: '#CB11AB', cls: 'wb', desc: '' }
 };
 const STEP_INFO = { select: ['Выбор', '#8B5CF6'], cian: ['Циан', '#0468FF'], avito: ['Авито', '#00AAFF'], winner: ['Winner', '#F97316'], center: ['Выгрузка и проверка', '#14B8A6'] };
 const ICON_OK = '<svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>';
@@ -70,11 +70,31 @@ async function openSiteView(kind, url) {
   $('wzSiteName').textContent = SRC[kind] ? SRC[kind].name : kind;
   await tick(); sendRect();
   if (url) await pvz.navUrl(kind, url, true);
+  setTimeout(() => zoomShow('site'), 1500);
 }
 function closeSiteView() { W.siteOpen = false; document.body.classList.remove('site-open'); pvz.siteRect(null); }
 $('wzSiteClose').onclick = () => { W.liveSite = false; closeSiteView(); if (cur() === 'center') rerender(); };
 $('wzSiteBack').onclick = () => pvz.siteBack();
 $('wzSiteReload').onclick = () => pvz.siteReload();
+
+// подсказка: «название ⌄» — по наведению или нажатию раскрывается объяснение (работает и на Mac)
+const tip = (label, text) => `<span class="tip"><span class="tip-l">${label}</span><button type="button" class="tip-b" tabindex="-1">⌄</button><span class="tip-t">${text}</span></span>`;
+document.addEventListener('click', e => {
+  const b = e.target.closest('.tip-b');
+  document.querySelectorAll('.tip.open').forEach(t => { if (!b || t !== b.parentNode) t.classList.remove('open'); });
+  if (b) { e.preventDefault(); e.stopPropagation(); b.parentNode.classList.toggle('open'); }
+}, true);
+
+// кнопки «Назад / Далее» — всегда в нижней полосе окна, на одном месте на всех шагах (не уезжают, когда открыт сайт)
+new MutationObserver(() => { const n = $('wzStep').querySelector(':scope > .wz-nav'); if (n) { $('wzFoot').innerHTML = ''; $('wzFoot').appendChild(n); } }).observe($('wzStep'), { childList: true });
+
+// масштаб сайтов: кнопки «− / +» (запоминается для каждого сайта)
+window.zoomShow = async which => { const z = await pvz.zoom(which, 0); document.querySelectorAll(`[data-zoom="${which}"] .zv`).forEach(e => (e.textContent = z + ' %')); };
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-zoom] [data-z]'); if (!b) return;
+  const which = b.closest('[data-zoom]').dataset.zoom, z = await pvz.zoom(which, +b.dataset.z);
+  b.closest('[data-zoom]').querySelector('.zv').textContent = z + ' %';
+});
 
 // ---------------- шаги ----------------
 const buildSteps = () => (W.steps = ['select', ...['cian', 'avito', 'winner'].filter(s => W.sources[s]), 'center']);
@@ -163,14 +183,13 @@ function bindSaveBlock(root) {
 
 // ---------------- шаг 1: выбор ----------------
 function card(key, info, on) {
-  return `<button class="pc-card ${info.cls || ''}${on ? ' on' : ''}" data-k="${key}" style="--b:${info.color}"><span class="ck">${ICON_OK}</span><span class="nm">${info.name}</span><span class="ds">${info.desc}</span></button>`;
+  return `<button class="pc-card ${info.cls || ''}${on ? ' on' : ''}" data-k="${key}" style="--b:${info.color}"><span class="ck">${ICON_OK}</span><span class="nm">${info.name}</span>${info.desc ? `<span class="ds">${info.desc}</span>` : ''}</button>`;
 }
 async function renderSelect() {
   const c = await pvz.getCfg();
   presets = c.presets && Object.keys(c.presets).length ? c.presets : JSON.parse(JSON.stringify(DEFAULT_PRESETS));
   $('wzStep').innerHTML = `<h2>Где работаем?</h2>
-    <p class="lead">Источники объявлений и карты для проверки.</p>
-    <div class="scen-inline"><span class="muted">Сценарий</span><select id="wzScen"><option value="">— текущие настройки —</option>${Object.keys(presets).map(n => `<option${n === W.scenario ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select><span class="qm" title="Сохранённый набор: источники, проверки, параметры, фильтры Авито и заказы Winner">?</span></div>
+    <div class="scen-inline">${tip('Сценарий', 'Сохранённый набор: источники, проверки, параметры поиска, фильтры Авито и заказы Winner. Сохраняется кнопкой «Сохранить сценарий» на последнем шаге.')}<select id="wzScen"><option value="">— текущие настройки —</option>${Object.keys(presets).map(n => `<option${n === W.scenario ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></div>
     <h3>Источники объявлений</h3><div class="pick" id="wzSrc">${Object.entries(SRC).map(([k, v]) => card(k, v, W.sources[k])).join('')}</div>
     <h3>Проверка зон</h3><div class="pick" id="wzChk">${Object.entries(CHK).map(([k, v]) => card(k, v, W.checks[k])).join('')}</div>
     <details class="fold" id="wzSaveF"><summary>Куда сохранять<span class="sum" id="wzSaveSum">${esc(saveSum(c))}</span></summary><div id="wzSave">${saveBlock(c, false)}</div></details>
@@ -260,17 +279,16 @@ function renderAvito() {
     <details class="fold"${manual ? ' open' : ''}><summary>Что будет на Авито<span class="sum">${W.avitoUrl ? 'фильтры сохранены' : manual ? 'нужно выставить на сайте' : 'всё автоматически'}</span></summary><div id="aList">${listHtml(avitoItems())}</div></details>
     ${W.avitoUrl ? `<div class="okline">✓ Фильтры Авито сохранены. <a id="aReset">Выставить заново</a></div>` : ''}
     <button class="bigbtn" id="aOpen"><svg viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>${W.avitoUrl ? 'Открыть Авито с сохранёнными фильтрами' : 'Открыть Авито и выставить фильтры'}</button>
-    <p class="hint" id="aHint" style="margin-top:10px">${manual ? 'Выберите на сайте вид, площадь и этаж и нажмите «Далее».' : ''}</p>
+    <p class="hint" id="aHint" style="margin-top:10px">${manual ? 'Выберите на сайте вид, площадь и этаж и нажмите «Далее». Фильтры запоминаются сразу — сайт можно свернуть.' : ''}</p>
     ${nav('← Назад')}`;
   if (first) bindParams(() => ($('aList').innerHTML = listHtml(avitoItems())));
   if ($('aReset')) $('aReset').onclick = () => { W.avitoUrl = null; persist(); render(); };
   $('aOpen').onclick = () => openSiteView('avito', W.avitoUrl || avitoUrl(W.params));
+  W.avitoTouched = false; W.avitoBase = null;
   bindNav(async () => {
     if (W.siteOpen && W.siteKind === 'avito') {
-      const u = await pvz.currentUrl();
-      if (/avito\.ru\/[^?]*kommercheskaya_nedvizhimost/.test(u) && !/_\d{8,}(\?|$)/.test(u)) {
-        const x = new URL(u); x.searchParams.delete('context'); x.searchParams.delete('localPriority'); W.avitoUrl = x.href; persist();
-      }
+      const s = avitoSearchUrl(await pvz.currentUrl());
+      if (s && W.avitoBase && s !== W.avitoBase) { W.avitoUrl = s; persist(); }
     }
     if (!W.avitoUrl && avitoManual(W.params).length) {
       const v = await showModal({ kind: 'warn', title: 'Фильтры Авито не выставлены',
@@ -283,10 +301,24 @@ function renderAvito() {
   });
 }
 
+// фильтры Авито запоминаются при каждом изменении выдачи на сайте (а не только при «Далее»): свернуть сайт можно в любой момент
+function avitoSearchUrl(u) {
+  if (!/avito\.ru\/[^?]*kommercheskaya_nedvizhimost/.test(u) || /_\d{8,}(\?|$)/.test(u)) return null;
+  const x = new URL(u); x.searchParams.delete('context'); x.searchParams.delete('localPriority'); x.searchParams.delete('p'); return x.href;
+}
+pvz.onUrl(u => {
+  if (document.body.dataset.mode !== 'wizard' || cur() !== 'avito' || W.siteKind !== 'avito' || !W.siteOpen) return;
+  const s = avitoSearchUrl(u); if (!s) return;
+  if (!W.avitoBase) { W.avitoBase = s; return; }   // первая загрузка после открытия — исходный адрес (с перенаправлениями Авито)
+  if (s === W.avitoBase) return;
+  W.avitoTouched = true; W.avitoUrl = s; persist();
+  const h = $('aHint'); if (h) h.textContent = '✓ Фильтры Авито запомнены — можно нажать «Далее» (сайт можно свернуть).';
+});
+
 // ---------------- шаг: Winner ----------------
 async function renderWinner() {
   $('wzStep').innerHTML = `<h2>Baza Winner <span class="tag">шаг ${W.step + 1}</span></h2>
-    <p class="lead">Отметьте заказы для выгрузки.<span class="qm" title="Параметры заказов хранятся в самом Winner. Если вход слетел — откройте Winner и войдите сами.">?</span></p>
+    <p class="lead">${tip('Отметьте заказы для выгрузки', 'Параметры заказов хранятся в самом Winner. Если вход слетел — откройте Winner и войдите сами.')}</p>
     <div id="oList"><p class="hint">Загружаю заказы…</p></div>
     <button class="bigbtn" id="wOpen"><svg viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>Открыть Winner (вход, просмотр заказов)</button>
     ${nav('← Назад')}`;
@@ -298,7 +330,7 @@ async function renderWinner() {
       <label class="switch"><input type="checkbox" class="on"${s.on ? ' checked' : ''}><span></span></label>
       <div><b>${esc(o.name)}</b><div class="hint">${o.guid.slice(0, 8)}…</div></div>
       <label class="field">Метка файлов<input type="text" class="tg" value="${esc(s.tag)}" placeholder="пусто"></label>
-      <label class="switch"><input type="checkbox" class="hd"${s.hide ? ' checked' : ''}><span></span><span class="lbl">в скрытые</span><span class="qm" title="После проверки файла выгруженные объявления уходят в скрытые (#3, #5). Без галочки (#4) — остаются в ленте.">?</span></label></div>`; }).join('') || '<p class="hint">Заказы не найдены — откройте Winner и зайдите в нужный заказ, он появится здесь.</p>';
+      <label class="switch"><input type="checkbox" class="hd"${s.hide ? ' checked' : ''}><span></span><span class="lbl">${tip('в скрытые', 'После проверки файла выгруженные объявления уходят в скрытые (#3, #5). Без галочки (#4) — остаются в ленте.')}</span></label></div>`; }).join('') || '<p class="hint">Заказы не найдены — откройте Winner и зайдите в нужный заказ, он появится здесь.</p>';
   $('oList').querySelectorAll('.order-row').forEach(r => {
     const s = W.orders[r.dataset.g];
     r.querySelector('.on').onchange = e => { s.on = e.target.checked; persist(); };
@@ -336,7 +368,11 @@ function renderCenter() {
   const hasErr = Object.values(R.src).some(s => s.st === 'err');
   const openF = [...document.querySelectorAll('#wzStep details.fold[open] > summary')].map(s => s.firstChild.textContent);
   $('wzStep').innerHTML = `<h2>Выгрузка и проверка</h2>
-    <p class="lead">Сначала выгрузка, потом проверка — обе по кнопке.</p>
+    <div class="cc-opts">
+      <label class="switch"><input type="checkbox" id="ccOnlyNew"><span></span><span class="lbl">Не повторять уже выгруженные</span></label>
+      <select id="ccSeenDays" title="За какой период"><option value="3">за 3 дня</option><option value="7">за 7 дней</option><option value="14">за 14 дней</option><option value="30">за 30 дней</option><option value="0">за всё время</option></select>
+      <label class="switch"><input type="checkbox" id="ccAuto"><span></span><span class="lbl">Проверять сразу после выгрузки</span></label>
+    </div>
     <div class="cc-grid">
       ${Object.entries(R.src).map(([k, s]) => `<div class="cc-card ${SRC[k].cls || ''}" style="--b:${SRC[k].color}" id="cc_${k}">
         <div class="h"><b>${SRC[k].name}</b><span class="st ${ST[s.st][1]}">${s.st === 'run' ? 'идёт…' : s.st === 'ok' ? 'готово · ' + fmtNum(s.total) : ST[s.st][0]}</span></div>
@@ -353,11 +389,10 @@ function renderCenter() {
       </div>
     </div>
     ${W.checks.ozon ? `<details class="fold" id="ozSetF"><summary>Настройки проверки Ozon<span class="sum" id="ozSum"></span></summary><div class="fgrid" id="ozSet">
-      <label class="field">Пауза между запросами, с<input type="text" class="num" data-oz="ozonPause" inputmode="numeric"></label>
-      <label class="field">Потоков<input type="text" class="num" data-oz="ozonThreads" inputmode="numeric"></label>
-      <label class="field">Ожидание при ограничении, мин<input type="text" class="num" data-oz="ozonWait" inputmode="numeric"></label>
-      <label class="field">Попыток после ограничения<input type="text" class="num" data-oz="ozonTries" inputmode="numeric"></label></div>
-      <p class="hint" style="margin-top:8px">Меньше пауза и больше потоков — быстрее, но Ozon чаще ограничивает. Надёжно: пауза 2 с, 2 потока. Изменения действуют со следующего запуска проверки.</p></details>` : ''}
+      <label class="field">${tip('Пауза, с', 'Сколько секунд ждать между запросами к Ozon. Меньше — быстрее, но Ozon чаще временно ограничивает запросы. Надёжно: 2 с.')}<input type="text" class="num" data-oz="ozonPause" inputmode="numeric"></label>
+      <label class="field">${tip('Потоки', 'Сколько адресов проверяется одновременно. 2 потока — примерно вдвое быстрее одного, но Ozon чаще ограничивает. Надёжно: 2.')}<input type="text" class="num" data-oz="ozonThreads" inputmode="numeric"></label>
+      <label class="field">${tip('Ожидание, мин', 'Если Ozon ограничил запросы — сколько минут подождать перед новой попыткой.')}<input type="text" class="num" data-oz="ozonWait" inputmode="numeric"></label>
+      <label class="field">${tip('Попытки', 'Сколько раз пробовать снова после ограничения, прежде чем остановиться (проверенное сохраняется).')}<input type="text" class="num" data-oz="ozonTries" inputmode="numeric"></label></div></details>` : ''}
     <details class="fold"><summary>Куда сохраняются файлы<span class="sum" id="ccSaveSum"></span></summary><div id="ccSaveBox"></div></details>
     <div class="cc-actions" style="margin-top:16px">
       ${R.phase === 'exported' && hasErr && !checking ? '<button class="ghost" id="ccRetryExp">↻ Повторить выгрузку с ошибкой</button>' : ''}
@@ -380,8 +415,7 @@ function renderCenter() {
       else if (allDone) main = '<button class="primary cc-main" id="wzNext">Готово ✓</button>';
       else main = '';
       const hint = R.phase === 'idle' ? 'Шаг 1 из 2' : R.phase === 'exported' && checks.length && R.check.st === 'wait' ? 'Шаг 2 из 2' : '';
-      return `<div class="wz-nav"><div class="nav-left"><button class="ghost" id="wzBack"${exporting || checking ? ' disabled' : ''}>← Назад</button>
-        <button class="link-btn" id="ccHome"${exporting || checking ? ' disabled' : ''}>На главный экран</button></div>
+      return `<div class="wz-nav"><div class="nav-left"><button class="ghost" id="wzBack"${exporting || checking ? ' disabled' : ''}>← Назад</button></div>
         <div class="nav-right"><span class="nav-hint">${hint}</span>${main}</div></div>`;
     })()}`;
   const on = (id, f) => { const e = $(id); if (e) e.onclick = f; };
@@ -397,7 +431,14 @@ function renderCenter() {
   on('ccStop', () => { if (W.run.phase === 'export') { W.run.stop = true; pvz.stop(); } if (W.run.check.st === 'run') pvz.ozonStop(); });
   on('ccCheck', () => runCheck(false));
   on('ccCheckAgain', () => runCheck(true));
-  on('ccHome', () => goHome());
+  pvz.getCfg().then(c => {
+    if (!$('ccOnlyNew')) return;
+    $('ccOnlyNew').checked = c.onlyNew !== false; $('ccSeenDays').value = String(c.seenDays || 0); $('ccSeenDays').disabled = c.onlyNew === false; $('ccAuto').checked = !!c.autoCheck;
+    $('ccOnlyNew').onchange = () => { pvz.setCfg({ onlyNew: $('ccOnlyNew').checked, cianOnlyNew: $('ccOnlyNew').checked }); $('ccSeenDays').disabled = !$('ccOnlyNew').checked; };
+    $('ccSeenDays').onchange = () => pvz.setCfg({ seenDays: +$('ccSeenDays').value });
+    $('ccAuto').onchange = () => pvz.setCfg({ autoCheck: $('ccAuto').checked });
+    if (exporting || checking) ['ccOnlyNew', 'ccSeenDays'].forEach(id => ($(id).disabled = true));
+  });
   on('ccContinue', () => runCheck(false));
   on('ccNow', () => { pvz.ozonNow(); W.run.check.wait = false; W.run.check.text = 'Пробую подключиться к Ozon…'; rerender(); });
   if ($('ozSet')) pvz.getCfg().then(c => {
@@ -486,6 +527,9 @@ async function runExportAll(onlyFailed) {
       text: errs.map(([k, s]) => `${SRC[k].name}: ${s.err || s.text}`).join('\n') + `\n\nСохранено файлов: ${n}.`,
       buttons: [{ label: 'Закрыть', value: 'close' }, { label: 'Продолжить к проверке', value: 'go' }, { label: '↻ Попробовать снова', cls: 'primary', value: 'retry' }] });
     if (v === 'retry') return runExportAll(true);
+  } else if (!R.stop && n && Object.values(W.checks).some(Boolean) && (await pvz.getCfg()).autoCheck) {
+    pvz.notify('PVZ Master — выгрузка завершена', `Файлов: ${n}. Начинаю проверку зон.`);
+    return runCheck(false);
   } else if (!R.stop) {
     pvz.notify('PVZ Master — выгрузка завершена', `Файлов: ${n}`);
     await showModal({ kind: 'ok', title: 'Выгрузка завершена', text: `Сохранено файлов: ${n}.` + (Object.values(W.checks).some(Boolean) ? '\nТеперь можно нажать «Начать проверку».' : ''),
@@ -546,7 +590,7 @@ async function goHome() {
     if (!v) return;
     W.run.stop = true; pvz.stop(); pvz.ozonStop();
   }
-  closeSiteView();
+  closeSiteView(); $('wzFoot').innerHTML = '';
   document.body.dataset.mode = 'welcome'; $('welcome').classList.remove('leave');
   pvz.nav('welcome');
 }
@@ -557,6 +601,6 @@ window.openWizard = async function () {
   document.body.dataset.mode = 'wizard'; pvz.siteRect(null);
   render(); $('wzStep').classList.add('enter');
 };
-$('startBtn').onclick = () => { $('welcome').classList.add('leave'); setTimeout(() => window.openWizard(), 320); };
+$('startBtn').onclick = async () => { if (window.ensureFolders && !(await ensureFolders())) return; $('welcome').classList.add('leave'); setTimeout(() => window.openWizard(), 320); };
 $('wzHome').onclick = goHome;
 })();
