@@ -443,6 +443,17 @@ function ensureMapView() {
   win.contentView.addChildView(mapView); mapView.setVisible(false);
   mapView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   mapReady = mapView.webContents.loadURL(ozon.OZON_URL).catch(() => {});
+  watchFail(mapView.webContents, 'ozon');
+}
+// карта не открылась (нет интернета, VPN, сайт не ответил) — сообщить окну: вместо «Загружаю карту…» будет причина
+function watchFail(wc, key) {
+  wc.on('did-fail-load', (_e, code, desc, url, isMain) => {
+    if (!isMain || code === -3) return;   // -3 — загрузка прервана новой (это нормально)
+    trace.log('карта ' + key, `не загрузилась: ${desc} (${code}) ${url}`);
+    send('mapFail', { key, why: desc || ('код ' + code) });
+  });
+  wc.on('did-finish-load', () => send('mapFail', { key, why: null }));
+  wc.on('render-process-gone', (_e, d) => { trace.log('карта ' + key, 'страница упала: ' + d.reason); send('mapFail', { key, why: 'страница карты упала (' + d.reason + ')' }); });
 }
 const FIND_INPUT = `(async () => {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -562,6 +573,7 @@ ipcMain.handle('ozonMapShow', async (_e, rect, q) => {
   ensureMapView();
   if (rect) { mapView.setBounds(rb(rect)); mapView.setVisible(true); }
   const wc = mapView.webContents;
+  if (!q) { trace.log('карта Ozon', 'показать без адреса'); return { ok: true, idle: true }; }
   trace.log('карта Ozon', 'поиск: ' + q); mapLastQuery = q;
   try {
     await mapReady; applyZoom(wc);
@@ -581,6 +593,7 @@ const EXT = {
   ym: { part: 'persist:maps', base: 'https://logistics.market.yandex.ru/lp/market-pvz' },
   listing: { part: 'persist:avito' }
 };
+const IDLE = { yandex: 'https://yandex.ru/maps/213/moscow/', '2gis': 'https://2gis.ru/moscow', osm: 'https://www.openstreetmap.org/#map=11/55.7522/37.6156' };
 const ext = {};
 function extView(key) {
   if (ext[key]) return ext[key];
@@ -588,6 +601,7 @@ function extView(key) {
   win.contentView.addChildView(v); v.setVisible(false);
   v.webContents.setWindowOpenHandler(({ url }) => { v.webContents.loadURL(url).catch(() => {}); return { action: 'deny' }; });
   v.webContents.on('did-navigate', () => applyZoom(v.webContents));
+  watchFail(v.webContents, key);
   const e = ext[key] = { view: v, seq: 0, ready: null };
   if (EXT[key].base) e.ready = v.webContents.loadURL(EXT[key].base).catch(() => {});
   return e;
@@ -603,6 +617,8 @@ ipcMain.handle('extShow', async (_e, key, rect, q, pt) => {
   trace.log('карта ' + key, 'показать: ' + (q || ''));
   try {
     if (key === 'listing') { if (q && wc.getURL() !== q) await wc.loadURL(q).catch(() => {}); return { ok: true }; }
+    // без адреса (объявление ещё не выбрано) — просто карта Москвы, если ничего не открыто
+    if (!q) { if (key !== 'listing' && !wc.getURL()) await wc.loadURL(EXT[key].base || IDLE[key]).catch(() => {}); applyZoom(wc); return { ok: true, idle: true }; }
     if (EXT[key].url) { await wc.loadURL(EXT[key].url(q, pt)).catch(() => {}); applyZoom(wc); return { ok: true }; }
     await e.ready; applyZoom(wc);
     await new Promise(r => setTimeout(r, 1500));
@@ -823,6 +839,11 @@ async function selfTest(dir) {
       await J(`selectRow(1,true); R.split=true; setMapMode('yandex'); setMapMode('ym'); R.showLst=true; applyLst(); 1`); await W8(14000); await shot('11-split');
       if (ext.yandex) fs.writeFileSync(path.join(dir, '12-yandex.png'), (await ext.yandex.view.webContents.capturePage()).toPNG());
       console.log('LST', await J(`JSON.stringify([rectOf('rLstHost'), R.showLst, R.sel, document.querySelector('.r-body').className])`)); console.log('EXT', JSON.stringify(Object.fromEntries(Object.entries(ext).map(([k, e]) => [k, { url: e.view.webContents.getURL(), vis: e.view.getVisible(), b: e.view.getBounds() }]))));
+    }
+    if (process.env.PVZ_IDLE) {
+      await J(`R.sel=null; R.split=true; R.agg='ozon'; R.gen='yandex'; layoutMaps(); 1`); await W8(15000); await shot('17-idle-split');
+      if (mapView) fs.writeFileSync(path.join(dir, '18-idle-oz.png'), (await mapView.webContents.capturePage()).toPNG()); if (ext.yandex) fs.writeFileSync(path.join(dir, '19-idle-ya.png'), (await ext.yandex.view.webContents.capturePage()).toPNG());
+      console.log('IDLE', JSON.stringify({ oz: mapView && { vis: mapView.getVisible(), b: mapView.getBounds(), url: mapView.webContents.getURL() }, ext: Object.fromEntries(Object.entries(ext).map(([k, e]) => [k, { vis: e.view.getVisible(), b: e.view.getBounds(), url: e.view.webContents.getURL() }])) }), await J(`JSON.stringify([R.fail, $('rOzQ').textContent])`));
     }
     if (process.env.PVZ_OZMAP) {
       await J(`selectRow(3,true); setMapMode('ozon'); 1`); await W8(30000); await shot('10-ozon-map');

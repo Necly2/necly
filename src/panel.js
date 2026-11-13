@@ -502,9 +502,26 @@ function setMapMode(m) {
   pvz.setCfg({ resMap: m });
   layoutMaps();
   const x = R.sel != null ? R.rows[R.sel] : null;
-  if (!x) { if (shown().agg || GEN_EXT.includes(shown().gen)) $('rOzQ').textContent = 'Выберите объявление в таблице'; return; }
+  if (!x) { if (shown().agg || GEN_EXT.includes(shown().gen)) $('rOzQ').textContent = 'Выберите объявление в таблице'; showIdleMaps(); return; }
   showOnMap(x);
 }
+// объявление ещё не выбрано — всё равно открыть выбранные карты (раньше они не показывались и висело «Загружаю карту…»)
+async function showIdleMaps() {
+  if (document.body.dataset.mode !== 'results') return;
+  const s = shown(); await new Promise(r => requestAnimationFrame(r));
+  if (s.agg === 'ozon') pvz.ozonMapShow(null, null).then(syncRects);
+  else if (s.agg && s.agg !== 'ym') pvz.extShow(s.agg, null, null).then(syncRects);
+  if (GEN_EXT.includes(s.gen)) pvz.extShow(s.gen, null, null).then(syncRects);
+}
+// карта не загрузилась — показать причину вместо вечного «Загружаю карту…»
+R.fail = {};
+const hostOf = k => (k === 'ozon' || AGG.includes(k)) ? 'rOzHost' : GEN_EXT.includes(k) ? 'rGenHost' : k === 'listing' ? 'rLstHost' : null;
+pvz.onMapFail(d => {
+  R.fail[d.key] = d.why; const h = hostOf(d.key); if (!h) return;
+  const w = $(h).querySelector('.oz-wait');
+  if (w) w.textContent = d.why ? `Карта не загрузилась: ${d.why}. Проверьте интернет и VPN, затем нажмите ↻ над картой.` : (h === 'rLstHost' ? 'Выберите объявление в таблице' : 'Загружаю карту…');
+  syncRects();
+});
 // карта Яндекс Маркета: своя карта (проекция Яндекса EPSG:3395) — подложка Яндекс.Карт + слои зон ПВЗ Маркета
 // (те же тайлы, что читает проверка: available_v2, only_subsidy_v2, security) и точка выбранного объявления
 let ymMap = null, ymMarker = null;
@@ -543,6 +560,7 @@ function layoutMaps() {
   if (both) { $('rMapZoom').dataset.zoom = s.agg === 'ozon' ? 'ozonmap' : s.agg; $('rMapZoom').title = 'Масштаб верхней карты'; }
   else if (R.split && s.agg === 'ym' && GEN_EXT.includes(s.gen)) { $('rMapZoom').style.display = ''; $('rMapZoom').dataset.zoom = s.gen; }
   if (!live) $('rOzQ').textContent = '';
+  if (live && R.sel == null) showIdleMaps();
   setTimeout(() => { R.map && R.map.invalidateSize(); syncRects(); }, 40);
 }
 async function showOnMap(x) {
@@ -567,7 +585,7 @@ $('rAggSel').onchange = () => setMapMode($('rAggSel').value);
 $('rMapSel').addEventListener('mousedown', () => { if (!$('rMapSel').classList.contains('active')) setMapMode($('rMapSel').value); });
 $('rAggSel').addEventListener('mousedown', () => { if (!$('rAggSel').classList.contains('active')) setMapMode($('rAggSel').value); });
 $('rSplit').onclick = () => { R.split = !R.split; pvz.setCfg({ resSplit: R.split }); layoutMaps(); const x = R.rows[R.sel]; if (x) showOnMap(x); };
-$('rOzReload').onclick = async () => { const s = shown(); if (s.agg === 'ozon') await pvz.ozonMapReload(); else if (s.agg) await pvz.extReload(s.agg); if (GEN_EXT.includes(s.gen)) await pvz.extReload(s.gen); const x = R.rows[R.sel]; if (x) setTimeout(() => showOnMap(x), 1800); };
+$('rOzReload').onclick = async () => { const s = shown(); R.fail = {}; document.querySelectorAll('#rOzHost .oz-wait, #rGenHost .oz-wait').forEach(w => (w.textContent = 'Загружаю карту…')); if (s.agg === 'ozon') await pvz.ozonMapReload(); else if (s.agg) await pvz.extReload(s.agg); if (GEN_EXT.includes(s.gen)) await pvz.extReload(s.gen); const x = R.rows[R.sel]; if (x) setTimeout(() => showOnMap(x), 1800); };
 // сайт объявления — средняя колонка
 function lstAuto() { return window.innerWidth >= 1700; }
 function applyLst() {
@@ -588,20 +606,22 @@ $('rShowLst').onchange = () => { R.showLst = $('rShowLst').checked; pvz.setCfg({
 $('rLstExt').onclick = () => { const x = R.rows[R.sel]; if (x && x.url) pvz.openExternal(x.url); };
 // встроенные сайты — точно на свои места (или спрятать)
 const modalIsOpen = () => $('modal').classList.contains('on');
-const visRect = id => { const e = $(id); if (!e || e.offsetParent === null) return null; const r = rectOf(id); return r.width > 50 && r.height > 50 ? r : null; };
+const visRect = id => { const e = $(id); if (!e || !e.getClientRects().length || getComputedStyle(e).display === 'none') return null; const r = rectOf(id); return r.width > 50 && r.height > 50 ? r : null; };
 function syncRects() {
   const away = document.body.dataset.mode !== 'results' || modalIsOpen() || R.dragging || $('rMoreMenu').classList.contains('on');
   const s = shown(), has = R.sel != null && !away;
   const full = document.querySelector('.r-body .full');
-  const vis = id => has && (!full || full.contains($(id))) ? visRect(id) : null;
-  pvz.ozonMapRect(s.agg === 'ozon' ? vis('rOzHost') : null);
-  pvz.extRect('wb', s.agg === 'wb' ? vis('rOzHost') : null); pvz.extRect('ym', null);
-  for (const k of GEN_EXT) pvz.extRect(k, s.gen === k ? vis('rGenHost') : null);
-  pvz.extRect('listing', R.showLst ? vis('rLstHost') : null);
+  const fit = id => (!full || full.contains($(id))) ? visRect(id) : null;
+  // карты видны и без выбранного объявления; сайт объявления — только когда оно выбрано; не загрузившаяся карта прячется (видна причина)
+  const vis = (id, k) => !away && !R.fail[k] ? fit(id) : null;
+  pvz.ozonMapRect(s.agg === 'ozon' ? vis('rOzHost', 'ozon') : null);
+  pvz.extRect('wb', s.agg === 'wb' ? vis('rOzHost', 'wb') : null); pvz.extRect('ym', null);
+  for (const k of GEN_EXT) pvz.extRect(k, s.gen === k ? vis('rGenHost', k) : null);
+  pvz.extRect('listing', R.showLst && has ? fit('rLstHost') : null);
 }
 ['rOzHost', 'rGenHost', 'rLstHost', 'rMapArea'].forEach(id => new ResizeObserver(syncRects).observe($(id)));
 window.addEventListener('resize', syncRects);
-new MutationObserver(() => setTimeout(syncRects, 50)).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
+new MutationObserver(() => setTimeout(() => { syncRects(); if (document.body.dataset.mode === 'results' && R.sel == null && R.map) showIdleMaps(); }, 50)).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
 new MutationObserver(syncRects).observe($('modal'), { attributes: true, attributeFilter: ['class'] });
 // во весь экран: сайт объявления или карты; выход — кнопкой или Esc
 function setFull(id) {

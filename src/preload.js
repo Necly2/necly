@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('pvz', {
   extRect: (k, r) => ipcRenderer.invoke('extRect', k, r),
   extHideAll: s => ipcRenderer.invoke('extHideAll', s),
   extReload: k => ipcRenderer.invoke('extReload', k),
+  onMapFail: cb => ipcRenderer.on('mapFail', (_e, d) => cb(d)),
   extExternal: k => ipcRenderer.invoke('extExternal', k),
   history: () => ipcRenderer.invoke('history'),
   results: () => ipcRenderer.invoke('results'),
