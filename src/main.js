@@ -105,7 +105,15 @@ function createWindow() {
   view.webContents.on('did-navigate-in-page', (_e, url) => send('url', url));
 }
 
+// идущие процессы — для меню в строке меню Mac (и подсказки значка в трее)
+const procs = {};
+const SITE_NAMES = { cian: 'Циан', avito: 'Авито', winner: 'Winner' };
+function pctOf(text) { const m = String(text || '').match(/(\d[\d\s]*)\s*из\s*(?:максимум\s*)?(\d[\d\s]*)/); if (!m) return null; const a = +m[1].replace(/\s/g, ''), b = +m[2].replace(/\s/g, ''); return b ? Math.min(100, Math.round(100 * a / b)) : null; }
+function procUpdate() { try { scheduler.setProgress(Object.values(procs)); } catch {} }
 const send = (ch, data) => {
+  if (ch === 'status' && running) { procs.export = { name: 'Выгрузка · ' + (SITE_NAMES[currentSite] || 'сайт'), text: String(data).split('\n')[0], pct: pctOf(data) }; procUpdate(); }
+  if (ch === 'ozonStatus' && data) { procs.check = { name: 'Проверка зон', text: String(data.text || '').split('\n')[0], pct: data.total ? Math.round(100 * (data.done || 0) / data.total) : pctOf(data.text) }; procUpdate(); }
+  if (ch === 'ozonDone') { delete procs.check; procUpdate(); }
   if (ch === 'status') trace.status(currentSite || 'выгрузка', data);
   else if (ch === 'ozonStatus' && data && data.text) trace.status('проверка', data.text);
   return win && !win.isDestroyed() && win.webContents.send(ch, data);
@@ -271,7 +279,7 @@ ipcMain.handle('start', async (_e, c) => {
       journal.addHistory({ type: 'export', site, title: c.title || (r.extra || '').replace(/^Заказ: /, '').split(';')[0], ok: !!r.ok, total: r.total || 0, files: r.saved || [], reason: r.reason || r.error });
       return Object.assign({ site, withCoords: r.total, ozonQueued: q }, r);
     } catch (e) { journal.logError('Winner', e); journal.addHistory({ type: 'export', site, ok: false, total: 0, files: [], reason: String(e && e.message || e) }); return { ok: false, error: String(e && e.message || e) }; }
-    finally { running = false; }
+    finally { running = false; delete procs.export; procUpdate(); }
   }
 
   running = true;
@@ -299,7 +307,7 @@ ipcMain.handle('start', async (_e, c) => {
     journal.logError(site === 'cian' ? 'Циан' : 'Авито', e);
     journal.addHistory({ type: 'export', site, title: c.title || '', ok: false, total: 0, files: [], reason: String(e && e.message || e) });
     return { ok: false, error: String(e && e.message || e) };
-  } finally { running = false; }
+  } finally { running = false; delete procs.export; procUpdate(); }
 });
 
 // ---------- проверка Ozon ----------
@@ -608,6 +616,9 @@ ipcMain.handle('bwOrders', () => {
   return Object.values(out);
 });
 ipcMain.handle('notify', (_e, t, b) => scheduler.notify(t, b));
+ipcMain.handle('vpnCheck', () => require('./vpn').check());
+ipcMain.handle('flats', (_e, lat, lon) => require('./flats').lookup(lat, lon));
+ipcMain.handle('flatsCached', (_e, pts) => { const f = require('./flats'); return pts.map(([a, b]) => f.cached(a, b)); });
 ipcMain.handle('setAutostart', (_e, on) => { const c = Object.assign(loadCfg(), { autostart: !!on }); saveCfg(c); scheduler.applyAutostart(on); return true; });
 ipcMain.handle('isVisible', () => win.isVisible());
 ipcMain.handle('errors', () => journal.readErrors());
@@ -627,7 +638,13 @@ app.on('second-instance', () => { if (win) { win.show(); win.focus(); } });
 app.on('activate', () => { if (win) win.show(); });
 if (gotLock) app.whenReady().then(() => {
   createWindow(); updater.schedule(win);
-  scheduler.setupTray(win); scheduler.bindClose(win, loadCfg); scheduler.applyAutostart(loadCfg().autostart);
+  scheduler.setupTray(win); scheduler.bindClose(win, loadCfg);
+  // VPN: предупреждение при запуске и если включится во время работы
+  require('./vpn').watch((r, was) => {
+    trace.log('сеть', `VPN: ${r.vpn ? 'похоже, включён' : 'нет'}${r.adapter ? ' (адаптер ' + r.adapter + ')' : ''}; ответы: ${JSON.stringify(r.status)}`);
+    if (r.vpn) scheduler.notify('PVZ Master: похоже, включён VPN', 'С VPN Авито, Циан и карта Ozon могут не открываться. Выключите VPN, чтобы выгрузка и проверка работали.');
+    if (r.vpn || was) send('vpn', r);
+  }); scheduler.applyAutostart(loadCfg().autostart);
   scheduler.start(loadCfg, s => { journal.addHistory({ type: 'schedule', ok: true, title: s.name || s.preset || 'задание', reason: 'запуск по расписанию ' + s.time }); win.webContents.send('runSchedule', s); }); if (process.env.PVZ_DEBUG) console.log('PVZ main ready, exceljs', typeof require('exceljs').Workbook, 'build', updater.currentBuild());
   if (process.env.PVZ_SHOT) selfTest(process.env.PVZ_SHOT);
 });

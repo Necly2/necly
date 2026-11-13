@@ -440,7 +440,7 @@ function renderResults(fit) {
     <td class="num-c">${i + 1}</td><td>${esc(x.platform)}</td>
     <td><span class="zb"><i style="background:${zoneColor(x)}"></i>${esc(x.zone)}</span></td>
     <td class="addr">${R.seen[markKey(x)] ? '' : '<b class="new-dot" title="Ещё не просмотрено">●</b>'}${esc(x.address)}${x.also && x.also.length ? x.also.map(y => `<span class="also" title="Это помещение есть и в проверке ${esc(y.platform)}"><i style="background:${zoneColor(y)}"></i>${esc(y.platform)}: ${esc(y.zone)}</span>`).join('') : ''}${x.archived ? '<span class="also">из архива</span>' : ''}${x.metro ? `<small>${esc(x.metro)}</small>` : ''}${x.note ? `<small>${esc(x.note)}</small>` : ''}</td>
-    <td class="n">${area(x)}</td><td class="n">${x.price != null ? fmtNum(x.price) + ' ₽' : ''}${x.money ? `<small class="pay">выплата ${fmtNum(x.money)} ₽</small>` : ''}</td>
+    <td class="n">${area(x)}</td><td class="n flats" data-flats="${x.id}">${flatsCell(x)}</td><td class="n">${x.price != null ? fmtNum(x.price) + ' ₽' : ''}${x.money ? `<small class="pay">выплата ${fmtNum(x.money)} ₽</small>` : ''}</td>
     <td>${fmtTime(x.checked)}</td><td class="acts">${x.url ? '<a class="open" href="#">Открыть ↗</a>' : ''}<button class="star${R.watch[markKey(x)] ? ' on' : ''}" title="${R.watch[markKey(x)] ? 'Убрать из отслеживаемых' : 'Отслеживать'}">${R.watch[markKey(x)] ? '★' : '☆'}</button></td><td class="mk"><label class="mbox"><input type="checkbox"${x.mark ? ' checked' : ''}><span></span></label></td></tr>`).join('');
   $('rMore').textContent = list.length > shown.length ? `Показаны первые ${fmtNum(shown.length)} — уточните фильтры.` : (list.length ? '' : 'Ничего не найдено — измените фильтры или день.');
   R.layer.clearLayers(); R.markers.clear();
@@ -453,6 +453,7 @@ function renderResults(fit) {
     m.addTo(R.layer); R.markers.set(x.id, m); pts.push([x.lat, x.lon]);
   }
   if (fit && pts.length) R.map.fitBounds(pts, { padding: [30, 30], maxZoom: 14 });
+  setTimeout(loadFlats, 300);
 }
 // ---- карта Ozon по выбранному объявлению ----
 // что искать на карте Ozon: адрес, с которым сверялись при проверке (если Ozon уточнил его), иначе адрес объявления
@@ -539,7 +540,8 @@ function baseTiles() {
     : L.tileLayer('https://tile{s}.maps.2gis.com/tiles?x={x}&y={y}&z={z}&v=1', { attribution: '© 2ГИС', subdomains: '0123', maxZoom: 18 });
 }
 function selectRow(id, fly) {
-  R.sel = id; if (R.rows[id]) markSeen(R.rows[id], document.querySelector(`#rRows tr[data-id="${id}"]`));
+  R.sel = id; { const x = R.rows[id]; if (x && x.lat != null && (x.flats === undefined || (x.flats && x.flats.err))) pvz.flats(x.lat, x.lon).then(f => { x.flats = f || { n: null }; paintFlats(x); }).catch(() => {}); }
+  if (R.rows[id]) markSeen(R.rows[id], document.querySelector(`#rRows tr[data-id="${id}"]`));
   if (R.mapMode && R.mapMode !== 'res') showOnMap(R.rows[id]);
   if (R.showLst) showListing(R.rows[id]);
   document.querySelectorAll('#rRows tr.sel').forEach(t => t.classList.remove('sel'));
@@ -574,6 +576,32 @@ document.querySelectorAll('.r-table th[data-k]').forEach(th => (th.onclick = () 
 ['rArea', 'rPrice', 'rSearch'].forEach(id => $(id).addEventListener('input', () => renderResults(false)));
 $('rPlat').querySelectorAll('input').forEach(i => (i.onchange = () => renderResults(true)));
 $('rReload').onclick = () => loadResults();
+// квартир в доме (OpenStreetMap): сначала из кэша, по выбору строки — запрос; видимые строки догружаются по одной
+function flatsCell(x) {
+  const f = x.flats; if (x.lat == null) return '';
+  if (f === undefined) return '<span class="muted">…</span>';
+  if (!f || f.n == null) return '<span class="muted" title="Нет данных в OpenStreetMap">—</span>';
+  return f.exact ? fmtNum(f.n) : `<span title="Оценка: ${f.levels} эт. × ${f.entrances || 1} подъезд(а) × 4">≈${fmtNum(f.n)}</span>`;
+}
+let flatsBusy = false;
+async function loadFlats() {
+  const need = R.list.slice(0, 1000).filter(x => x.lat != null && x.flats === undefined);
+  if (!need.length) return;
+  const c = await pvz.flatsCached(need.map(x => [x.lat, x.lon]));
+  need.forEach((x, i) => { if (c[i]) x.flats = c[i]; });
+  paintFlats();
+  if (flatsBusy) return; flatsBusy = true;
+  try {
+    for (const x of R.list.slice(0, 60)) {
+      if (document.body.dataset.mode !== 'results') break;
+      if (x.lat == null || x.flats !== undefined) continue;
+      x.flats = await pvz.flats(x.lat, x.lon).catch(() => null) || { n: null }; paintFlats(x);
+    }
+  } finally { flatsBusy = false; }
+}
+function paintFlats(only) {
+  for (const x of only ? [only] : R.list.slice(0, 1000)) { const td = document.querySelector(`td[data-flats="${x.id}"]`); if (td) td.innerHTML = flatsCell(x); }
+}
 // просмотренные: объявление считается просмотренным, когда вы его выбрали или открыли
 let seenT = null;
 function markSeen(x, tr) {

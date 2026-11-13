@@ -377,7 +377,9 @@ function renderCenter() {
       ${Object.entries(R.src).map(([k, s]) => `<div class="cc-card ${SRC[k].cls || ''}" style="--b:${SRC[k].color}" id="cc_${k}">
         <div class="h"><b>${SRC[k].name}</b><span class="st ${ST[s.st][1]}">${s.st === 'run' ? 'идёт…' : s.st === 'ok' ? 'готово · ' + fmtNum(s.total) : ST[s.st][0]}</span></div>
         <div class="p">${esc(s.st === 'wait' ? srcSummary(k) : prettyNums(s.text))}</div>
-        ${s.st === 'run' ? '<div class="bar ind"><i></i></div>' : ''}
+        ${s.fix ? `<div class="fix"><b>${SRC[k].name} просит пройти проверку на робота</b><span>Сайт открыт справа — пройдите проверку (или войдите), затем нажмите «Продолжить выгрузку». Уже выгруженное сохранено.</span>
+          <div class="cc-actions"><button class="primary" data-fix="go">▶ Продолжить выгрузку</button><button class="ghost" data-fix="skip">Пропустить ${SRC[k].name}</button></div></div>` :
+          s.st === 'run' ? '<div class="bar ind"><i></i></div>' : ''}
         ${s.files.length ? `<div class="cc-files">${s.files.map(f => `<a data-file="${esc(f)}" title="${esc(f)}">📄 ${esc(f.split(/[\\/]/).pop())}</a>`).join('')}</div>` : ''}</div>`).join('')}
       <div class="cc-card" style="--b:#8B5CF6" id="cc_check">
         <div class="h"><b>Проверка зон</b><div class="chips-inline" style="margin-left:8px">${checks.map(([k, v]) => `<span style="--b:${v.color}">${v.name}</span>`).join('') || '<span style="--b:#64748b">не выбрана</span>'}</div>
@@ -459,6 +461,10 @@ function renderCenter() {
   on('ccFolder', () => pvz.showFile(R.files[0]));
   on('ccResults', () => openPage('results'));
   $('wzStep').querySelectorAll('a[data-file]').forEach(a => (a.onclick = () => pvz.showFile(a.dataset.file)));
+  $('wzStep').querySelectorAll('[data-fix]').forEach(b => (b.onclick = () => {
+    const S = Object.values(W.run.src).find(s => s.fix); if (!S) return;
+    const f = S.fix; S.fix = null; if (!W.liveSite) closeSiteView(); rerender(); f.res(b.dataset.fix === 'go');
+  }));
   $('wzBack').onclick = () => goTo(W.step - 1);
   on('wzNext', () => goHome());
 }
@@ -469,6 +475,15 @@ async function baseCfg(extra) {
   return Object.assign({ pages: c.pages || 40, delay: Math.max(3, c.delay || 4), part: c.part || 300, days: W.params.days === '' ? 0 : W.params.days }, extra);
 }
 const isBad = r => !r.ok || /ошибк|робот|войти|не удалось|не найден/i.test(r.reason || '');
+const isRobot = r => /робот|captcha|Доступ ограничен|проблема с IP|ответил 403|ответил 429/i.test((r.error || '') + ' ' + (r.reason || ''));
+// ждём, пока пользователь пройдёт проверку на сайте (сайт открыт справа), затем «Продолжить выгрузку»
+function waitUserFix(k, S, why) {
+  return new Promise(res => {
+    W.siteKind = k; openSiteView(k);
+    S.fix = { why, res }; S.st = 'run'; rerender();
+    pvz.notify('PVZ Master — нужна ваша помощь', `${SRC[k].name}: пройдите проверку на сайте и нажмите «Продолжить выгрузку».`);
+  });
+}
 async function exportOne(k) {
   const S = W.run.src[k];
   S.st = 'run'; S.text = 'Открываю сайт…'; S.files = []; S.total = 0; W.run.cur = k; rerender();
@@ -480,7 +495,17 @@ async function exportOne(k) {
     if (waitMs) await sleep(waitMs);
     if (W.run.stop) return null;
     S.text = (label ? label + ': ' : '') + 'выгрузка…'; rerender();
-    const r = await pvz.start(await baseCfg(extra));
+    let r = await pvz.start(await baseCfg(extra));
+    // сайт показал проверку на робота / ограничил доступ: показываем сайт прямо здесь, после проверки — продолжаем с того же места
+    // (уже выгруженное сохранено; при «Не повторять уже выгруженные» повторно не попадёт)
+    for (let tries = 0; tries < 3 && r && isRobot(r) && !W.run.stop; tries++) {
+      if (r.saved) S.files.push(...r.saved);
+      S.total += r.total || 0;
+      const ok = await waitUserFix(k, S, r.error || r.reason);
+      if (!ok) break;
+      S.text = (label ? label + ': ' : '') + 'продолжаю выгрузку…'; rerender();
+      r = await pvz.start(await baseCfg(extra));
+    }
     if (r.saved) S.files.push(...r.saved);
     S.total += r.total || 0;
     parts.push((label ? label + ': ' : '') + (r.ok ? `${r.reason}. Объявлений ${fmtNum(r.total)}, файлов ${r.saved.length}` + (r.extra ? `\n${r.extra}` : '') : 'ошибка — ' + r.error));
@@ -510,6 +535,11 @@ async function exportOne(k) {
   W.run.cur = null; rerender();
 }
 async function runExportAll(onlyFailed) {
+  const vpn = await pvz.vpnCheck().catch(() => null);
+  if (vpn && vpn.vpn) {
+    const v = await showModal({ kind: 'warn', title: 'Похоже, включён VPN', text: vpnText(vpn), buttons: [{ label: 'Отмена', value: false }, { label: 'Всё равно выгружать', cls: 'primary', value: true }] });
+    if (!v) return;
+  }
   const R = W.run; R.phase = 'export'; R.stop = false; W.liveSite = false; closeSiteView(); rerender();
   if (!onlyFailed) R.files = [];
   for (const k of Object.keys(R.src)) {
@@ -581,6 +611,13 @@ async function saveScenario() {
   W.scenario = v.input; await pvz.setCfg({ presets, lastPreset: v.input }); persist();
   showModal({ kind: 'ok', title: 'Сценарий сохранён', text: `«${v.input}» — выберите его на шаге «Выбор» в следующий раз.` });
 }
+
+// ---------------- VPN ----------------
+window.vpnText = r => (r.adapter ? `Найдено VPN-подключение «${r.adapter}». ` : '') + (r.bad && r.bad.length ? `Не открываются: ${r.bad.join(', ')}. ` : '') + 'С VPN Авито, Циан и карта Ozon часто не работают или показывают проверку на робота. Выключите VPN и продолжайте.';
+let vpnShownAt = 0;
+pvz.onVpn(r => {
+  if (r.vpn && Date.now() - vpnShownAt > 10 * 60e3) { vpnShownAt = Date.now(); showModal({ kind: 'warn', title: 'Похоже, включён VPN', text: vpnText(r) }); }
+});
 
 // ---------------- вход и выход ----------------
 async function goHome() {

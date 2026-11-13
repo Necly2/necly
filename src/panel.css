@@ -605,3 +605,18 @@ body.site-open .wz-site{padding:12px 14px 12px 12px}
 .r-maptools b{font-size:13px}
 .map-sel{width:auto;padding:6px 10px;font-size:12.5px}
 #rLstHost{display:block}
+
+.fix{margin-top:10px;padding:12px 14px;border-radius:12px;border:1px solid color-mix(in srgb,var(--warn-t) 50%,transparent);background:color-mix(in srgb,var(--warn-t) 10%,transparent);display:flex;flex-direction:column;gap:6px}
+.fix span{color:var(--sub);font-size:13px}
+.fix .cc-actions{margin-top:4px}
+td.flats{white-space:nowrap}
+/* таблица результатов всегда помещается по ширине (галочки не обрезаются) */
+.r-table{width:100%;table-layout:fixed}
+.r-table th:nth-child(1){width:30px}.r-table th:nth-child(2){width:72px}.r-table th:nth-child(3){width:104px}
+.r-table th:nth-child(5){width:74px}.r-table th:nth-child(6){width:62px}.r-table th:nth-child(7){width:92px}.r-table th:nth-child(8){width:84px}
+.r-table th:nth-child(9){width:96px}.r-table th:nth-child(10){width:34px}
+.r-table td{overflow:hidden;text-overflow:ellipsis}
+.r-table td:nth-child(8){font-size:12px}
+.r-table td.addr{overflow-wrap:anywhere}
+.r-table th:nth-child(2){width:64px}.r-table th:nth-child(3){width:96px}.r-table th:nth-child(6){width:58px}.r-table th:nth-child(9){width:116px}
+.r-table td.acts{overflow:visible}

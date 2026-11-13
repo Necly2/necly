@@ -55,5 +55,9 @@ contextBridge.exposeInMainWorld('pvz', {
   checkUpdate: () => ipcRenderer.invoke('checkUpdate'),
   version: () => ipcRenderer.invoke('version'),
   onStatus: cb => ipcRenderer.on('status', (_e, s) => cb(s)),
-  onUrl: cb => ipcRenderer.on('url', (_e, s) => cb(s))
+  onUrl: cb => ipcRenderer.on('url', (_e, s) => cb(s)),
+  onVpn: cb => ipcRenderer.on('vpn', (_e, s) => cb(s)),
+  vpnCheck: () => ipcRenderer.invoke('vpnCheck'),
+  flats: (a, b) => ipcRenderer.invoke('flats', a, b),
+  flatsCached: pts => ipcRenderer.invoke('flatsCached', pts)
 });
