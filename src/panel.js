@@ -447,7 +447,7 @@ function renderResults(fit) {
   $('rRows').innerHTML = shown.map((x, i) => `<tr data-id="${x.id}" class="${x.mark ? 'marked' : ''}${R.seen[markKey(x)] ? '' : ' unseen'}${x.also && x.also.length ? ' multi' : ''}">
     <td class="num-c">${i + 1}</td><td>${esc(x.platform)}</td>
     <td>${zoneCell(x)}</td>
-    <td class="addr">${R.seen[markKey(x)] ? '' : '<b class="new-dot" title="Ещё не просмотрено">●</b>'}${esc(x.address)}${x.also && x.also.length ? x.also.map(y => `<span class="also" title="Это помещение есть и в проверке ${esc(y.platform)}"><i style="background:${zoneColor(y)}"></i>${esc(y.platform)}: ${esc(y.zone)}</span>`).join('') : ''}${x.archived ? '<span class="also">из архива</span>' : ''}${x.metro ? `<small>${esc(x.metro)}</small>` : ''}${x.note ? `<small>${esc(x.note)}</small>` : ''}</td>
+    <td class="addr">${R.seen[markKey(x)] ? '' : '<b class="new-dot" title="Ещё не просмотрено">●</b>'}<span class="addr-t" title="Щёлкните, чтобы скопировать адрес">${esc(x.address)}</span>${x.also && x.also.length ? x.also.map(y => `<span class="also" title="Это помещение есть и в проверке ${esc(y.platform)}"><i style="background:${zoneColor(y)}"></i>${esc(y.platform)}: ${esc(y.zone)}</span>`).join('') : ''}${x.archived ? '<span class="also">из архива</span>' : ''}${x.metro ? `<small>${esc(x.metro)}</small>` : ''}${x.note ? `<small>${esc(x.note)}</small>` : ''}</td>
     <td class="n">${area(x)}</td><td class="n flats" data-flats="${x.id}">${flatsCell(x)}</td><td class="n">${x.price != null ? fmtNum(x.price) + ' ₽' : ''}${x.money ? `<small class="pay">выплата ${fmtNum(x.money)} ₽</small>` : ''}</td>
     <td>${fmtTime(x.checked)}</td><td class="acts">${x.url ? '<a class="open" href="#">Открыть ↗</a>' : ''}<button class="star${R.watch[markKey(x)] ? ' on' : ''}" title="${R.watch[markKey(x)] ? 'Убрать из отслеживаемых' : 'Отслеживать'}">${R.watch[markKey(x)] ? '★' : '☆'}</button></td><td class="mk"><label class="mbox"><input type="checkbox"${x.mark ? ' checked' : ''}><span></span></label></td></tr>`).join('');
   $('rMore').textContent = list.length > shown.length ? `Показаны первые ${fmtNum(shown.length)} — уточните фильтры.` : (list.length ? '' : 'Ничего не найдено — измените фильтры или день.');
@@ -492,27 +492,50 @@ function setMapMode(m) {
   if (!x) { if (shown().agg || GEN_EXT.includes(shown().gen)) $('rOzQ').textContent = 'Выберите объявление в таблице'; return; }
   showOnMap(x);
 }
+// карта Яндекс Маркета: своя карта (проекция Яндекса EPSG:3395) — подложка Яндекс.Карт + слои зон ПВЗ Маркета
+// (те же тайлы, что читает проверка: available_v2, only_subsidy_v2, security) и точка выбранного объявления
+let ymMap = null, ymMarker = null;
+function ymInit() {
+  if (ymMap) return ymMap;
+  ymMap = L.map('rYmMap', { crs: L.CRS.EPSG3395, zoomControl: true }).setView([55.75, 37.62], 12);
+  L.tileLayer('https://core-renderer-tiles.maps.yandex.net/tiles?l=map&x={x}&y={y}&z={z}&scale=1&lang=ru_RU', { maxZoom: 19, attribution: '© Яндекс' }).addTo(ymMap);
+  const ov = { 'Зоны ПВЗ': 'available_v2', 'Только субсидия': 'only_subsidy_v2', 'Охранные (красные)': 'security' }, layers = {};
+  for (const [name, l] of Object.entries(ov)) layers[name] = L.tileLayer(`https://tiles.s3.yandex.net/RU/${l}/{z}/{x}/{y}.png`, { maxNativeZoom: 13, maxZoom: 19, opacity: .75, errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==' }).addTo(ymMap);
+  L.control.layers(null, layers, { collapsed: true }).addTo(ymMap);
+  return ymMap;
+}
+function ymShow(x) {
+  const m = ymInit(); setTimeout(() => m.invalidateSize(), 30);
+  if (!x || x.lat == null) { $('rOzQ').textContent = 'У объявления нет координат'; return; }
+  if (ymMarker) ymMarker.remove();
+  ymMarker = L.marker([x.lat, x.lon]).addTo(m).bindPopup(`<b>${esc(x.address)}</b>${x.platform === 'Яндекс' ? '<br>' + esc(x.zone) : ''}`).openPopup();
+  m.setView([x.lat, x.lon], 16);
+  $('rOzQ').textContent = x.address;
+}
 function layoutMaps() {
   const s = shown(), live = !!s.agg || GEN_EXT.includes(s.gen);
   $('rMapArea').classList.toggle('split', R.split);
-  $('rOzHost').style.display = s.agg ? 'block' : 'none';
+  $('rOzHost').style.display = s.agg && s.agg !== 'ym' ? 'block' : 'none';
+  $('rYmMap').style.display = s.agg === 'ym' ? '' : 'none'; if (s.agg === 'ym') { ymInit(); setTimeout(() => ymMap.invalidateSize(), 50); }
   $('rMap').style.display = s.gen === 'res' ? '' : 'none';
   $('rGenHost').style.display = GEN_EXT.includes(s.gen) ? 'block' : 'none';
   $('rAggSel').classList.toggle('active', !!s.agg); $('rMapSel').classList.toggle('active', !!s.gen);
   $('rSplit').classList.toggle('on', R.split); if (!R.split) { $('rOzHost').style.flex = ''; $('rMap').style.flex = ''; $('rGenHost').style.flex = ''; } setTimeout(restoreSizes, 0);
   $('rOzReload').style.display = live ? '' : 'none'; $('rBase').style.display = s.gen === 'res' ? '' : 'none'; $('rMapZoom').style.display = live ? '' : 'none';
-  $('rMapZoom').dataset.zoom = s.agg === 'ozon' ? 'ozonmap' : s.agg || s.gen;
+  $('rMapZoom').dataset.zoom = s.agg === 'ozon' ? 'ozonmap' : (s.agg && s.agg !== 'ym' ? s.agg : s.gen);
+  if (s.agg === 'ym' && !GEN_EXT.includes(s.gen)) { $('rMapZoom').style.display = 'none'; $('rOzReload').style.display = 'none'; }
   if (!live) $('rOzQ').textContent = '';
   setTimeout(() => { R.map && R.map.invalidateSize(); syncRects(); }, 40);
 }
 async function showOnMap(x) {
   const s = shown(), q = ozQuery(x);
-  if (!s.agg && !GEN_EXT.includes(s.gen)) return;
+  if (s.agg === 'ym') ymShow(x);
+  if (!(s.agg && s.agg !== 'ym') && !GEN_EXT.includes(s.gen)) return;
   $('rOzQ').textContent = 'Ищу: ' + q;
   await new Promise(r => requestAnimationFrame(r));
   const jobs = [];
   if (s.agg === 'ozon') jobs.push(pvz.ozonMapShow(rectOf('rOzHost'), q));
-  else if (s.agg) jobs.push(pvz.extShow(s.agg, rectOf('rOzHost'), q, extPoint(x)));
+  else if (s.agg && s.agg !== 'ym') jobs.push(pvz.extShow(s.agg, rectOf('rOzHost'), q, extPoint(x)));
   if (GEN_EXT.includes(s.gen)) jobs.push(pvz.extShow(s.gen, rectOf('rGenHost'), q, extPoint(x)));
   const res = (await Promise.all(jobs))[0];
   if (R.rows[R.sel] !== x) return;
@@ -555,7 +578,7 @@ function syncRects() {
   const full = document.querySelector('.r-body .full');
   const vis = id => has && (!full || full.contains($(id))) ? visRect(id) : null;
   pvz.ozonMapRect(s.agg === 'ozon' ? vis('rOzHost') : null);
-  for (const k of ['wb', 'ym']) pvz.extRect(k, s.agg === k ? vis('rOzHost') : null);
+  pvz.extRect('wb', s.agg === 'wb' ? vis('rOzHost') : null); pvz.extRect('ym', null);
   for (const k of GEN_EXT) pvz.extRect(k, s.gen === k ? vis('rGenHost') : null);
   pvz.extRect('listing', R.showLst ? vis('rLstHost') : null);
 }
@@ -592,7 +615,7 @@ function placeSplitters() {
   }
   const area = $('rMapArea'); area.querySelectorAll('.split-v').forEach(h => h.remove());
   if (R.split) {
-    const top = $('rOzHost'), ar = area.getBoundingClientRect(), tr = top.getBoundingClientRect(), h = document.createElement('div');
+    const top = shown().agg === 'ym' ? $('rYmMap') : $('rOzHost'), ar = area.getBoundingClientRect(), tr = top.getBoundingClientRect(), h = document.createElement('div');
     h.className = 'split-v'; h.style.top = (tr.bottom - ar.top + 1) + 'px'; h.title = 'Потяните, чтобы изменить высоту';
     h.onmousedown = e => startDrag(e, 'y', 0, [top, top.nextElementSibling.style.display === 'none' ? $('rGenHost') : $('rMap')]); area.appendChild(h);
   }
@@ -634,7 +657,7 @@ function markAllSeen() {
   pvz.setCfg({ resSeen: R.seen }); renderDays(); renderResults(false);
 }
 function selectRow(id, fly) {
-  R.sel = id; { const x = R.rows[id]; if (x && x.lat != null && (x.flats === undefined || (x.flats && x.flats.err))) pvz.flats(x.lat, x.lon).then(f => { x.flats = f || { n: null }; paintFlats(x); }).catch(() => {}); }
+  R.sel = id; { const x = R.rows[id]; if (x && x.lat != null && (x.flats === undefined || (x.flats && x.flats.err))) pvz.flats(x.lat, x.lon, ozQuery(x)).then(f => { x.flats = f || { n: null }; paintFlats(x); }).catch(() => {}); }
   if (R.rows[id]) markSeen(R.rows[id], document.querySelector(`#rRows tr[data-id="${id}"]`));
   showOnMap(R.rows[id]);
   if (R.showLst) showListing(R.rows[id]);
@@ -660,6 +683,7 @@ $('rRows').addEventListener('click', e => {
     if (R.watch[k]) delete R.watch[k]; else { const row = Object.assign({}, x); delete row.also; delete row.id; R.watch[k] = { added: Date.now(), row }; }
     pvz.setCfg({ resWatch: R.watch }); renderDays(); renderResults(false); return;
   }
+  if (e.target.closest('.addr-t')) { navigator.clipboard.writeText(x.address).then(() => toast('Адрес скопирован: ' + x.address)).catch(() => {}); }
   markSeen(x, tr);
   if (e.target.closest('a.open')) { e.preventDefault(); pvz.openExternal(x.url); return; }
   selectRow(x.id, true);
@@ -683,7 +707,7 @@ function flatsCell(x) {
   const f = x.flats; if (x.lat == null) return '';
   if (f === undefined) return '<span class="muted">…</span>';
   if (!f || f.n == null) return '<span class="muted" title="Нет данных в OpenStreetMap">—</span>';
-  return f.exact ? fmtNum(f.n) : `<span title="Оценка: ${f.levels} эт. × ${f.entrances || 1} подъезд(а) × 4">≈${fmtNum(f.n)}</span>`;
+  return f.exact ? `<span title="Источник: ${esc(f.src || 'OpenStreetMap')}">${fmtNum(f.n)}</span>` : `<span title="Оценка: ${f.levels} эт. × ${f.entrances || 1} подъезд(а) × 4">≈${fmtNum(f.n)}</span>`;
 }
 let flatsBusy = false;
 async function loadFlats() {
@@ -697,7 +721,7 @@ async function loadFlats() {
     for (const x of R.list.slice(0, 60)) {
       if (document.body.dataset.mode !== 'results') break;
       if (x.lat == null || x.flats !== undefined) continue;
-      x.flats = await pvz.flats(x.lat, x.lon).catch(() => null) || { n: null }; paintFlats(x);
+      x.flats = await pvz.flats(x.lat, x.lon, ozQuery(x)).catch(() => null) || { n: null }; paintFlats(x);
     }
   } finally { flatsBusy = false; }
 }
@@ -842,3 +866,7 @@ pvz.onRunSchedule(async s => {
 
 // ручной режим (для опытных): прежняя панель с вкладками сайтов
 $('expertBtn').onclick = async () => { const c = await pvz.getCfg(); openSite(c.lastSite && NAMES[c.lastSite] && c.lastSite !== 'ozon' ? c.lastSite : 'winner'); };
+
+// короткое уведомление внизу
+let toastT = null;
+window.toast = t => { const e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => e.classList.remove('on'), 1800); };

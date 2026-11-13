@@ -59,6 +59,6 @@ contextBridge.exposeInMainWorld('pvz', {
   onUrl: cb => ipcRenderer.on('url', (_e, s) => cb(s)),
   onVpn: cb => ipcRenderer.on('vpn', (_e, s) => cb(s)),
   vpnCheck: () => ipcRenderer.invoke('vpnCheck'),
-  flats: (a, b) => ipcRenderer.invoke('flats', a, b),
+  flats: (a, b, c) => ipcRenderer.invoke('flats', a, b, c),
   flatsCached: pts => ipcRenderer.invoke('flatsCached', pts)
 });

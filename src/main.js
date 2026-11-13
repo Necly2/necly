@@ -632,7 +632,7 @@ ipcMain.handle('bwOrders', () => {
 });
 ipcMain.handle('notify', (_e, t, b) => scheduler.notify(t, b));
 ipcMain.handle('vpnCheck', () => require('./vpn').check());
-ipcMain.handle('flats', (_e, lat, lon) => require('./flats').lookup(lat, lon));
+ipcMain.handle('flats', (_e, lat, lon, addr) => require('./flats').lookup(lat, lon, addr));
 ipcMain.handle('flatsCached', (_e, pts) => { const f = require('./flats'); return pts.map(([a, b]) => f.cached(a, b)); });
 ipcMain.handle('setAutostart', (_e, on) => { const c = Object.assign(loadCfg(), { autostart: !!on }); saveCfg(c); scheduler.applyAutostart(on); return true; });
 ipcMain.handle('isVisible', () => win.isVisible());
@@ -695,7 +695,7 @@ async function selfTest(dir) {
     await J(`(()=>{const z=['голубой','синий','зелёный'];const rows=Array.from({length:14},(_,i)=>({platform:'Ozon',zone:z[i%3],address:'Москва, ул. Тестовая, '+(i%10+1),metro:'м. Пример',note:'',areaMin:30+(i%10),price:50000+i*5000,checked:Date.now()-Math.floor(i/6)*864e5-(i%2)*3600e3,url:'https://x/'+i,lat:55.7+i*0.01,lon:37.5+i*0.01,file:'OZON export_excel ЦИАН 13 '+(1+i%2)+'.xlsx'}));rows.push({platform:'Яндекс',zone:'синий',address:'ул. Тестовая, 2',metro:'',note:'',areaMin:31,price:55000,checked:Date.now(),url:'https://x/y',lat:55.71,lon:37.51,file:'ЯНДЕКС export_excel ЦИАН 13 1.xlsx'});R.marks={};R.seen={'https://x/3':1};R.watch={};prepRows(rows);R.day=dayKey(Date.now());renderDays();renderResults(true);})(); 1`);
     await W8(1500); await shot('09-results-fake');
     if (process.env.PVZ_EXT) {
-      await J(`selectRow(1,true); R.split=true; setMapMode('yandex'); setMapMode('wb'); R.showLst=true; applyLst(); 1`); await W8(14000); await shot('11-split');
+      await J(`selectRow(1,true); R.split=true; setMapMode('yandex'); setMapMode('ym'); R.showLst=true; applyLst(); 1`); await W8(14000); await shot('11-split');
       if (ext.yandex) fs.writeFileSync(path.join(dir, '12-yandex.png'), (await ext.yandex.view.webContents.capturePage()).toPNG());
       console.log('LST', await J(`JSON.stringify([rectOf('rLstHost'), R.showLst, R.sel, document.querySelector('.r-body').className])`)); console.log('EXT', JSON.stringify(Object.fromEntries(Object.entries(ext).map(([k, e]) => [k, { url: e.view.webContents.getURL(), vis: e.view.getVisible(), b: e.view.getBounds() }]))));
     }

@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="ru"><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.maps.2gis.com">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.maps.2gis.com https://*.tile.openstreetmap.org https://tile.openstreetmap.org https://tiles.s3.yandex.net https://core-renderer-tiles.maps.yandex.net">
 <link rel="stylesheet" href="../node_modules/leaflet/dist/leaflet.css">
 <title>PVZ Master</title>
 <link rel="stylesheet" href="panel.css">
@@ -50,6 +50,7 @@
   <footer class="wz-foot" id="wzFoot"></footer>
 </section>
 
+<div class="toast" id="toast"></div>
 <!-- ================= ОКНО ПО ЦЕНТРУ (ошибки, вопросы) ================= -->
 <div id="modal" class="modal"><div class="m-box"><div class="m-ico" id="mIco"></div><h3 id="mTitle"></h3><div class="m-text" id="mText"></div><div class="m-btns" id="mBtns"></div><button class="m-x" id="mX" title="Закрыть">✕</button></div></div>
 
@@ -106,6 +107,7 @@
       </div>
       <div class="map-area" id="rMapArea">
         <div class="r-map oz-host" id="rOzHost"><div class="oz-wait">Загружаю карту…</div></div>
+        <div class="r-map" id="rYmMap" style="display:none"></div>
         <div class="r-map" id="rMap"></div>
         <div class="r-map oz-host" id="rGenHost"><div class="oz-wait">Загружаю карту…</div></div>
       </div>
