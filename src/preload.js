@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('pvz', {
   ozonScan: () => ipcRenderer.invoke('ozonScan'),
   ozonStart: (p, o) => ipcRenderer.invoke('ozonStart', p, o),
   ozonStop: () => ipcRenderer.invoke('ozonStop'),
+  resultSources: r => ipcRenderer.invoke('resultSources', r),
   ozonNow: () => ipcRenderer.invoke('ozonNow'),
   ozonMapShow: (r, q) => ipcRenderer.invoke('ozonMapShow', r, q),
   ozonMapRect: r => ipcRenderer.invoke('ozonMapRect', r),

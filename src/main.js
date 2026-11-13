@@ -411,6 +411,14 @@ ipcMain.handle('ozonStart', (_e, paths, opts) => {
   enqueueOzon(paths); return { ok: true };
 });
 ipcMain.handle('ozonStop', () => { ozonStop = true; return true; });
+// «Перепроверить зоны»: по файлам результатов находим исходные выгрузки (по журналам проверок)
+ipcMain.handle('resultSources', (_e, results) => {
+  const cfg = loadCfg(), want = new Set(results), out = new Set();
+  for (const p of PLATFORMS) {
+    try { const j = JSON.parse(fs.readFileSync(path.join(cfg.ozonOut, p.journal), 'utf8')); for (const [src, v] of Object.entries(j.files || {})) if (v && want.has(v.result) && fs.existsSync(src)) out.add(src); } catch {}
+  }
+  return [...out];
+});
 // ---------- карта Ozon для выбранного объявления (вкладка «Результаты») ----------
 let mapView = null, mapReady = null, mapSeq = 0;
 function ensureMapView() {

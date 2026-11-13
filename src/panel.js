@@ -610,6 +610,19 @@ function markSeen(x, tr) {
   clearTimeout(seenT); seenT = setTimeout(() => { pvz.setCfg({ resSeen: R.seen }); renderDays(); }, 800);
 }
 window.openWatch = () => { R.day = 'watch'; openPage('results'); };
+// перепроверка зон: заново (без памяти результатов) для выгрузок, строки которых сейчас в списке
+$('rRecheck').onclick = async () => {
+  const files = [...new Set(R.list.filter(x => !x.archived).map(x => x.filePath))];
+  const src = files.length ? await pvz.resultSources(files) : [];
+  if (!src.length) { showModal({ kind: 'info', title: 'Нечего перепроверять', text: 'Не нашёл исходные выгрузки для строк в списке (возможно, файлы перенесены).' }); return; }
+  const v = await showModal({ kind: 'info', title: 'Перепроверить зоны?', text: `Выгрузок: ${src.length}. Каждый адрес будет проверен заново на карте (это займёт время), файлы результатов обновятся.`, buttons: [{ label: 'Отмена', value: false }, { label: 'Перепроверить', cls: 'primary', value: true }] });
+  if (!v) return;
+  const r = await pvz.ozonStart(src, { fresh: true });
+  if (!r.ok) { showModal({ kind: 'err', title: 'Не запустилось', text: r.error }); return; }
+  $('rRecheck').disabled = true; $('rRecheck').textContent = '↻ Перепроверяю…';
+};
+pvz.onOzonStatus(s => { if (document.body.dataset.mode === 'results' && $('rRecheck').disabled) $('rRecheck').textContent = '↻ ' + String(s.text || '').split('\n')[0].slice(0, 40); });
+pvz.onOzonDone(() => { if ($('rRecheck').disabled) { $('rRecheck').disabled = false; $('rRecheck').textContent = '↻ Перепроверить зоны'; if (document.body.dataset.mode === 'results') loadResults(); } });
 // экспорт отмеченных
 $('rExport').onclick = async () => {
   const list = R.rows.filter(x => x.mark && !(R.dedup && x.dupHidden));
