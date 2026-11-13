@@ -32,7 +32,7 @@ function readFile(file, spec, mtime) {
       platform: spec.platform, zone: String(g(r, spec.zoneCol) || ''), note: String(g(r, spec.noteCol) || ''),
       address: String(addr), metro: String(g(r, 'Метро / ЖД станции') || ''),
       areaMin: num(g(r, 'Мин. площадь')), areaMax: num(g(r, 'Макс. площадь')), price: num(g(r, 'Цена, ₽')),
-      money: spec.moneyCol ? num(g(r, spec.moneyCol)) : null, source: String(g(r, 'Источник') || ''), date: String(g(r, 'Дата') || ''),
+      money: spec.moneyCol ? num(g(r, spec.moneyCol)) : null, supMonth: num(g(r, 'Поддержка под площадь, ₽/мес')), supTotal: num(g(r, 'Поддержка всего, ₽')), supTier: String(g(r, 'Ступень площади') || ''), source: String(g(r, 'Источник') || ''), date: String(g(r, 'Дата') || ''),
       url, lat: isFinite(lat) ? lat : null, lon: isFinite(lon) ? lon : null,
       file: path.basename(file), filePath: file, checked: mtime
     });

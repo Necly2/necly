@@ -400,6 +400,7 @@ async function loadResults() {
   const r = await pvz.results();
   const cfg = await pvz.getCfg();
   if (R.showLst === undefined) { R.showLst = cfg.resShowLst != null ? (cfg.resShowLst && lstAuto()) || (cfg.resShowLst && window.innerWidth >= 1400) : lstAuto(); R.base = cfg.resBase || '2gis'; $('rBase').value = R.base; R.mapMode = cfg.resMap || 'res'; $('rMapSel').value = R.mapMode; }
+  R.testSup = !!cfg.testSupport;
   R.marks = cfg.resMarks || {}; R.seen = cfg.resSeen || {}; R.watch = cfg.resWatch || {}; if (cfg.resDedup === false) R.dedup = false;
   prepRows(r.rows);
   renderDays();
@@ -438,7 +439,7 @@ function renderResults(fit) {
   const area = x => x.areaMin == null ? '' : (x.areaMax && x.areaMax !== x.areaMin ? `${fmtNum(x.areaMin)}–${fmtNum(x.areaMax)}` : fmtNum(x.areaMin)) + ' м²';
   $('rRows').innerHTML = shown.map((x, i) => `<tr data-id="${x.id}" class="${x.mark ? 'marked' : ''}${R.seen[markKey(x)] ? '' : ' unseen'}${x.also && x.also.length ? ' multi' : ''}">
     <td class="num-c">${i + 1}</td><td>${esc(x.platform)}</td>
-    <td><span class="zb"><i style="background:${zoneColor(x)}"></i>${esc(x.zone)}</span></td>
+    <td>${zoneCell(x)}</td>
     <td class="addr">${R.seen[markKey(x)] ? '' : '<b class="new-dot" title="Ещё не просмотрено">●</b>'}${esc(x.address)}${x.also && x.also.length ? x.also.map(y => `<span class="also" title="Это помещение есть и в проверке ${esc(y.platform)}"><i style="background:${zoneColor(y)}"></i>${esc(y.platform)}: ${esc(y.zone)}</span>`).join('') : ''}${x.archived ? '<span class="also">из архива</span>' : ''}${x.metro ? `<small>${esc(x.metro)}</small>` : ''}${x.note ? `<small>${esc(x.note)}</small>` : ''}</td>
     <td class="n">${area(x)}</td><td class="n flats" data-flats="${x.id}">${flatsCell(x)}</td><td class="n">${x.price != null ? fmtNum(x.price) + ' ₽' : ''}${x.money ? `<small class="pay">выплата ${fmtNum(x.money)} ₽</small>` : ''}</td>
     <td>${fmtTime(x.checked)}</td><td class="acts">${x.url ? '<a class="open" href="#">Открыть ↗</a>' : ''}<button class="star${R.watch[markKey(x)] ? ' on' : ''}" title="${R.watch[markKey(x)] ? 'Убрать из отслеживаемых' : 'Отслеживать'}">${R.watch[markKey(x)] ? '★' : '☆'}</button></td><td class="mk"><label class="mbox"><input type="checkbox"${x.mark ? ' checked' : ''}><span></span></label></td></tr>`).join('');
@@ -576,6 +577,14 @@ document.querySelectorAll('.r-table th[data-k]').forEach(th => (th.onclick = () 
 ['rArea', 'rPrice', 'rSearch'].forEach(id => $(id).addEventListener('input', () => renderResults(false)));
 $('rPlat').querySelectorAll('input').forEach(i => (i.onchange = () => renderResults(true)));
 $('rReload').onclick = () => loadResults();
+// зона или (тестовая функция) поддержка Ozon под площадь объявления
+function zoneCell(x) {
+  if (R.testSup && x.platform === 'Ozon' && x.supMonth != null) {
+    const t = `Зона: ${x.zone}. Ступень ${x.supTier}${x.supTotal ? ', всего ' + fmtNum(x.supTotal) + ' ₽' : ''}`;
+    return `<span class="zb" title="${esc(t)}"><i style="background:${zoneColor(x)}"></i>${x.supMonth ? fmtNum(x.supMonth) + ' ₽/мес' : 'нет поддержки'}</span>${x.supMonth ? '' : `<small>${esc(x.supTier)}</small>`}`;
+  }
+  return `<span class="zb"><i style="background:${zoneColor(x)}"></i>${esc(x.zone)}</span>`;
+}
 // квартир в доме (OpenStreetMap): сначала из кэша, по выбору строки — запрос; видимые строки догружаются по одной
 function flatsCell(x) {
   const f = x.flats; if (x.lat == null) return '';

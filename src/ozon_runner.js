@@ -138,6 +138,15 @@ function addrMatch(addr, geo) {
   const a = streetWords(st), b = streetWords(geo.street);
   return a.size > 0 && [...a].every(x => b.has(x));
 }
+// ступени поддержки по площади: [[мин. м², макс. м² | null, ₽ в месяц, ₽ всего]] (по всем тарифам — максимум на ступень)
+function tiersOf(r) {
+  const m = new Map();
+  for (const f of Object.values((r && r.tariffs) || {})) for (const o of f.flexSupport || []) {
+    const k = (o.minArea || 0) + '-' + (o.maxArea || ''), p = m.get(k);
+    if (!p || (o.totalSupport || 0) > p[3]) m.set(k, [o.minArea || 0, o.maxArea || null, o.support || 0, o.totalSupport || 0]);
+  }
+  return [...m.values()].sort((a, b) => a[0] - b[0]);
+}
 function maxSupport(r) {
   let g = 0;
   for (const f of Object.values((r && r.tariffs) || {})) for (const o of f.flexSupport || []) g = Math.max(g, o.totalSupport || 0);
@@ -242,7 +251,7 @@ async function one(addr, c) {
   if (!final) return null;
   const green = await greenInfo(final, lat, lon);
   const rec = {final: slim(final), found_by: foundBy, green};
-  return [classify(rec.final, green), checkNote(addr, rec)];
+  return [classify(rec.final, green), checkNote(addr, rec), tiersOf(final)];
 }
 let STOP = false;
 async function worker() {

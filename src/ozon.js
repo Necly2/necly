@@ -15,8 +15,8 @@ const TEST = '/p-api/orp-agent-api/task/creation-availability?layer=PvzGroup&wit
 
 const EXPORT_HEAD = ['Онлайн-показ', 'Объект', 'Метро / ЖД станции', 'От станции', 'Адрес', 'Мин. площадь', 'Макс. площадь',
   'Цена, ₽', 'Пер. оплаты', 'Дата', 'Кол-во дней в экспозиции', 'Источник', 'Ссылка на первоисточник', 'Координаты'];
-const GEN_HEAD = [null, 'Онлайн-показ', ' ', ...EXPORT_HEAD.slice(2), 'Зона Ozon', 'Сверка адреса'];
-const WIDTHS = [13, 13, 32, 13, 13, 26, 13, 13, 13, 13, 13, 13, 29, 22, 30, 60, 40];
+const GEN_HEAD = [null, 'Онлайн-показ', ' ', ...EXPORT_HEAD.slice(2), 'Зона Ozon', 'Сверка адреса', 'Поддержка под площадь, ₽/мес', 'Поддержка всего, ₽', 'Ступень площади'];
+const WIDTHS = [13, 13, 32, 13, 13, 26, 13, 13, 13, 13, 13, 13, 29, 22, 30, 60, 40, 16, 16, 22];
 const ZONE_COLOR = { 'синий': '8DB4E2', 'голубой': 'BDD7EE', 'зелёный': 'C6EFCE', 'гарантия < 3 млн': 'E4DFEC', 'ошибка запроса': 'FFC000' };
 const KEEP = ['зелёный', 'синий', 'голубой', 'гарантия < 3 млн', 'ошибка запроса'];
 const GREEN_MIN_AREA_DEF = 60;   // Ozon с ноября 2026 пишет «для ПВЗ от 60 м²»; меняется в настройках
@@ -84,17 +84,25 @@ function scan(roots, outDir, days, journalName) {
 }
 
 // ---------- файл результата ----------
+// поддержка Ozon для площади объявления: ступень, в которую попадает площадь
+function supportFor(tiers, area) {
+  if (!tiers || !tiers.length || !area) return null;
+  const t = tiers.find(([a, b]) => area >= a && (b == null || area < b)) || (area >= tiers[tiers.length - 1][0] ? tiers[tiers.length - 1] : null);
+  if (!t) return { month: 0, total: 0, note: `меньше ${tiers[0][0]} м² — поддержки нет` };
+  return { month: t[2], total: t[3], note: `${t[0]}${t[1] ? '–' + t[1] : '+'} м²` };
+}
 async function writeResult(outFile, items) {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Проверка Ozon', { views: [{ state: 'frozen', ySplit: 1 }] });
   WIDTHS.forEach((w, i) => (ws.getColumn(i + 1).width = w));
   const h = ws.addRow(GEN_HEAD);
   h.eachCell({ includeEmpty: true }, c => { c.font = { bold: true }; c.alignment = { wrapText: true, vertical: 'middle' }; });
-  for (const { d, zone, note } of items) {
-    const vals = [null, ...EXPORT_HEAD.map(k => d[k] ?? null), zone, note || null];
+  for (const { d, zone, note, sup } of items) {
+    const vals = [null, ...EXPORT_HEAD.map(k => d[k] ?? null), zone, note || null, sup ? sup.month : null, sup ? sup.total : null, sup ? sup.note : null];
     const row = ws.addRow(vals);
     if (d._url) { const c = row.getCell(14); c.value = { text: 'Открыть объявление', hyperlink: d._url }; c.font = { color: { argb: 'FF0563C1' }, underline: true }; }
     const pc9 = row.getCell(9); if (typeof pc9.value === 'number') pc9.numFmt = '#,##0';   // «Цена, ₽» с разрядами
+    [GEN_HEAD.length - 2, GEN_HEAD.length - 1].forEach(i => (row.getCell(i).numFmt = '#,##0'));
     const col = ZONE_COLOR[zone];
     if (col) for (let i = 1; i <= GEN_HEAD.length; i++) row.getCell(i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + col } };
   }
@@ -183,7 +191,7 @@ async function run(files, ctx) {
       const merge = async () => {
         const out = await J('JSON.stringify(window.__out || {})').then(JSON.parse).catch(() => ({}));
         const now = Date.now();
-        for (const [k, v] of Object.entries(out)) cache[k] = [v[0], v[1] || '', now];
+        for (const [k, v] of Object.entries(out)) cache[k] = [v[0], v[1] || '', now, v[2] || null];
         writeJson(ctx.cachePath, cache);
       };
       while (true) {
@@ -222,11 +230,11 @@ async function run(files, ctx) {
     for (const d of rows) {
       const r = fresh(d._key) ? cache[d._key] : null;
       if (!r) { pending.push([d['Адрес'], d._key]); continue; }
-      const [zone, note] = r;
+      const [zone, note, , tiers] = r;
       if (!KEEP.includes(zone)) { stats.out_zone++; continue; }
       if (zone === 'зелёный' && Math.max(num(d['Мин. площадь']) || 0, num(d['Макс. площадь']) || 0) < (cfg.ozonGreenMin || GREEN_MIN_AREA_DEF)) { stats.green_small++; continue; }
       stats[zone]++;
-      items.push({ d, zone, note });
+      items.push({ d, zone, note, sup: supportFor(tiers, Math.max(num(d['Мин. площадь']) || 0, num(d['Макс. площадь']) || 0)) });
       if (note && /проверить вручную/.test(note)) manual.push(`${d['Адрес']} — ${note}`);
       const price = num(d['Цена, ₽']);
       if (price !== null && (price < 10000 || /год/.test(String(d['Пер. оплаты'] || '')))) odd.push(`${d['Адрес']} — ${d['Цена, ₽']} ${d['Пер. оплаты'] || ''}`);
