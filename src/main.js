@@ -13,6 +13,7 @@ const platforms = require('./platforms');
 const journal = require('./journal');
 const results = require('./results');
 const scheduler = require('./scheduler');
+const os = require('os');
 app.on('before-quit', () => trace.flush());
 process.on('uncaughtException', e => journal.logError('программа', e));
 process.on('unhandledRejection', e => journal.logError('программа (promise)', e));
@@ -49,6 +50,10 @@ function loadCfg() {
   c.onlyNewMigrated = 1;
   if (!c.jobsMigrated) { try { migrateJobs(c); c.jobsMigrated = 1; saveCfg(c); } catch (e) { console.error('migrateJobs', e); } }
   if (!Array.isArray(c.jobs)) c.jobs = [];
+  // этот компьютер (для расписания заказов при синхронизации)
+  if (!c.pcId) { c.pcId = 'pc' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); try { saveCfg(c); } catch {} }
+  // задания заказов без компьютера — выполняет этот
+  if ((c.schedules || []).some(s => s.kind === 'job' && !s.pc)) { for (const s of c.schedules) if (s.kind === 'job' && !s.pc) { s.pc = c.pcId; s.pcName = os.hostname(); } try { saveCfg(c); } catch {} }
   return c;
 }
 // ---------- заказы: сохранённые параметры выгрузки со своими папками (cfg.jobs) ----------
@@ -100,20 +105,54 @@ function outDirs(c) {
   return [...m.values()];
 }
 function touchJob(id) { const c = loadCfg(), j = findJob(c, id); if (j) { j.lastRun = Date.now(); saveCfg(c); } }
+const SYNC_FIELDS = ['name', 'color', 'sources', 'checks', 'params', 'avitoUrl', 'orders', 'onlyNew', 'seenDays', 'archived'];
+// расписание заказа (карточка): задания этого заказа целиком; новым — этот компьютер
+ipcMain.handle('jobSched', (_e, id, list) => {
+  const c = loadCfg(), j = findJob(c, id); if (!j) return [];
+  const pcName = os.hostname();
+  list = (list || []).map(s => Object.assign({ pc: c.pcId, pcName }, s, { kind: 'job', job: id, name: j.name }));
+  c.schedules = (c.schedules || []).filter(s => !(s.kind === 'job' && s.job === id)).concat(list);
+  j.updated = Date.now(); saveCfg(c); syncer.soon(); return list;
+});
+ipcMain.handle('pcInfo', () => ({ id: loadCfg().pcId, name: os.hostname() }));
+// ---------- синхронизация заказов через общую папку (Яндекс Диск) ----------
+const syncer = require('./sync').create({ loadCfg, saveCfg, defJobDirs, jobSeenPath, safeName, busy: () => running || ozonRunning, send: (ch, d) => send(ch, d), log: m => trace.log('синхронизация', m) });
+const yaDisk = () => [path.join(app.getPath('home'), 'YandexDisk'), path.join(app.getPath('home'), 'Yandex.Disk.localized'), path.join(app.getPath('home'), 'Yandex.Disk')].find(p => fs.existsSync(p));
+ipcMain.handle('syncState', () => { const c = loadCfg(); return { dir: c.syncDir || '', exists: !!c.syncDir && fs.existsSync(c.syncDir), last: syncer.state.last, err: syncer.state.err, pc: os.hostname(), yandex: yaDisk() || '' }; });
+ipcMain.handle('syncPick', async () => {
+  const c = loadCfg();
+  const r = await dialog.showOpenDialog(win, { title: 'Общая папка заказов (на Яндекс Диске)', defaultPath: c.syncDir || yaDisk() || app.getPath('home'), properties: ['openDirectory', 'createDirectory'] });
+  if (r.canceled || !r.filePaths[0]) return null;
+  c.syncDir = r.filePaths[0]; saveCfg(c); return syncer.run();
+});
+ipcMain.handle('syncOff', () => { const c = loadCfg(); delete c.syncDir; saveCfg(c); return true; });
+ipcMain.handle('syncNow', () => syncer.run());
+// «Синхронизировать» в карточке заказа: выключили — заказ остаётся только здесь и больше не приходит из общей папки
+ipcMain.handle('jobSync', (_e, id, on) => {
+  const c = loadCfg(), j = findJob(c, id); if (!j) return null;
+  j.sync = !!on; const ig = new Set(c.syncIgnore || []);
+  if (on) ig.delete(id); else ig.add(id);
+  c.syncIgnore = [...ig]; saveCfg(c);
+  return on ? syncer.run() : syncer.state;
+});
 ipcMain.handle('jobs', () => { const c = loadCfg(); return c.jobs.map(j => Object.assign({}, j, { expDir: j.exp || '', resDir: j.res || c.ozonOut, shared: !j.exp, defDirs: defJobDirs(c, j.name) })); });
 ipcMain.handle('jobSave', (_e, job, opt) => {
   const c = loadCfg(); let j = findJob(c, job.id);
   if (!j) {
     const used = new Set(c.jobs.map(x => x.color));
     j = Object.assign({ id: newJobId(), color: JOB_COLORS.find(x => !used.has(x)) || JOB_COLORS[c.jobs.length % JOB_COLORS.length], onlyNew: c.onlyNew !== false, seenDays: c.seenDays || 0, archived: false, created: Date.now() }, defJobDirs(c, job.name), job, { id: undefined });
-    j.id = newJobId(); c.jobs.push(j);
+    j.id = newJobId(); j.updated = Date.now(); c.jobs.push(j);
     if (opt && opt.copySeen) { try { fs.mkdirSync(path.dirname(jobSeenPath(j.id)), { recursive: true }); fs.copyFileSync(path.join(app.getPath('userData'), 'seen.json'), jobSeenPath(j.id)); } catch {} }
-  } else Object.assign(j, job, { id: j.id });
+  } else {
+    // изменение параметров (не папок) — отметка времени для синхронизации
+    if (SYNC_FIELDS.some(k => k in job && JSON.stringify(job[k]) !== JSON.stringify(j[k]))) j.updated = Date.now();
+    Object.assign(j, job, { id: j.id });
+  }
   for (const d of [j.exp, j.res]) if (d) { try { fs.mkdirSync(d, { recursive: true }); } catch {} }
-  saveCfg(c); return j;
+  saveCfg(c); syncer.soon(); return j;
 });
 ipcMain.handle('jobDelete', (_e, id) => {
-  const c = loadCfg(); c.jobs = c.jobs.filter(j => j.id !== id);
+  const c = loadCfg(); syncer.markDeleted(c, findJob(c, id)); c.jobs = c.jobs.filter(j => j.id !== id);
   for (const s of c.schedules || []) if (s.kind === 'job' && s.job === id) s.enabled = false;
   saveCfg(c); try { fs.unlinkSync(jobSeenPath(id)); } catch {} return true;
 });
@@ -294,7 +333,19 @@ ipcMain.handle('zoom', (_e, which, step) => {
 });
 
 ipcMain.handle('getCfg', () => loadCfg());
-ipcMain.handle('setCfg', (_e, c) => { const cur = Object.assign(loadCfg(), c); saveCfg(cur); return cur; });
+ipcMain.handle('setCfg', (_e, c) => {
+  const old = loadCfg();
+  // страница «Расписание» поменяла задания заказа — отметить заказ изменённым (для синхронизации)
+  if (c.schedules) {
+    const by = l => { const m = {}; for (const s of l || []) if (s.kind === 'job') (m[s.job] = m[s.job] || []).push(s); return m; };
+    for (const s of c.schedules) if (s.kind === 'job' && !s.pc) { s.pc = old.pcId; s.pcName = os.hostname(); }
+    const a = by(old.schedules), b = by(c.schedules);
+    for (const id of new Set([...Object.keys(a), ...Object.keys(b)])) if (JSON.stringify(a[id] || []) !== JSON.stringify(b[id] || [])) { const j = findJob(old, id); if (j) j.updated = Date.now(); }
+  }
+  const cur = Object.assign(old, c); saveCfg(cur);
+  if (c.schedules || c.resWatch) syncer.soon();
+  return cur;
+});
 ipcMain.handle('pickFolder', async (_e, which) => {
   const key = which === 'cian' ? 'cianRoot' : which === 'ozon' ? 'ozonOut' : 'root';
   const title = which === 'cian' ? 'Папка АДРЕСА ЦИАН' : which === 'ozon' ? 'Папка для результатов проверки Ozon' : 'Папка АДРЕСА проекта PVZ';
@@ -376,7 +427,7 @@ ipcMain.handle('start', async (_e, c) => {
       if (job && r.ok) touchJob(job.id);
       return Object.assign({ site, withCoords: r.total, ozonQueued: q }, r);
     } catch (e) { journal.logError('Winner', e); journal.addHistory({ type: 'export', site, ok: false, total: 0, files: [], reason: String(e && e.message || e) }); return { ok: false, error: String(e && e.message || e) }; }
-    finally { running = false; delete procs.export; procUpdate(); }
+    finally { running = false; delete procs.export; procUpdate(); syncer.soon(3000); }
   }
 
   running = true;
@@ -412,7 +463,7 @@ ipcMain.handle('start', async (_e, c) => {
     journal.logError(site === 'cian' ? 'Циан' : 'Авито', e);
     journal.addHistory({ type: 'export', site, dur: Date.now() - t0, title: c.title || '', ok: false, total: 0, files: [], reason: String(e && e.message || e) });
     return { ok: false, error: String(e && e.message || e) };
-  } finally { running = false; delete procs.export; procUpdate(); }
+  } finally { running = false; delete procs.export; procUpdate(); syncer.soon(3000); }
 });
 
 // ---------- проверка Ozon ----------
@@ -498,7 +549,7 @@ async function pumpOzon() {
     journal.logError('проверка зон', e);
     journal.addHistory({ type: 'check', ok: false, title: 'Проверка зон', total: 0, files: [], reason: String(e && e.message || e) });
     send('ozonDone', { ok: false, error: String(e && e.message || e) });
-  } finally { ozonRunning = false; if (ozonStop) ozonQueue.length = 0; }
+  } finally { ozonRunning = false; if (ozonStop) ozonQueue.length = 0; syncer.soon(3000); }
 }
 ipcMain.handle('ozonScan', () => {
   const cfg = loadCfg();
@@ -527,6 +578,40 @@ ipcMain.handle('ozonStart', (_e, paths, opts) => {
   enqueueOzon(paths); return { ok: true };
 });
 ipcMain.handle('ozonStop', () => { ozonStop = true; return true; });
+// ---------- «Поиск по адресу»: проверка одного помещения на карте Ozon ----------
+let addrBusy = false;
+ipcMain.handle('addrCheck', async (_e, addr, area, pick) => {
+  addr = String(addr || '').trim();
+  if (!addr) return { ok: false, error: 'Введите адрес' };
+  if (ozonRunning || zwBusy) return { ok: false, error: 'Сейчас идёт проверка зон — попробуйте после неё (карта Ozon занята).' };
+  if (addrBusy) return { ok: false, error: 'Предыдущий адрес ещё проверяется' };
+  addrBusy = true;
+  try {
+    const wc = ozonView.webContents, J = c => wc.executeJavaScript(c, true);
+    if (!/pvz-map\.ozon\.ru/.test(wc.getURL())) { await wc.loadURL(ozon.OZON_URL).catch(() => {}); await new Promise(r => setTimeout(r, 4000)); }
+    if (!(await J('!!(window.__ozon && window.__ozon.suggest)').catch(() => false))) { await J('window.__ozonRunnerLoaded = false; 1').catch(() => {}); await J(ozon.RUNNER); }
+    // точка: выбранный вариант или первый вариант с номером дома
+    let list = [], pt = pick || null;
+    if (!pt) {
+      list = await J(`window.__ozon.suggest(${JSON.stringify(addr)})`).catch(() => null);
+      if (!list) return { ok: false, error: 'Карта Ozon не ответила — проверьте интернет и VPN и попробуйте ещё раз.' };
+      pt = list.find(x => x.house) || list[0];
+      if (!pt) return { ok: false, error: 'Ozon не нашёл такой адрес. Уточните: улица, номер дома, город (для Подмосковья).' };
+    }
+    const c = `${pt.lat},${pt.lon}`;
+    const r = await J(`window.__ozon.one(${JSON.stringify(pt.text || addr)}, ${JSON.stringify(c)})`).catch(e => ({ err: e.message }));
+    if (!r || r.err) return { ok: false, error: 'Ozon не ответил (возможно, временно ограничил запросы). Попробуйте через несколько минут.', found: pt, variants: list.slice(0, 6) };
+    const [zone, note, tiers] = r, cfg = loadCfg();
+    const a = Number(area) || 0, sup = ozon.supportFor(tiers, a);
+    const greenMin = cfg.ozonGreenMin || ozon.GREEN_MIN_AREA_DEF;
+    const res = { ok: true, addr, area: a || null, found: pt, variants: list.slice(0, 6), zone, note, tiers, sup, greenSmall: zone === 'зелёный' && a && a < greenMin, greenMin, at: Date.now() };
+    // последние проверки — на странице «Поиск по адресу»
+    const c2 = loadCfg(); c2.addrHistory = [{ addr, area: res.area, found: pt, zone, note, tiers, sup, at: res.at }, ...(c2.addrHistory || []).filter(x => !(x.addr === addr && x.area === res.area))].slice(0, 30); saveCfg(c2);
+    trace.log('Поиск по адресу', `${addr} → ${pt.text} (${c}): ${zone}`);
+    return res;
+  } catch (e) { journal.logError('поиск по адресу', e); return { ok: false, error: String(e && e.message || e) }; }
+  finally { addrBusy = false; }
+});
 // «Перепроверить зоны»: по файлам результатов находим исходные выгрузки (по журналам проверок)
 ipcMain.handle('resultSources', (_e, results) => {
   const cfg = loadCfg(), want = new Set(results), out = new Set();
@@ -867,7 +952,8 @@ if (gotLock) app.whenReady().then(() => {
     if (r.vpn) scheduler.notify('PVZ Master: похоже, включён VPN', 'С VPN Авито, Циан и карта Ozon могут не открываться. Выключите VPN, чтобы выгрузка и проверка работали.');
     if (r.vpn || was) send('vpn', r);
   }); scheduler.applyAutostart(loadCfg().autostart);
-  scheduler.start(loadCfg, s => { journal.addHistory({ type: 'schedule', ok: true, title: s.name || s.preset || 'задание', reason: 'запуск по расписанию ' + s.time }); win.webContents.send('runSchedule', s); }); if (process.env.PVZ_DEBUG) console.log('PVZ main ready, exceljs', typeof require('exceljs').Workbook, 'build', updater.currentBuild());
+  syncer.start();
+  scheduler.start(() => { const c = loadCfg(); return Object.assign({}, c, { schedules: (c.schedules || []).filter(s => !(s.kind === 'job' && s.pc && s.pc !== c.pcId)) }); }, s => { journal.addHistory({ type: 'schedule', ok: true, title: s.name || s.preset || 'задание', reason: 'запуск по расписанию ' + s.time }); win.webContents.send('runSchedule', s); }); if (process.env.PVZ_DEBUG) console.log('PVZ main ready, exceljs', typeof require('exceljs').Workbook, 'build', updater.currentBuild());
   if (process.env.PVZ_SHOT) selfTest(process.env.PVZ_SHOT);
 });
 async function ozDump() {
@@ -903,6 +989,9 @@ async function selfTest(dir) {
   console.log('JOBS', await J(`JSON.stringify({ tiles: document.querySelectorAll('.j-tile[data-id]').length, badges: [...document.querySelectorAll('.j-tile .j-badge')].map(b => b.textContent).join() })`));
   await J(`document.querySelector('.j-tile[data-id]').click(); 1`); await W8(1200);
   await J(`$('jcSchAdd').click(); 1`); await W8(800); await J(`document.querySelector('.jc-sch [data-d="6"]').click(); 1`); await W8(800);
+  await J(`$('jcSync') && $('jcSync').click(); 1`); await W8(2500);
+  console.log('JOBSYNC', await J(`JSON.stringify({ on: $('jcSync') && $('jcSync').checked, open: !!$('jcSyncOpen'), tileSync: 0 })`), JSON.stringify(fs.existsSync(loadCfg().syncDir || '-') ? fs.readdirSync(loadCfg().syncDir) : []));
+  await J(`$('jcRefresh').click(); 1`); await W8(2000);
   await J(`document.querySelector('.j-card').scrollTop = 9999; 1`); await W8(300); await shot('21-job-card');
   console.log('JOBSCHED', await J(`JSON.stringify({ rows: document.querySelectorAll('.jc-sch').length, days: [...document.querySelectorAll('.jc-sch .s-days button.on')].map(b => b.textContent).join(), badge: (document.querySelector('.jc-top .j-badge') || {}).textContent || '' })`));
   await J(`document.querySelector('.j-card').scrollTop = 0; 1`);
@@ -910,6 +999,13 @@ async function selfTest(dir) {
   console.log('JOBRUN', await J(`JSON.stringify({ step: document.querySelector('#wzStep h2').textContent, job: $('wzJob').textContent, save: ($('ccSave') || {}).textContent, dirs: ($('ccSaveSum') || {}).textContent })`));
   await J(`$('wzHome').click(); 1`); await W8(1200);
   console.log('JOBBACK', await J(`document.body.dataset.mode + '|' + document.getElementById('jobs').className`));
+  await J(`openPage('settings'); 1`); await W8(1500); await shot('27-settings-sync');
+  await J(`$('syncHow').click(); 1`); await W8(800); await shot('28-sync-how'); await J(`$('mX').click(); 1`); await W8(300);
+  // поиск по адресу (в облаке карта Ozon может быть недоступна — тогда будет понятная ошибка)
+  await J(`document.body.dataset.mode = 'welcome'; 1`); await W8(800); await J(`$('homeAddrQ').value = 'Москва, Тверская улица, 7'; $('homeAddr').requestSubmit(); 1`); await W8(1500); await shot('29-addr-wait');
+  for (let i = 0; i < 40; i++) { await W8(1500); if (await J(`!$('aGo').disabled`)) break; }
+  await shot('30-addr-result'); console.log('ADDR', await J(`($('aRes').innerText || '').replace(/\s+/g, ' ').slice(0, 300)`));
+  console.log('SYNC', await J(`$('syncDirT').textContent.split('/').slice(-2).join('/') + ' | ' + $('syncInfo').textContent`), JSON.stringify(fs.existsSync(loadCfg().syncDir || '-') ? fs.readdirSync(loadCfg().syncDir) : []));
   await J(`openPage('schedule'); 1`); await W8(1200); await J(`$('sAdd').click(); 1`); await W8(800); await shot('23-schedule-job');
   console.log('SCHED', await J(`[...document.querySelectorAll('#sList select.what')].map(s => s.selectedOptions[0] && s.selectedOptions[0].textContent).join('|')`));
   await J(`document.body.dataset.mode = 'welcome'; 1`); await W8(1500); await shot('25-home-badge'); console.log('HOMEBADGE', await J(`$('jobsN').textContent`));

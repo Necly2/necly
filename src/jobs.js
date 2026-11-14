@@ -1,7 +1,7 @@
 // PVZ Master — «Заказы»: сохранённые параметры выгрузки, у каждого своё название, цвет и свои папки
 // для выгрузок и результатов. Плитки → карточка заказа: запустить, изменить, результаты, папки, архив.
 (() => {
-const J = { list: [], rows: [], seen: {}, open: null, arch: false, sched: [] };
+const J = { list: [], rows: [], seen: {}, open: null, arch: false, sched: [], pc: '', syncDir: '' };
 const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const COLORS = ['#2F7BFF', '#14B8A6', '#F97316', '#8B5CF6', '#EC4899', '#22C55E', '#EAB308', '#06B6D4', '#EF4444', '#64748B'];
 const SRC_N = { cian: 'Циан', avito: 'Авито', winner: 'Winner' }, CHK_N = { ozon: 'Ozon', yandex: 'Яндекс Маркет', wb: 'WB' };
@@ -10,7 +10,8 @@ const short = p => (p || '').split(/[\\/]/).filter(Boolean).slice(-3).join(' / '
 
 async function load() {
   const [list, r, c] = await Promise.all([pvz.jobs(), pvz.results().catch(() => ({ rows: [] })), pvz.getCfg()]);
-  J.list = list; J.rows = r.rows || []; J.seen = c.resSeen || {}; J.sched = c.schedules || [];
+  J.list = list; J.rows = r.rows || []; J.seen = c.resSeen || {}; J.sched = c.schedules || []; J.pc = c.pcId; J.syncDir = c.syncDir || '';
+  J.syncLast = c.syncDir ? (await pvz.syncState().catch(() => ({}))).last : 0;
 }
 // подходящие / непросмотренные — по файлам результатов в папке заказа (у заказов с общими папками не различить)
 function stats(j) {
@@ -39,7 +40,7 @@ function renderGrid() {
   $('jGrid').innerHTML = list.map(j => {
     const s = stats(j);
     return `<button class="j-tile" data-id="${esc(j.id)}" style="--c:${esc(j.color || '#2F7BFF')}">
-      <div class="jt-h"><i></i><b>${esc(j.name)}</b>${s && s.unseen ? `<span class="j-badge" title="Не просмотрено объявлений: ${fmtNum(s.unseen)}">${fmtNum(s.unseen)}</span>` : ''}</div>
+      <div class="jt-h"><i></i><b>${esc(j.name)}</b>${J.syncDir && j.sync ? '<span class="jt-sync" title="Общий заказ — синхронизируется с другими компьютерами">⇅</span>' : ''}${s && s.unseen ? `<span class="j-badge" title="Не просмотрено объявлений: ${fmtNum(s.unseen)}">${fmtNum(s.unseen)}</span>` : ''}</div>
       <div class="jt-l">${esc(srcLine(j))} <span class="muted">→ ${esc(chkLine(j))}</span></div>
       <div class="jt-l muted">${esc(parLine(j))}</div>
       <div class="jt-st">${s ? `<span>подходящих <b>${fmtNum(s.n)}</b>${s.green ? `, <b class="g">${fmtNum(s.green)} зел.</b>` : ''}</span>${s.unseen ? `<span class="u">не просмотрено <b>${fmtNum(s.unseen)}</b></span>` : ''}` : '<span class="muted">общие папки программы</span>'}</div>
@@ -65,6 +66,7 @@ function openCard(id) {
     <div class="jc-actions">
       <button class="primary" id="jcRun">▶ Запустить</button>
       <button class="ghost" id="jcEdit">✎ Изменить параметры</button>
+      <button class="ghost" id="jcRefresh" title="${J.syncDir && j.sync ? 'Забрать из общей папки новые выгрузки, результаты и изменения с других компьютеров' : 'Пересчитать итоги по файлам в папках заказа'}">↻ Обновить</button>
       <button class="ghost" id="jcRes"${j.shared ? ' title="У заказа общие папки — откроются все результаты"' : ''}>Результаты заказа${s ? ` <b>${fmtNum(s.n)}</b>` : ''}${s && s.unseen ? ` <span class="j-badge">${fmtNum(s.unseen)}</span>` : ''}</button>
     </div>
     <div class="jc-grid">
@@ -78,7 +80,13 @@ function openCard(id) {
       <div class="box jc-folders"><div class="box-h">Папки</div>
         ${j.shared ? `<p class="hint">Общие папки программы (как у «Новой выгрузки»).</p>${folder('Результаты', 'res', j.resDir)}
           <button class="ghost" id="jcOwn">Сделать отдельные папки заказа</button><p class="hint">Будут созданы: ${esc(short(j.defDirs.exp))} и ${esc(short(j.defDirs.res))}. Старые файлы останутся на месте.</p>`
-        : folder('Выгрузки', 'exp', j.expDir) + folder('Результаты', 'res', j.resDir) + '<p class="hint">Переименование заказа папки не меняет.</p>'}</div>
+        : folder('Выгрузки', 'exp', j.expDir) + folder('Результаты', 'res', j.resDir) + '<p class="hint">Переименование заказа папки не меняет.</p>'}
+</div>
+      <div class="box"><div class="box-h">Общий доступ (другие компьютеры)</div>
+        ${J.syncDir ? `<label class="switch"><input type="checkbox" id="jcSync"${j.sync ? ' checked' : ''}><span></span><span class="lbl">Синхронизировать этот заказ <small>параметры, расписание, «уже выгруженные»${j.shared ? '' : ', файлы выгрузок и результатов'} — общие с другими компьютерами</small></span></label>
+          ${j.sync ? `<div class="jc-f"><span class="jc-fl">Общая папка</span><span class="jc-fp" title="${esc(J.syncDir)}">${esc('…/' + short(J.syncDir) + (j.syncDir ? ' / ' + j.syncDir : ''))}</span><span class="jc-fb"><button class="ghost sm" id="jcSyncOpen">Открыть</button></span></div>` : ''}
+          <p class="hint">${!j.sync ? 'Сейчас заказ только на этом компьютере.' : j.shared ? 'У заказа общие папки программы — синхронизируются параметры и расписание; для файлов сделайте отдельные папки заказа.' : 'Файлы копируются в общую папку и обратно — в папках на этом компьютере они тоже остаются.'}${J.syncLast ? ' Синхронизировано: ' + new Date(J.syncLast).toLocaleTimeString('ru-RU').slice(0, 5) + '.' : ''}</p>`
+        : '<p class="hint">Синхронизация выключена. Чтобы заказ был общим с другими компьютерами, выберите общую папку Яндекс Диска в «Настройки → Синхронизация заказов».</p><button class="ghost sm" id="jcSyncSet" style="align-self:flex-start">Открыть настройки</button>'}</div>
       <div class="box"><div class="box-h">Не повторять уже выгруженные</div>
         <div class="jc-row"><label class="switch"><input type="checkbox" id="jcOnlyNew"${j.onlyNew !== false ? ' checked' : ''}><span></span><span class="lbl">Только новые объявления</span></label>
           <select id="jcSeenDays">${[[3, 'за 3 дня'], [7, 'за 7 дней'], [14, 'за 14 дней'], [30, 'за 30 дней'], [0, 'за всё время']].map(([v, t]) => `<option value="${v}"${(j.seenDays || 0) === v ? ' selected' : ''}>${t}</option>`).join('')}</select></div>
@@ -107,6 +115,18 @@ function openCard(id) {
   };
   $('jCard').querySelectorAll('[data-open]').forEach(b => (b.onclick = () => b.dataset.open && pvz.openFolder(b.dataset.open)));
   $('jCard').querySelectorAll('[data-pick]').forEach(b => (b.onclick = async () => { await pvz.jobPickFolder(j.id, b.dataset.pick); await load(); openCard(j.id); }));
+  if ($('jcSync')) $('jcSync').onchange = async () => {
+    const on = $('jcSync').checked;
+    if (!on && !(await showModal({ kind: 'warn', title: 'Не синхронизировать?', text: `Заказ «${j.name}» останется на этом компьютере, но перестанет обмениваться изменениями и файлами с другими. На других компьютерах он останется как был.`, buttons: [{ label: 'Отмена', value: false }, { label: 'Выключить', cls: 'primary', value: true }] }))) { $('jcSync').checked = true; return; }
+    await pvz.jobSync(j.id, on); await load(); openCard(j.id); toast(on ? 'Заказ стал общим' : 'Заказ только на этом компьютере');
+  };
+  if ($('jcSyncSet')) $('jcSyncSet').onclick = () => openPage('settings');
+  $('jcRefresh').onclick = async () => {
+    $('jcRefresh').disabled = true; $('jcRefresh').textContent = '↻ Обновляю…';
+    if (J.syncDir && j.sync) { const st = await pvz.syncNow(); if (st && st.err) toast('Синхронизация: ' + st.err); }
+    await load(); openCard(j.id); toast('Обновлено');
+  };
+  if ($('jcSyncOpen')) $('jcSyncOpen').onclick = () => pvz.openFolder(j.syncDir ? J.syncDir.replace(/[\\/]$/, '') + (J.syncDir.includes('\\') ? '\\' : '/') + j.syncDir : J.syncDir);
   if ($('jcOwn')) $('jcOwn').onclick = async () => { await pvz.jobOwnFolders(j.id); await load(); openCard(j.id); toast('Папки заказа созданы'); };
   $('jcOnlyNew').onchange = () => { $('jcSeenDays').disabled = !$('jcOnlyNew').checked; pvz.jobSave({ id: j.id, onlyNew: $('jcOnlyNew').checked }); j.onlyNew = $('jcOnlyNew').checked; };
   $('jcSeenDays').disabled = j.onlyNew === false;
@@ -125,8 +145,11 @@ function openCard(id) {
   };
   $('jcArch').onclick = async () => { await save({ archived: !j.archived }); toast(j.archived ? 'Заказ возвращён' : 'Заказ в архиве'); };
   $('jcDel').onclick = async () => {
-    const v = await showModal({ kind: 'warn', title: 'Удалить заказ?', text: `Заказ «${j.name}» будет удалён. Файлы выгрузок и результатов в папках останутся. Задания расписания этого заказа отключатся.`, buttons: [{ label: 'Отмена', value: false }, { label: 'Удалить', cls: 'primary', value: true }] });
+    const synced = J.syncDir && j.sync;
+    const v = await showModal({ kind: 'warn', title: 'Удалить заказ?', text: `Заказ «${j.name}» будет удалён. Файлы выгрузок и результатов в папках останутся. Задания расписания этого заказа отключатся.` + (synced ? '\n\nЗаказ общий: «Удалить везде» — удалит его на всех компьютерах; «Только здесь» — уберёт с этого компьютера, у остальных он останется.' : ''),
+      buttons: synced ? [{ label: 'Отмена', value: false }, { label: 'Только здесь', value: 'here' }, { label: 'Удалить везде', cls: 'primary', value: true }] : [{ label: 'Отмена', value: false }, { label: 'Удалить', cls: 'primary', value: true }] });
     if (!v) return;
+    if (v === 'here') await pvz.jobSync(j.id, false);
     await pvz.jobDelete(j.id); J.open = null; await load(); show(); renderGrid();
   };
 }
@@ -138,6 +161,7 @@ function renderSched(j) {
       <input type="time" class="tm" value="${esc(x.time)}">
       <div class="s-days">${DAYS.map((d, k) => `<button class="${(x.days || []).includes(k + 1) ? 'on' : ''}" data-d="${k + 1}">${d}</button>`).join('')}</div>
       <label class="chk"><input type="checkbox" class="ck"${x.check ? ' checked' : ''}>проверить зоны</label>
+      ${J.syncDir && j.sync ? (x.pc && x.pc !== J.pc ? `<span class="jc-pc other" title="Задание выполняет другой компьютер">💻 ${esc(x.pcName || 'другой компьютер')}</span><button class="ghost sm here">Выполнять здесь</button>` : '<span class="jc-pc">💻 этот компьютер</span>') : ''}
       <button class="del" title="Удалить">✕</button></div>`).join('')
     : '<p class="hint">Заданий нет — выгрузка только вручную.</p>';
   if (j.archived && list.some(x => x.enabled)) el.insertAdjacentHTML('beforeend', '<p class="hint">Заказ в архиве — по расписанию не запускается.</p>');
@@ -149,6 +173,7 @@ function renderSched(j) {
     r.querySelector('.ck').onchange = e => upd(id, x => (x.check = e.target.checked));
     r.querySelectorAll('[data-d]').forEach(b => (b.onclick = () => upd(id, x => { const n = +b.dataset.d; x.days = (x.days || []).includes(n) ? x.days.filter(k => k !== n) : [...(x.days || []), n].sort(); })));
     r.querySelector('.del').onclick = () => upd(id, (x, l) => l.splice(l.indexOf(x), 1));
+    if (r.querySelector('.here')) r.querySelector('.here').onclick = () => upd(id, x => { delete x.pc; delete x.pcName; });
   });
 }
 function show() { $('jobs').classList.toggle('detail', !!J.open); }
@@ -170,6 +195,7 @@ window.openJobs = async (id) => {
   if (J.open) openCard(J.open);
 };
 window.jobsBack = id => window.openJobs(id);
+window.jobsOpenId = () => J.open;
 $('jNew').onclick = newJob;
 $('jArch').onchange = () => { J.arch = $('jArch').checked; J.open = null; show(); renderGrid(); };
 

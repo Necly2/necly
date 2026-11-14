@@ -289,6 +289,13 @@ window.__counts = () => Object.values(OUT).reduce((m, v) => (m[v[0]] = (m[v[0]] 
 window.__reset = () => { for (const k of Object.keys(OUT)) delete OUT[k]; Q.length = 0; errors = 0; persist(); return "ok"; };
 window.__pad = (s) => s + "\n" + "#".repeat(Math.max(0, 105000 - s.length));
 // для отладки
-window.__ozon = {query, classify, addrMatch, greenAt, regionPrefix};
+// «Поиск по адресу»: варианты адреса (геокодер карты Ozon) и проверка одной точки
+async function suggest(q) {
+  const pre = /москв|област|обл\.|(^|[\s,])г\.\s|город/i.test(q) ? "" : regionPrefix(q);
+  const body = await get(SUGGEST + "&query=" + encodeURIComponent(pre + String(q).replace(/\(.*?\)/g, "")));
+  return ((body && body.suggestions) || []).map(s => { const a = s.address || {}, c = a.components || {}, pt = (a.geometry || {}).point;
+    return pt ? {text: a.formattedFullText || a.fullText || "", lat: pt.lat, lon: pt.lon, house: (c.house || {}).number || ""} : null; }).filter(Boolean);
+}
+window.__ozon = {query, classify, addrMatch, greenAt, regionPrefix, suggest, one};
 console.log("ozon_runner загружен; сохранено результатов:", Object.keys(OUT).length);
 })();

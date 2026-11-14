@@ -24,6 +24,7 @@
       <button class="start" id="newBtn"><svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>Новая выгрузка</button>
       <button class="start alt" id="jobsBtn"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/></svg>Заказы<span class="jn" id="jobsN"></span></button>
     </div>
+    <form class="home-addr" id="homeAddr" autocomplete="off"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="homeAddrQ" placeholder="Поиск по адресу — проверить помещение на карте Ozon"><button class="ghost" type="submit">Проверить</button></form>
     <button class="home-sum" id="homeSum" style="display:none" title="Открыть результаты за сегодня"></button>
     <div class="zone-note" id="zoneNote" style="display:none"><b>Ozon обновил карту зон</b><span id="zoneNoteT"></span>
       <div class="zn-act"><button class="ghost sm" id="zoneNoteRes">Открыть результаты</button><button class="ghost sm" id="zoneNoteHide">Понятно</button></div></div>
@@ -136,6 +137,24 @@
   <div class="j-card" id="jCard"></div>
 </section>
 
+<!-- ================= ПОИСК ПО АДРЕСУ ================= -->
+<section id="addr" class="page">
+  <div class="p-head">
+    <button class="icon-btn back-home" title="На главный экран"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <h1>Поиск по адресу</h1><span class="muted">проверка одного помещения на карте Ozon</span><span class="grow"></span>
+    <button class="ghost gear-btn" data-settings title="Настройки"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+  </div>
+  <div class="a-wrap">
+    <form class="box a-form" id="aForm" autocomplete="off">
+      <label class="field grow">Адрес<input id="aQ" type="text" placeholder="Москва, ул. Тверская, 7   ·   Химки, ул. Ленина, 5"></label>
+      <label class="field">Площадь, м² <small class="muted">необязательно</small><input id="aArea" type="text" inputmode="numeric" class="num"></label>
+      <button class="primary" id="aGo" type="submit">Проверить</button>
+    </form>
+    <div id="aRes"></div>
+    <div class="box"><div class="box-h">Недавние проверки</div><div id="aHist" class="a-hist"></div></div>
+  </div>
+</section>
+
 <!-- ================= ИСТОРИЯ ================= -->
 <section id="history" class="page">
   <div class="p-head">
@@ -197,6 +216,11 @@
       <div class="set-row"><span>Зелёная зона — площадь от, м²<small class="muted"> (Ozon сейчас пишет «от 60 м²»)</small></span><input type="text" class="num" id="setGreenMin" inputmode="numeric" style="width:90px"></div>
       <div class="set-row"><span>Помнить результаты проверки</span><select id="setCache"><option value="1">3 дня</option><option value="0">не помнить</option></select></div>
       <label class="switch"><input type="checkbox" id="setTestSup"><span></span><span class="lbl">В «Результатах» вместо цвета зоны — поддержка Ozon под площадь объявления <small>сумма в месяц для ступени площади (25–40, 40–60, 60+ м²), цвет зоны — кружок рядом; если площади нет или адрес проверялся старой версией — название зоны</small></span></label>
+    </div>
+    <div class="box"><div class="box-h">Синхронизация заказов (Яндекс Диск)</div>
+      <p class="hint">Общие с другими компьютерами (3–4 и больше) через папку на Яндекс Диске: заказы, у которых в карточке включено «Синхронизировать», их расписание, «уже выгруженные», файлы выгрузок и результатов, а также отслеживаемые объявления. Файлы остаются и в папках на этом компьютере.</p>
+      <button class="primary small-p" id="syncHow" style="align-self:flex-start;padding:9px 16px !important">Как подключить другие компьютеры</button>
+      <div class="set-row"><span><b id="syncDirT">Выключена</b><small class="muted" id="syncInfo"></small></span><span class="sync-btns"><button class="ghost sm" id="syncPick">Выбрать папку…</button><button class="ghost sm" id="syncOpen">Открыть</button><button class="ghost sm" id="syncNowB">↻ Сейчас</button><button class="ghost sm" id="syncOffB">Выключить</button></span></div>
     </div>
     <div class="box"><div class="box-h">Карты в «Результатах»</div>
       <p class="hint">Какие карты есть в выпадающих списках над картой. По умолчанию — Яндекс.Карты и карта Ozon.</p>
@@ -349,4 +373,5 @@
 <script src="wizard.js"></script>
 <script src="settings.js"></script>
 <script src="jobs.js"></script>
+<script src="addr.js"></script>
 </body></html>

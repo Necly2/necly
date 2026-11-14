@@ -259,4 +259,4 @@ async function run(files, ctx) {
   return { ok: true, reason, saved, errors, stats, manual, odd, files: data.length, addresses: total, rowsTotal, noCoords, fromCache: total - todo.length, greenMin: cfg.ozonGreenMin || GREEN_MIN_AREA_DEF };
 }
 
-module.exports = { scan, run, readExport, OZON_URL };
+module.exports = { scan, run, readExport, OZON_URL, RUNNER, supportFor, GREEN_MIN_AREA_DEF };

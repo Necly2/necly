@@ -416,6 +416,13 @@ function prepRows(rows) {
   for (const x of R.rows) x.also = [...new Map(byMatch.get(matchKey(x)).filter(y => y.platform !== x.platform).map(y => [y.platform, y])).values()];
 }
 window.prepRows = prepRows;
+// синхронизация с другим компьютером что-то поменяла — обновить открытую страницу
+pvz.onSynced(async d => {
+  const m = document.body.dataset.mode;
+  if (m === 'results') { const c = await pvz.getCfg(); R.watch = c.resWatch || {}; R.watchDel = c.resWatchDel || {}; if (d.files) loadResults(); else { renderDays(); renderResults(false); } }
+  if (m === 'jobs' && window.openJobs) openJobs(window.jobsOpenId && jobsOpenId());
+  if (m === 'schedule') loadSchedule();
+});
 async function loadResults() {
   $('rCount').textContent = 'загрузка…';
   const r = await pvz.results();
@@ -424,7 +431,7 @@ async function loadResults() {
   setMapLists(cfg.resMapsGen, cfg.resMapsAgg);
   R.split = !!cfg.resSplit;   // «Разделить» — постоянная функция (была тестовой)
   R.testSup = cfg.testSupport !== false;
-  R.marks = cfg.resMarks || {}; R.seen = cfg.resSeen || {}; R.watch = cfg.resWatch || {}; if (cfg.resDedup === false) R.dedup = false;
+  R.marks = cfg.resMarks || {}; R.seen = cfg.resSeen || {}; R.watch = cfg.resWatch || {}; R.watchDel = cfg.resWatchDel || {}; if (cfg.resDedup === false) R.dedup = false;
   prepRows(r.rows);
   // заказы со своими папками — фильтр «Заказ»
   R.jobs = (await pvz.jobs().catch(() => [])).filter(j => !j.shared);
@@ -757,8 +764,10 @@ $('rRows').addEventListener('click', e => {
   }
   if (e.target.closest('.star')) {
     const k = markKey(x);
-    if (R.watch[k]) delete R.watch[k]; else { const row = Object.assign({}, x); delete row.also; delete row.id; R.watch[k] = { added: Date.now(), row }; }
-    pvz.setCfg({ resWatch: R.watch }); renderDays(); renderResults(false); return;
+    // удаление запоминается со временем — чтобы синхронизация не вернула объявление с другого компьютера
+    R.watchDel = R.watchDel || {};
+    if (R.watch[k]) { delete R.watch[k]; R.watchDel[k] = Date.now(); } else { const row = Object.assign({}, x); delete row.also; delete row.id; R.watch[k] = { added: Date.now(), row }; }
+    pvz.setCfg({ resWatch: R.watch, resWatchDel: R.watchDel }); renderDays(); renderResults(false); return;
   }
   const cb = e.target.closest('.copy-a');
   if (cb) {

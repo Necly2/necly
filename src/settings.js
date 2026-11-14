@@ -38,6 +38,7 @@ async function loadSettings() {
   $('setExpert').checked = !!c.showExpert;
   $('setTestSup').checked = c.testSupport !== false;
   mapChecks(c);
+  syncInfo();
   $('sTray').checked = c.tray !== false; $('sAuto').checked = !!c.autostart;
   const mode = window.getThemeMode ? getThemeMode() : 'auto';
   $('setTheme').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === mode));
@@ -58,6 +59,50 @@ function mapChecks(c) {
   draw('setMapsGen', MAPS_GEN, c.resMapsGen, 'resMapsGen', DEF_MAPS_GEN);
   draw('setMapsAgg', MAPS_AGG, c.resMapsAgg, 'resMapsAgg', DEF_MAPS_AGG);
 }
+// ---------- синхронизация заказов ----------
+async function syncInfo(st) {
+  st = st || await pvz.syncState();
+  $('syncDirT').textContent = st.dir || 'Выключена';
+  $('syncInfo').textContent = st.dir ? (!st.exists ? 'Папка не найдена — проверьте, что Яндекс Диск запущен' : st.err ? 'Ошибка: ' + st.err : st.last ? `Синхронизировано: ${new Date(st.last).toLocaleTimeString('ru-RU').slice(0, 5)} · компьютер «${st.pc}»` : 'Ждёт первой синхронизации')
+    : (st.yandex ? 'Найден Яндекс Диск: ' + st.yandex : 'Яндекс Диск на этом компьютере не найден — установите приложение Яндекс Диск');
+  ['syncOpen', 'syncNowB', 'syncOffB'].forEach(id => ($(id).style.display = st.dir ? '' : 'none'));
+  $('syncPick').textContent = st.dir ? 'Сменить…' : 'Выбрать папку…';
+}
+// инструкция: как подключить другой компьютер к общей папке (можно скопировать и отправить коллеге)
+const SYNC_HOW = st => `Подключение компьютера к общим заказам PVZ Master
+
+ВЛАДЕЛЕЦ ПАПКИ (один раз для каждого человека):
+1. Откройте disk.yandex.ru в браузере.
+2. Нажмите правой кнопкой на общую папку${st.dir ? ' «' + st.dir.split(/[\\/]/).filter(Boolean).pop() + '»' : ''} → «Настроить доступ» (или «Поделиться» → «Пригласить»).
+3. Введите почту Яндекса коллеги и выберите «Полный доступ» (с «Только просмотр» программа не сможет записывать файлы). Пригласите.
+   Если на всех компьютерах вход в один и тот же аккаунт Яндекса — приглашать не нужно.
+
+НА ДРУГОМ КОМПЬЮТЕРЕ:
+1. Войдите в свой аккаунт Яндекса и примите приглашение (письмо на почту или уведомление на disk.yandex.ru) — папка появится на его Диске.
+2. Установите приложение «Яндекс Диск» для компьютера (disk.yandex.ru → «Скачать Диск для Windows / macOS»), войдите тем же аккаунтом и дождитесь синхронизации.
+   Папка должна быть на компьютере, а не «только в облаке».
+3. Установите PVZ Master, откройте «Настройки → Синхронизация заказов → Выбрать папку…» и выберите эту папку внутри папки Яндекс Диска
+   (Windows: C:\\Пользователи\\<имя>\\YandexDisk\\…, Mac: Яндекс Диск в Finder).
+4. Через минуту появятся общие заказы. Свой заказ сделать общим — переключатель «Синхронизировать этот заказ» в карточке заказа.
+
+ВАЖНО:
+• Расписание заказа выполняет тот компьютер, на котором задание добавлено (в карточке: «💻 этот компьютер» / «Выполнять здесь») — заказ не выгрузится дважды.
+• Не меняйте один и тот же заказ на двух компьютерах одновременно — сохранится более позднее изменение.
+• Удалить общий заказ можно «везде» или «только здесь».
+• Названия пунктов на сайте Яндекса могут немного отличаться.`;
+$('syncHow').onclick = async () => {
+  const st = await pvz.syncState();
+  const v = await showModal({ kind: 'info', title: 'Как подключить другие компьютеры', html: true, text: `<pre class="how">${esc(SYNC_HOW(st))}</pre>`, buttons: [{ label: 'Скопировать, чтобы отправить коллеге', value: 'copy' }, { label: 'Понятно', cls: 'primary', value: true }] });
+  if (v === 'copy') { navigator.clipboard.writeText(SYNC_HOW(st)).then(() => toast('Инструкция скопирована')).catch(() => toast('Не удалось скопировать')); }
+};
+$('syncPick').onclick = async () => { const r = await pvz.syncPick(); if (r) { syncInfo(); toast('Синхронизация включена'); } };
+$('syncOpen').onclick = async () => { const st = await pvz.syncState(); if (st.dir) pvz.openFolder(st.dir); };
+$('syncNowB').onclick = async () => { await pvz.syncNow(); syncInfo(); toast('Синхронизировано'); };
+$('syncOffB').onclick = async () => {
+  const v = await showModal({ kind: 'warn', title: 'Выключить синхронизацию?', text: 'Заказы и файлы на этом компьютере останутся, но изменения перестанут передаваться на другой компьютер. Общая папка не удаляется.', buttons: [{ label: 'Отмена', value: false }, { label: 'Выключить', cls: 'primary', value: true }] });
+  if (v) { await pvz.syncOff(); syncInfo(); }
+};
+pvz.onSynced(() => { if (document.body.dataset.mode === 'settings') syncInfo(); });
 async function seenInfo() { const s = await pvz.seenInfo(); $('setSeenInfo').textContent = `Запомнено: Циан ${fmtNum(s.cian)}, Авито ${fmtNum(s.avito)}`; }
 $('setOnlyNew').onchange = () => pvz.setCfg({ onlyNew: $('setOnlyNew').checked, cianOnlyNew: $('setOnlyNew').checked });
 $('setSeenDays').onchange = async () => { await pvz.setCfg({ seenDays: +$('setSeenDays').value }); seenInfo(); };
