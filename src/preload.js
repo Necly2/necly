@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('pvz', {
   getCfg: () => ipcRenderer.invoke('getCfg'),
+  uiScale: v => ipcRenderer.invoke('uiScale', v),
+  onUiScale: cb => ipcRenderer.on('uiScale', (_e, z) => cb(z)),
   jobs: () => ipcRenderer.invoke('jobs'),
   jobSave: (j, o) => ipcRenderer.invoke('jobSave', j, o),
   jobDelete: id => ipcRenderer.invoke('jobDelete', id),

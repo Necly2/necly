@@ -38,6 +38,7 @@ async function loadSettings() {
   $('setExpert').checked = !!c.showExpert;
   $('setTestSup').checked = c.testSupport !== false;
   mapChecks(c);
+  scaleInfo();
   $('setPriceWatch').checked = c.priceWatch !== false;
   { const w = Object.values(c.resWatch || {}), n = w.filter(x => x.row && x.row.url).length, last = Math.max(0, ...w.map(x => (x.pc && x.pc.at) || 0));
     $('setPriceInfo').textContent = n ? `Объявлений со ссылкой: ${fmtNum(n)}` + (last ? ` · последняя проверка ${new Date(last).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : '') : 'Отслеживаемых объявлений пока нет'; }
@@ -106,6 +107,8 @@ $('setPriceNow').onclick = async () => {
   showModal({ kind: 'info', title: 'Отслеживаемые', text: !r ? 'Не удалось проверить.' : r.skipped ? 'Сейчас идёт выгрузка или проверка — попробуйте позже.' : `Проверено объявлений: ${r.checked || 0}.\nПодешевело: ${r.down || 0}, подорожало: ${r.up || 0}, снято: ${r.gone || 0}.` + (r.blocked && r.blocked.length ? `\n\nСайт показал проверку на робота: ${r.blocked.join(', ')} — попробую в следующий раз.` : '') });
   loadSettings();
 };
+async function scaleInfo() { const s = await pvz.uiScale(); $('setScale').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === String(s.set))); $('setScaleInfo').textContent = `сейчас ${Math.round(s.now * 100)} %` + (s.set === 'auto' ? ' — подобрано по размеру окна' : ''); }
+$('setScale').querySelectorAll('button').forEach(b => (b.onclick = async () => { await pvz.uiScale(b.dataset.v === 'auto' ? 'auto' : +b.dataset.v); setTimeout(scaleInfo, 200); }));
 $('syncPick').onclick = async () => { const r = await pvz.syncPick(); if (r) { syncInfo(); toast('Синхронизация включена'); } };
 $('syncOpen').onclick = async () => { const st = await pvz.syncState(); if (st.dir) pvz.openFolder(st.dir); };
 $('syncNowB').onclick = async () => { await pvz.syncNow(); syncInfo(); toast('Синхронизировано'); };

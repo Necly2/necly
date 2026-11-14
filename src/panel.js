@@ -1078,7 +1078,10 @@ $('rColsBtn').onclick = e => {
   m.classList.add('on');
 };
 document.addEventListener('click', e => { if (!e.target.closest('#rColsMenu')) $('rColsMenu').classList.remove('on'); });
-pvz.getCfg().then(c => { hiddenCols = (c.resHiddenCols || []).map(String); applyCols(); });
+// на небольшом окне, пока столбцы не настраивали, «Проверено» скрыт (есть в карточке) — адресу больше места
+pvz.getCfg().then(c => { hiddenCols = c.resHiddenCols ? c.resHiddenCols.map(String) : (window.innerWidth < 1750 ? ['8'] : []); applyCols(); });
+// сменился размер интерфейса — встроенные карты и сайты на новые места
+pvz.onUiScale(() => setTimeout(() => { fixMap(); syncRects(); window.dispatchEvent(new Event('resize')); }, 80));
 
 // ---------- клавиши в «Результатах»: ↑/↓ — соседнее объявление, Пробел — просмотрено / не просмотрено, S — отслеживать ----------
 document.addEventListener('keydown', e => {

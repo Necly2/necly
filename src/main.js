@@ -350,6 +350,22 @@ ipcMain.handle('zoom', (_e, which, step) => {
 });
 
 ipcMain.handle('getCfg', () => loadCfg());
+// ---------- размер интерфейса: на небольшом экране (MacBook 13″) всё уменьшается, чтобы помещалось как на большом ----------
+// cfg.uiScale: 'auto' (по ширине окна) или число 0.8 / 0.9 / 1 / 1.1
+function uiScale() {
+  if (!win || win.isDestroyed()) return 1;
+  const v = loadCfg().uiScale;
+  if (typeof v === 'number' && v >= 0.6 && v <= 1.5) return v;
+  const w = win.getContentSize()[0];
+  return w < 1250 ? 0.8 : w < 1600 ? 0.87 : 1;
+}
+let uiT = null;
+function applyUiScale() {
+  if (!win || win.isDestroyed()) return;
+  const z = uiScale(), wc = win.webContents;
+  if (Math.abs(wc.getZoomFactor() - z) > 0.005) { wc.setZoomFactor(z); setTimeout(() => { try { layout(); } catch {} send('uiScale', z); }, 60); }
+}
+ipcMain.handle('uiScale', (_e, v) => { if (v !== undefined) { const c = loadCfg(); c.uiScale = v; saveCfg(c); applyUiScale(); } return { set: loadCfg().uiScale || 'auto', now: uiScale() }; });
 ipcMain.handle('setCfg', (_e, c) => {
   const old = loadCfg();
   // страница «Расписание» поменяла задания заказа — отметить заказ изменённым (для синхронизации)
@@ -981,6 +997,7 @@ app.on('second-instance', () => { if (win) { win.show(); win.focus(); } });
 app.on('activate', () => { if (win) win.show(); });
 if (gotLock) app.whenReady().then(() => {
   createWindow(); updater.schedule(win);
+  win.webContents.on('did-finish-load', applyUiScale); win.on('resize', () => { clearTimeout(uiT); uiT = setTimeout(applyUiScale, 250); }); applyUiScale();
   scheduler.setupTray(win); scheduler.bindClose(win, loadCfg);
   // VPN: предупреждение при запуске и если включится во время работы
   require('./vpn').watch((r, was) => {

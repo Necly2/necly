@@ -1031,3 +1031,22 @@ body[data-mode="addr"] #addr{display:flex}
 .r-maptools .zoom .zv{min-width:34px}
 .rd-facts{align-items:flex-start}
 .rd-btns{align-self:center}
+
+/* ---------- небольшое окно (ноутбук 13″): плотнее ---------- */
+@media (max-width:1750px){
+  .page{padding:14px 18px;gap:10px}
+  .p-head h1{font-size:21px}
+  .r-body{gap:10px;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}
+  .r-days button{padding:5px 10px}
+  .r-table td{padding-top:6px;padding-bottom:6px}
+  .r-detail{padding:9px 12px;gap:6px}
+  .rd-meta{display:none}
+  .rd-facts{gap:16px}
+  .rd-facts b{font-size:14px}
+  .j-grid{gap:10px}
+  .jc-grid,.jc-col{gap:10px}
+}
+@media (max-height:860px){
+  .hero{gap:10px}
+  .hero h1{font-size:36px}
+}
