@@ -900,14 +900,19 @@ async function selfTest(dir) {
   // заказы: создать, карточка, «Запустить» (сразу шаг выгрузки), выход обратно в карточку, фильтр «Заказ» в результатах
   await J(`$('wzHome').click(); 1`); await W8(600); await J(`document.querySelector('#mBtns button') && document.querySelector('#mBtns button').click(); 1`); await W8(400);
   await J(`pvz.jobSave(Object.assign({ name: 'Заказ #4 — тест' }, wizDefaults())).then(() => $('jobsBtn').click()); 1`); await W8(1800); await shot('20-jobs');
-  console.log('JOBS', await J(`JSON.stringify({ tiles: document.querySelectorAll('.j-tile[data-id]').length, home: $('jobsN').textContent })`));
-  await J(`document.querySelector('.j-tile[data-id]').click(); 1`); await W8(1200); await shot('21-job-card');
+  console.log('JOBS', await J(`JSON.stringify({ tiles: document.querySelectorAll('.j-tile[data-id]').length, badges: [...document.querySelectorAll('.j-tile .j-badge')].map(b => b.textContent).join() })`));
+  await J(`document.querySelector('.j-tile[data-id]').click(); 1`); await W8(1200);
+  await J(`$('jcSchAdd').click(); 1`); await W8(800); await J(`document.querySelector('.jc-sch [data-d="6"]').click(); 1`); await W8(800);
+  await J(`document.querySelector('.j-card').scrollTop = 9999; 1`); await W8(300); await shot('21-job-card');
+  console.log('JOBSCHED', await J(`JSON.stringify({ rows: document.querySelectorAll('.jc-sch').length, days: [...document.querySelectorAll('.jc-sch .s-days button.on')].map(b => b.textContent).join(), badge: (document.querySelector('.jc-top .j-badge') || {}).textContent || '' })`));
+  await J(`document.querySelector('.j-card').scrollTop = 0; 1`);
   await J(`$('jcRun').click(); 1`); await W8(1800); await shot('22-job-run');
   console.log('JOBRUN', await J(`JSON.stringify({ step: document.querySelector('#wzStep h2').textContent, job: $('wzJob').textContent, save: ($('ccSave') || {}).textContent, dirs: ($('ccSaveSum') || {}).textContent })`));
   await J(`$('wzHome').click(); 1`); await W8(1200);
   console.log('JOBBACK', await J(`document.body.dataset.mode + '|' + document.getElementById('jobs').className`));
   await J(`openPage('schedule'); 1`); await W8(1200); await J(`$('sAdd').click(); 1`); await W8(800); await shot('23-schedule-job');
   console.log('SCHED', await J(`[...document.querySelectorAll('#sList select.what')].map(s => s.selectedOptions[0] && s.selectedOptions[0].textContent).join('|')`));
+  await J(`document.body.dataset.mode = 'welcome'; 1`); await W8(1500); await shot('25-home-badge'); console.log('HOMEBADGE', await J(`$('jobsN').textContent`));
   await J(`openPage('results'); 1`); await W8(1800); await shot('24-results-jobs');
   console.log('RJOB', await J(`JSON.stringify({ shown: $('rJobF').style.display, opts: [...$('rJob').options].map(o => o.textContent), rows: R.rows.length, jobRows: R.rows.filter(x => x.job).length })`));
   if (process.env.PVZ_FAKE) {

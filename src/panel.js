@@ -927,6 +927,7 @@ pvz.onRunSchedule(async s => {
     } else if (s.kind === 'job') {
       const j = (await pvz.jobs()).find(x => x.id === s.job);
       if (!j) report.push('заказ не найден (удалён)');
+      else if (j.archived) report.push('заказ в архиве — пропущено');
       else {
         // проверка по расписанию — на площадках, выбранных в заказе
         if (s.check && j.checks) await pvz.setCfg({ chkOzon: !!j.checks.ozon, chkYandex: !!j.checks.yandex, chkWb: !!j.checks.wb });

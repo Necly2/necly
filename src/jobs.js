@@ -1,7 +1,8 @@
 // PVZ Master — «Заказы»: сохранённые параметры выгрузки, у каждого своё название, цвет и свои папки
 // для выгрузок и результатов. Плитки → карточка заказа: запустить, изменить, результаты, папки, архив.
 (() => {
-const J = { list: [], rows: [], seen: {}, open: null, arch: false };
+const J = { list: [], rows: [], seen: {}, open: null, arch: false, sched: [] };
+const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const COLORS = ['#2F7BFF', '#14B8A6', '#F97316', '#8B5CF6', '#EC4899', '#22C55E', '#EAB308', '#06B6D4', '#EF4444', '#64748B'];
 const SRC_N = { cian: 'Циан', avito: 'Авито', winner: 'Winner' }, CHK_N = { ozon: 'Ozon', yandex: 'Яндекс Маркет', wb: 'WB' };
 const fmtDate = t => { const d = new Date(t); return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) + ' ' + d.toTimeString().slice(0, 5); };
@@ -9,7 +10,7 @@ const short = p => (p || '').split(/[\\/]/).filter(Boolean).slice(-3).join(' / '
 
 async function load() {
   const [list, r, c] = await Promise.all([pvz.jobs(), pvz.results().catch(() => ({ rows: [] })), pvz.getCfg()]);
-  J.list = list; J.rows = r.rows || []; J.seen = c.resSeen || {};
+  J.list = list; J.rows = r.rows || []; J.seen = c.resSeen || {}; J.sched = c.schedules || [];
 }
 // подходящие / непросмотренные — по файлам результатов в папке заказа (у заказов с общими папками не различить)
 function stats(j) {
@@ -22,6 +23,14 @@ const srcLine = j => Object.keys(SRC_N).filter(k => j.sources && j.sources[k]).m
 const chkLine = j => Object.keys(CHK_N).filter(k => j.checks && j.checks[k]).map(k => CHK_N[k]).join(', ') || 'без проверки';
 const parLine = j => (window.wizParamChips ? wizParamChips(j.params).slice(0, 4).join(' · ') : '');
 
+// задания расписания этого заказа (хранятся в общем расписании: kind 'job')
+const jobSched = j => J.sched.filter(x => x.kind === 'job' && x.job === j.id);
+const daysText = d => { d = [...(d || [])].sort(); return d.join() === '1,2,3,4,5' ? 'по будням' : d.length === 7 ? 'каждый день' : d.join() === '6,7' ? 'по выходным' : d.map(k => DAYS[k - 1]).join(', ') || 'дни не выбраны'; };
+const schedLine = j => jobSched(j).filter(x => x.enabled && (x.days || []).length).map(x => x.time).sort().join(', ');
+async function saveSched(mut) {
+  const c = await pvz.getCfg(); const list = c.schedules || []; mut(list);
+  await pvz.setCfg({ schedules: list }); J.sched = list;
+}
 function renderGrid() {
   const act = J.list.filter(j => !j.archived), arc = J.list.filter(j => j.archived), list = J.arch ? arc : act;
   $('jCount').textContent = J.arch ? `в архиве ${fmtNum(arc.length)}` : fmtNum(act.length) ? `${fmtNum(act.length)}` : '';
@@ -30,11 +39,11 @@ function renderGrid() {
   $('jGrid').innerHTML = list.map(j => {
     const s = stats(j);
     return `<button class="j-tile" data-id="${esc(j.id)}" style="--c:${esc(j.color || '#2F7BFF')}">
-      <div class="jt-h"><i></i><b>${esc(j.name)}</b></div>
+      <div class="jt-h"><i></i><b>${esc(j.name)}</b>${s && s.unseen ? `<span class="j-badge" title="Не просмотрено объявлений: ${fmtNum(s.unseen)}">${fmtNum(s.unseen)}</span>` : ''}</div>
       <div class="jt-l">${esc(srcLine(j))} <span class="muted">→ ${esc(chkLine(j))}</span></div>
       <div class="jt-l muted">${esc(parLine(j))}</div>
       <div class="jt-st">${s ? `<span>подходящих <b>${fmtNum(s.n)}</b>${s.green ? `, <b class="g">${fmtNum(s.green)} зел.</b>` : ''}</span>${s.unseen ? `<span class="u">не просмотрено <b>${fmtNum(s.unseen)}</b></span>` : ''}` : '<span class="muted">общие папки программы</span>'}</div>
-      <div class="jt-d">${j.lastRun ? 'Последняя выгрузка: ' + fmtDate(j.lastRun) : 'Ещё не запускался'}</div></button>`;
+      <div class="jt-d">${j.lastRun ? 'Последняя выгрузка: ' + fmtDate(j.lastRun) : 'Ещё не запускался'}${schedLine(j) ? ' · 🕒 ' + esc(schedLine(j)) : ''}</div></button>`;
   }).join('') + (J.arch ? '' : `<button class="j-tile j-add" id="jAddTile"><span>+</span>Новый заказ</button>`)
     + (J.arch && !list.length ? '<div class="s-empty">Архив пуст.</div>' : '');
   $('jGrid').querySelectorAll('.j-tile[data-id]').forEach(b => (b.onclick = () => openCard(b.dataset.id)));
@@ -52,11 +61,11 @@ function openCard(id) {
       <span class="jc-fb"><button class="ghost sm" data-open="${esc(dir || '')}">Открыть</button>${j.shared ? '' : `<button class="ghost sm" data-pick="${which}">Сменить…</button>`}</span></div>`;
   $('jCard').innerHTML = `<div class="jc-top" style="--c:${esc(j.color || '#2F7BFF')}">
       <button class="ghost" id="jcBack"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>Все заказы</button>
-      <i class="jc-dot"></i><h2>${esc(j.name)}</h2><button class="ghost sm" id="jcRename" title="Переименовать">✎</button>${j.archived ? '<span class="jc-badge">в архиве</span>' : ''}</div>
+      <i class="jc-dot"></i><h2>${esc(j.name)}</h2>${s && s.unseen ? `<span class="j-badge big" title="Не просмотрено объявлений">не просмотрено ${fmtNum(s.unseen)}</span>` : ''}<button class="ghost sm" id="jcRename" title="Переименовать">✎</button>${j.archived ? '<span class="jc-badge">в архиве</span>' : ''}</div>
     <div class="jc-actions">
       <button class="primary" id="jcRun">▶ Запустить</button>
       <button class="ghost" id="jcEdit">✎ Изменить параметры</button>
-      <button class="ghost" id="jcRes"${j.shared ? ' title="У заказа общие папки — откроются все результаты"' : ''}>Результаты заказа${s ? ` <b>${fmtNum(s.n)}</b>` : ''}</button>
+      <button class="ghost" id="jcRes"${j.shared ? ' title="У заказа общие папки — откроются все результаты"' : ''}>Результаты заказа${s ? ` <b>${fmtNum(s.n)}</b>` : ''}${s && s.unseen ? ` <span class="j-badge">${fmtNum(s.unseen)}</span>` : ''}</button>
     </div>
     <div class="jc-grid">
       <div class="box"><div class="box-h">Параметры</div>
@@ -75,9 +84,18 @@ function openCard(id) {
           <select id="jcSeenDays">${[[3, 'за 3 дня'], [7, 'за 7 дней'], [14, 'за 14 дней'], [30, 'за 30 дней'], [0, 'за всё время']].map(([v, t]) => `<option value="${v}"${(j.seenDays || 0) === v ? ' selected' : ''}>${t}</option>`).join('')}</select></div>
         <div class="jc-row"><span class="hint" id="jcSeenInfo">…</span><button class="ghost sm" id="jcForget">Забыть</button></div>
         <p class="hint">У каждого заказа свой список — объявление, выгруженное в другом заказе, здесь выгрузится.</p></div>
+      <div class="box jc-sched"><div class="box-h">Расписание заказа</div>
+        <div id="jcSchList"></div>
+        <button class="ghost sm" id="jcSchAdd">+ Добавить время</button>
+        <p class="hint">Выгрузка заказа запускается сама в эти дни и время — когда компьютер включён и PVZ Master запущен (можно свёрнутым). Winner — с выполненным входом; для Авито фильтры должны быть сохранены в заказе.</p></div>
       <div class="box"><div class="box-h">Цвет</div><div class="jc-colors">${COLORS.map(c => `<button data-color="${c}" style="--c:${c}" class="${c === j.color ? 'on' : ''}"></button>`).join('')}</div></div>
     </div>
     <div class="jc-foot"><button class="ghost" id="jcDup">⧉ Дублировать</button><button class="ghost" id="jcArch">${j.archived ? '↩ Вернуть из архива' : '🗄 В архив'}</button><span class="grow"></span><button class="ghost jc-del" id="jcDel">Удалить заказ</button></div>`;
+  renderSched(j);
+  $('jcSchAdd').onclick = async () => {
+    await saveSched(l => l.push({ id: Date.now().toString(36), enabled: true, time: '13:30', days: [1, 2, 3, 4, 5], check: true, kind: 'job', job: j.id, name: j.name }));
+    renderSched(j);
+  };
   const save = async o => { await pvz.jobSave(Object.assign({ id: j.id }, o)); await load(); openCard(j.id); };
   $('jcBack').onclick = () => { J.open = null; show(); renderGrid(); };
   $('jcRun').onclick = () => window.openWizard({ job: j, mode: 'run' });
@@ -112,6 +130,27 @@ function openCard(id) {
     await pvz.jobDelete(j.id); J.open = null; await load(); show(); renderGrid();
   };
 }
+function renderSched(j) {
+  const el = $('jcSchList'); if (!el) return;
+  const list = jobSched(j);
+  el.innerHTML = list.length ? list.map(x => `<div class="jc-sch${x.enabled ? '' : ' off'}" data-sid="${esc(x.id)}">
+      <label class="switch" title="Включено"><input type="checkbox" class="en"${x.enabled ? ' checked' : ''}><span></span></label>
+      <input type="time" class="tm" value="${esc(x.time)}">
+      <div class="s-days">${DAYS.map((d, k) => `<button class="${(x.days || []).includes(k + 1) ? 'on' : ''}" data-d="${k + 1}">${d}</button>`).join('')}</div>
+      <label class="chk"><input type="checkbox" class="ck"${x.check ? ' checked' : ''}>проверить зоны</label>
+      <button class="del" title="Удалить">✕</button></div>`).join('')
+    : '<p class="hint">Заданий нет — выгрузка только вручную.</p>';
+  if (j.archived && list.some(x => x.enabled)) el.insertAdjacentHTML('beforeend', '<p class="hint">Заказ в архиве — по расписанию не запускается.</p>');
+  const upd = (id, f) => saveSched(l => { const x = l.find(y => y.id === id); if (x) f(x, l); }).then(() => renderSched(j));
+  el.querySelectorAll('.jc-sch').forEach(r => {
+    const id = r.dataset.sid;
+    r.querySelector('.en').onchange = e => upd(id, x => (x.enabled = e.target.checked));
+    r.querySelector('.tm').onchange = e => e.target.value && upd(id, x => (x.time = e.target.value));
+    r.querySelector('.ck').onchange = e => upd(id, x => (x.check = e.target.checked));
+    r.querySelectorAll('[data-d]').forEach(b => (b.onclick = () => upd(id, x => { const n = +b.dataset.d; x.days = (x.days || []).includes(n) ? x.days.filter(k => k !== n) : [...(x.days || []), n].sort(); })));
+    r.querySelector('.del').onclick = () => upd(id, (x, l) => l.splice(l.indexOf(x), 1));
+  });
+}
 function show() { $('jobs').classList.toggle('detail', !!J.open); }
 
 async function newJob() {
@@ -135,7 +174,14 @@ $('jNew').onclick = newJob;
 $('jArch').onchange = () => { J.arch = $('jArch').checked; J.open = null; show(); renderGrid(); };
 
 // число заказов на кнопке главного экрана
-async function homeJobs() { try { const l = await pvz.jobs(); const n = l.filter(j => !j.archived).length; $('jobsN').textContent = n ? String(n) : ''; } catch {} }
+// на кнопке «Заказы» — сколько объявлений в заказах ещё не просмотрено
+async function homeJobs() {
+  try {
+    await load();
+    const u = J.list.filter(j => !j.archived).reduce((a, j) => a + ((stats(j) || {}).unseen || 0), 0);
+    $('jobsN').textContent = u ? fmtNum(u) : ''; $('jobsN').title = u ? `Не просмотрено объявлений в заказах: ${fmtNum(u)}` : '';
+  } catch {}
+}
 new MutationObserver(() => { if (document.body.dataset.mode === 'welcome') homeJobs(); }).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
 homeJobs();
 })();

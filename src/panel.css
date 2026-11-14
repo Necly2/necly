@@ -765,7 +765,7 @@ html[data-theme="light"] .modal{background:rgba(20,26,36,.35)}
 .start-row .start svg{width:22px;height:22px}
 .start.alt{background:var(--card);color:var(--text);border:1px solid var(--line2);box-shadow:var(--shadow)}
 .start.alt:hover{border-color:var(--accent)}
-.start .jn{font-size:12.5px;font-weight:700;min-width:22px;padding:2px 7px;border-radius:999px;background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent)}
+.start .jn{position:absolute;top:-9px;right:-9px;font-size:12px;font-weight:700;min-width:24px;height:24px;line-height:20px;text-align:center;padding:0 7px;border-radius:999px;background:var(--danger);color:#fff;border:2px solid var(--bg);box-shadow:0 4px 12px rgba(0,0,0,.3)}
 .start .jn:empty{display:none}
 .wz-job{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted);padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);white-space:nowrap;max-width:280px;overflow:hidden;text-overflow:ellipsis}
 .wz-job b{color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis}
@@ -824,3 +824,16 @@ body[data-mode="jobs"] #jobs{display:flex}
 .jc-foot .grow{flex:1}
 .jc-del{color:var(--err-t)}
 .jc-del:hover{border-color:color-mix(in srgb,var(--danger) 55%,transparent)}
+
+/* значок «не просмотрено» и расписание в карточке заказа */
+.j-badge{margin-left:auto;flex:none;font-size:11.5px;font-weight:700;min-width:22px;height:22px;line-height:22px;text-align:center;padding:0 7px;border-radius:999px;background:var(--danger);color:#fff}
+.j-badge.big{margin-left:6px;height:auto;line-height:1.4;padding:3px 10px;font-weight:600}
+.jc-actions .j-badge{margin-left:6px;display:inline-block}
+.jc-sched{grid-column:1 / -1}
+.jc-sch{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:var(--card2)}
+.jc-sch + .jc-sch{margin-top:6px}
+.jc-sch.off{opacity:.55}
+.jc-sch input[type=time]{padding:7px 8px;border-radius:9px;border:1px solid var(--line);background:var(--field);color:var(--text);font:inherit;color-scheme:var(--scheme)}
+.jc-sch .chk{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center;white-space:nowrap}
+.jc-sch .del{margin-left:auto;border:0;background:transparent;color:var(--err-t);font-size:16px;padding:4px 8px}
+#jcSchAdd{align-self:flex-start}
