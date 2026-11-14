@@ -101,17 +101,8 @@
     </div>
     <div class="r-mapcol" id="rMapCol">
       <div class="r-maptools">
-        <select id="rMapSel" class="map-sel">
-          <option value="res">Точки результатов</option>
-          <option value="yandex">Яндекс.Карты</option>
-          <option value="2gis">2ГИС</option>
-          <option value="osm">OpenStreetMap</option>
-        </select>
-        <select id="rAggSel" class="map-sel" title="Карты площадок">
-          <option value="ozon">Ozon</option>
-          <option value="wb">Wildberries</option>
-          <option value="ym">Яндекс Маркет</option>
-        </select>
+        <select id="rMapSel" class="map-sel" title="Обычная карта (список — в «Настройки → Карты в «Результатах»»)"></select>
+        <select id="rAggSel" class="map-sel" title="Карта площадки (список — в «Настройки → Карты в «Результатах»»)"></select>
         <button class="ghost sm icon-sq" id="rSplit" title="Разделить: сверху карта площадки, снизу обычная карта"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 12h18"/></svg></button>
         <select id="rBase" class="map-sel" title="Подложка карты с точками"><option value="2gis">подложка 2ГИС</option><option value="osm">подложка OSM</option></select>
         <span class="hint grow" id="rOzQ"></span>
@@ -206,6 +197,11 @@
       <div class="set-row"><span>Зелёная зона — площадь от, м²<small class="muted"> (Ozon сейчас пишет «от 60 м²»)</small></span><input type="text" class="num" id="setGreenMin" inputmode="numeric" style="width:90px"></div>
       <div class="set-row"><span>Помнить результаты проверки</span><select id="setCache"><option value="1">3 дня</option><option value="0">не помнить</option></select></div>
       <label class="switch"><input type="checkbox" id="setTestSup"><span></span><span class="lbl">В «Результатах» вместо цвета зоны — поддержка Ozon под площадь объявления <small>сумма в месяц для ступени площади (25–40, 40–60, 60+ м²), цвет зоны — кружок рядом; если площади нет или адрес проверялся старой версией — название зоны</small></span></label>
+    </div>
+    <div class="box"><div class="box-h">Карты в «Результатах»</div>
+      <p class="hint">Какие карты есть в выпадающих списках над картой. По умолчанию — Яндекс.Карты и карта Ozon.</p>
+      <div class="set-row"><span>Обычные карты</span><div class="map-chks" id="setMapsGen"></div></div>
+      <div class="set-row"><span>Карты площадок</span><div class="map-chks" id="setMapsAgg"></div></div>
     </div>
     <div class="box"><div class="box-h">Внешний вид</div>
       <div class="set-row"><span>Тема</span><div class="o-seg" id="setTheme"><button data-v="auto">Как в системе</button><button data-v="light">Светлая</button><button data-v="dark">Тёмная</button></div></div>

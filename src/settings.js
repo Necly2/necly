@@ -37,10 +37,26 @@ async function loadSettings() {
   $('setCache').value = c.ozonCache === false ? '0' : '1';
   $('setExpert').checked = !!c.showExpert;
   $('setTestSup').checked = c.testSupport !== false;
+  mapChecks(c);
   $('sTray').checked = c.tray !== false; $('sAuto').checked = !!c.autostart;
   const mode = window.getThemeMode ? getThemeMode() : 'auto';
   $('setTheme').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === mode));
   seenInfo();
+}
+// «Карты в «Результатах»»: хотя бы одна карта каждого вида остаётся включённой
+function mapChecks(c) {
+  const draw = (el, all, cur, key, def) => {
+    const on = cur && cur.length ? cur : def;
+    $(el).innerHTML = all.map(([k, n]) => `<label class="tgl"><input type="checkbox" value="${k}"${on.includes(k) ? ' checked' : ''}><span>${n}</span></label>`).join('');
+    $(el).querySelectorAll('input').forEach(i => (i.onchange = async () => {
+      const v = [...$(el).querySelectorAll('input:checked')].map(x => x.value);
+      if (!v.length) { i.checked = true; toast('Нужна хотя бы одна карта'); return; }
+      const cc = await pvz.setCfg({ [key]: v });
+      setMapLists(cc.resMapsGen, cc.resMapsAgg);
+    }));
+  };
+  draw('setMapsGen', MAPS_GEN, c.resMapsGen, 'resMapsGen', DEF_MAPS_GEN);
+  draw('setMapsAgg', MAPS_AGG, c.resMapsAgg, 'resMapsAgg', DEF_MAPS_AGG);
 }
 async function seenInfo() { const s = await pvz.seenInfo(); $('setSeenInfo').textContent = `Запомнено: Циан ${fmtNum(s.cian)}, Авито ${fmtNum(s.avito)}`; }
 $('setOnlyNew').onchange = () => pvz.setCfg({ onlyNew: $('setOnlyNew').checked, cianOnlyNew: $('setOnlyNew').checked });

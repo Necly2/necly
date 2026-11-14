@@ -420,7 +420,8 @@ async function loadResults() {
   $('rCount').textContent = 'загрузка…';
   const r = await pvz.results();
   const cfg = await pvz.getCfg();
-  if (R.showLst === undefined) { R.showLst = cfg.resShowLst != null ? (cfg.resShowLst && lstAuto()) || (cfg.resShowLst && window.innerWidth >= 1400) : lstAuto(); R.base = cfg.resBase || '2gis'; $('rBase').value = R.base; R.mapMode = cfg.resMap || 'res'; }
+  if (R.showLst === undefined) { R.showLst = cfg.resShowLst != null ? (cfg.resShowLst && lstAuto()) || (cfg.resShowLst && window.innerWidth >= 1400) : lstAuto(); R.base = cfg.resBase || '2gis'; $('rBase').value = R.base; R.mapMode = cfg.resMap || 'yandex'; }
+  setMapLists(cfg.resMapsGen, cfg.resMapsAgg);
   R.split = !!cfg.resSplit;   // «Разделить» — постоянная функция (была тестовой)
   R.testSup = cfg.testSupport !== false;
   R.marks = cfg.resMarks || {}; R.seen = cfg.resSeen || {}; R.watch = cfg.resWatch || {}; if (cfg.resDedup === false) R.dedup = false;
@@ -441,7 +442,7 @@ async function loadResults() {
     R.tiles = baseTiles().addTo(R.map);
     R.layer = L.layerGroup().addTo(R.map);
   }
-  setTimeout(() => R.map.invalidateSize(), 50);
+  setTimeout(fixMap, 50);
   renderResults(true);
   applyLst(); setMapMode(R.mapMode);
   if (r.errors.length) pvz.logError('результаты', r.errors.join('; '));
@@ -482,7 +483,8 @@ function renderResults(fit) {
     m.on('click', () => selectRow(x.id, false));
     m.addTo(R.layer); R.markers.set(x.id, m); pts.push([x.lat, x.lon]);
   }
-  if (fit && pts.length) R.map.fitBounds(pts, { padding: [30, 30], maxZoom: 14 });
+  // карта с точками может быть скрыта (выбрана другая карта) — тогда подогнать при показе
+  if (fit && pts.length) { if (mapOn()) R.map.fitBounds(pts, { padding: [30, 30], maxZoom: 14 }); else R.fitLater = pts; }
   setTimeout(loadFlats, 300);
 }
 // ---- карта Ozon по выбранному объявлению ----
@@ -496,15 +498,36 @@ function ozQuery(x) {
   const a = x.address.trim();
   return /москв|московск|область|г\.|город/i.test(a) ? a : 'Москва, ' + a;
 }
+// карта «Точки результатов» видна? (у скрытой Leaflet считает размеры от нуля — NaN)
+const mapOn = () => !!R.map && $('rMap').offsetWidth > 0 && $('rMap').offsetHeight > 0;
+function fixMap() { if (!mapOn()) return; R.map.invalidateSize(); if (R.fitLater) { R.map.fitBounds(R.fitLater, { padding: [30, 30], maxZoom: 14 }); R.fitLater = null; } }
 const rectOf = id => { const b = $(id).getBoundingClientRect(); return { x: b.left, y: b.top, width: b.width, height: b.height }; };
 const ozRect = () => rectOf('rOzHost');
 // справа карты: обычная (точки / Яндекс / 2ГИС / OSM) или карта площадки (Ozon / WB / Яндекс Маркет);
 // тест «Разделить»: сверху карта площадки, снизу обычная
 const AGG = ['ozon', 'wb', 'ym'], GEN_EXT = ['yandex', '2gis', 'osm'];
-R.mapMode = 'res'; R.gen = 'res'; R.agg = 'ozon'; R.split = false;
+R.mapMode = 'yandex'; R.gen = 'yandex'; R.agg = 'ozon'; R.split = false;
+// какие карты в списках над картой — выбираются в «Настройки → Карты в «Результатах»» (по умолчанию Яндекс.Карты и Ozon)
+const MAPS_GEN = [['yandex', 'Яндекс.Карты'], ['2gis', '2ГИС'], ['osm', 'OpenStreetMap'], ['res', 'Точки результатов']];
+const MAPS_AGG = [['ozon', 'Ozon'], ['wb', 'Wildberries'], ['ym', 'Яндекс Маркет']];
+const DEF_MAPS_GEN = ['yandex'], DEF_MAPS_AGG = ['ozon'];
+R.mapsGen = DEF_MAPS_GEN.slice(); R.mapsAgg = DEF_MAPS_AGG.slice();
+function setMapLists(gen, agg) {
+  R.mapsGen = MAPS_GEN.map(m => m[0]).filter(k => (gen && gen.length ? gen : DEF_MAPS_GEN).includes(k));
+  R.mapsAgg = MAPS_AGG.map(m => m[0]).filter(k => (agg && agg.length ? agg : DEF_MAPS_AGG).includes(k));
+  if (!R.mapsGen.includes(R.gen)) R.gen = R.mapsGen[0];
+  if (!R.mapsAgg.includes(R.agg)) R.agg = R.mapsAgg[0];
+  $('rMapSel').innerHTML = MAPS_GEN.filter(m => R.mapsGen.includes(m[0])).map(([k, n]) => `<option value="${k}">${n}</option>`).join('');
+  $('rAggSel').innerHTML = MAPS_AGG.filter(m => R.mapsAgg.includes(m[0])).map(([k, n]) => `<option value="${k}">${n}</option>`).join('');
+  $('rMapSel').value = R.gen; $('rAggSel').value = R.agg;
+}
+window.setMapLists = setMapLists;
+setMapLists();
 const extPoint = x => x && x.lat != null ? { lat: x.lat, lon: x.lon } : null;
 const shown = () => R.split ? { agg: R.agg, gen: R.gen } : AGG.includes(R.mapMode) ? { agg: R.mapMode, gen: null } : { agg: null, gen: R.mapMode };
 function setMapMode(m) {
+  // карта, убранная в настройках, — заменяется первой из включённых того же вида
+  if (AGG.includes(m) ? !R.mapsAgg.includes(m) : !R.mapsGen.includes(m)) m = AGG.includes(m) ? R.mapsAgg[0] : R.mapsGen[0];
   if (AGG.includes(m)) R.agg = m; else R.gen = m;
   R.mapMode = m; R.ozon = m === 'ozon';
   $('rAggSel').value = R.agg; $('rMapSel').value = R.gen;
@@ -570,7 +593,7 @@ function layoutMaps() {
   else if (R.split && s.agg === 'ym' && GEN_EXT.includes(s.gen)) { $('rMapZoom').style.display = ''; $('rMapZoom').dataset.zoom = s.gen; }
   if (!live) $('rOzQ').textContent = '';
   if (live && R.sel == null) showIdleMaps();
-  setTimeout(() => { R.map && R.map.invalidateSize(); syncRects(); }, 40);
+  setTimeout(() => { fixMap(); syncRects(); }, 40);
 }
 async function showOnMap(x) {
   const s = shown(), q = ozQuery(x);
@@ -600,7 +623,7 @@ function lstAuto() { return window.innerWidth >= 1700; }
 function applyLst() {
   const on = R.showLst; $('rShowLst').checked = on;
   document.querySelector('.r-body').classList.toggle('with-lst', on); restoreSizes();
-  setTimeout(() => { R.map && R.map.invalidateSize(); syncRects(); }, 60);
+  setTimeout(() => { fixMap(); syncRects(); }, 60);
   if (on && R.sel != null) showListing(R.rows[R.sel]);
 }
 async function showListing(x) {
@@ -637,7 +660,7 @@ function setFull(id) {
   document.querySelectorAll('.r-body .full').forEach(e => e.classList.remove('full'));
   if (id) $(id).classList.add('full');
   document.body.classList.toggle('r-full', !!id);
-  setTimeout(() => { R.map && R.map.invalidateSize(); syncRects(); }, 40);
+  setTimeout(() => { fixMap(); syncRects(); }, 40);
 }
 document.querySelectorAll('.fs-btn').forEach(b => (b.onclick = () => setFull($(b.dataset.fs).classList.contains('full') ? null : b.dataset.fs)));
 $('fsExit').onclick = () => setFull(null);
@@ -678,13 +701,13 @@ function startDrag(e, axis, i, els) {
   const move = ev => {
     const d = (axis === 'x' ? ev.clientX : ev.clientY) - start, s = sizes.slice();
     const dd = Math.max(MIN - s[i], Math.min(s[i + 1] - MIN, d)); s[i] += dd; s[i + 1] -= dd; apply(s); R.sizesNow = s;
-    R.map && R.map.invalidateSize();
+    fixMap();
   };
   const up = () => {
     document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); ov.remove();
     R.dragging = false;
     if (R.sizesNow) { const k = axis === 'y' ? 'resSizesV' : R.showLst ? 'resSizes3' : 'resSizes2'; pvz.setCfg({ [k]: R.sizesNow }); R.sizesNow = null; }
-    placeSplitters(); syncRects(); setTimeout(() => R.map && R.map.invalidateSize(), 30);
+    placeSplitters(); syncRects(); setTimeout(() => fixMap(), 30);
   };
   document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
 }
@@ -692,7 +715,7 @@ async function restoreSizes() {
   const c = await pvz.getCfg(), s = R.showLst ? c.resSizes3 : c.resSizes2, body = document.querySelector('.r-body');
   body.style.gridTemplateColumns = s && s.length === (R.showLst ? 3 : 2) ? s.map(w => `minmax(0,${Math.round(w)}fr)`).join(' ') : '';
   if (c.resSizesV && R.split) { $('rOzHost').style.flex = `${Math.round(c.resSizesV[0])} 1 0`; ($('rMap').style.display === 'none' ? $('rGenHost') : $('rMap')).style.flex = `${Math.round(c.resSizesV[1])} 1 0`; }
-  setTimeout(() => { placeSplitters(); syncRects(); R.map && R.map.invalidateSize(); }, 50);
+  setTimeout(() => { placeSplitters(); syncRects(); fixMap(); }, 50);
 }
 new ResizeObserver(() => placeSplitters()).observe(document.querySelector('.r-body'));
 // отметить все видимые (вкладка дня / выгрузка / фильтры) как просмотренные
@@ -719,7 +742,7 @@ function selectRow(id, fly) {
   const tr = document.querySelector(`#rRows tr[data-id="${id}"]`);
   if (tr) { tr.classList.add('sel'); if (!fly) tr.scrollIntoView({ block: 'nearest' }); }
   const m = R.markers.get(id);
-  if (m && fly) { R.map.flyTo(m.getLatLng(), Math.max(R.map.getZoom(), 15), { duration: .6 }); m.openPopup(); }
+  if (m && fly && mapOn()) { R.map.flyTo(m.getLatLng(), Math.max(R.map.getZoom(), 15), { duration: .6 }); m.openPopup(); }
 }
 $('rRows').addEventListener('click', e => {
   const tr = e.target.closest('tr'); if (!tr) return;
@@ -987,7 +1010,7 @@ document.addEventListener('keydown', e => {
     const j = i < 0 ? 0 : Math.max(0, Math.min(list.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)));
     if (j === i) return;
     const x = list[j]; selectRow(x.id, false);
-    const m = R.markers.get(x.id); if (m && R.map) { R.map.panTo(m.getLatLng(), { animate: true, duration: .3 }); m.openPopup(); }
+    const m = R.markers.get(x.id); if (m && mapOn()) { R.map.panTo(m.getLatLng(), { animate: true, duration: .3 }); m.openPopup(); }
     return;
   }
   if (i < 0) return;
