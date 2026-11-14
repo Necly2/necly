@@ -130,9 +130,11 @@ function create(d) {
       // 4. отслеживаемые
       const wp = path.join(root, WATCH_FILE), W = readJson(wp, { items: {}, del: {} });
       const items = Object.assign({}, W.items || {}), del = Object.assign({}, W.del || {});
-      for (const [k, v] of Object.entries(c.resWatch || {})) if (!items[k] || (v.added || 0) > (items[k].added || 0)) items[k] = v;
+      // версия записи — позднее из «добавлено» и «изменено» (статус, заметка, цена)
+      const ver = v => Math.max((v && v.added) || 0, (v && v.upd) || 0);
+      for (const [k, v] of Object.entries(c.resWatch || {})) if (!items[k] || ver(v) > ver(items[k])) items[k] = v;
       for (const [k, t] of Object.entries(c.resWatchDel || {})) del[k] = Math.max(del[k] || 0, t || 0);
-      for (const k of Object.keys(items)) if ((del[k] || 0) >= (items[k].added || 0)) delete items[k];
+      for (const k of Object.keys(items)) if ((del[k] || 0) >= ver(items[k])) delete items[k];
       writeJson(wp, { описание: 'Отслеживаемые объявления PVZ Master (общие для всех компьютеров)', items, del });
       if (!same(items, c.resWatch || {}) || !same(del, c.resWatchDel || {})) { c.resWatch = items; c.resWatchDel = del; changed = true; }
       if (changed) d.saveCfg(c);
@@ -146,9 +148,22 @@ function create(d) {
     if (!c.syncDir || !j || !j.syncDir || !j.sync) return;
     try { const p = path.join(c.syncDir, j.syncDir, JOB_FILE); const o = readJson(p, {}); if (o.id === j.id) writeJson(p, Object.assign(o, { deleted: true, updated: Date.now() })); } catch {}
   }
+  // «занято»: общий заказ сейчас выгружается на компьютере pcName
+  const BUSY_FILE = 'занято.json';
+  function setBusy(c, j, on, pcName) {
+    if (!c.syncDir || !j || !j.sync || !j.syncDir) return;
+    const p = path.join(c.syncDir, j.syncDir, BUSY_FILE);
+    try { if (on) fs.writeFileSync(p, JSON.stringify({ pc: c.pcId, pcName: pcName || '', at: Date.now() })); else if ((readJson(p, {}) || {}).pc === c.pcId) fs.unlinkSync(p); } catch {}
+  }
+  // → { pcName, at } если заказ выгружается на ДРУГОМ компьютере (отметка не старше 10 минут)
+  function busyOf(c, j) {
+    if (!c.syncDir || !j || !j.sync || !j.syncDir) return null;
+    const b = readJson(path.join(c.syncDir, j.syncDir, BUSY_FILE), null);
+    return b && b.pc && b.pc !== c.pcId && Date.now() - (b.at || 0) < 10 * 60e3 ? { pcName: b.pcName || 'другой компьютер', at: b.at } : null;
+  }
   let t = null, timer = null;
   const soon = (ms = 1500) => { clearTimeout(t); t = setTimeout(() => run(), ms); };
   const start = () => { clearInterval(timer); timer = setInterval(() => run(), 60e3); soon(4000); };
-  return { run, soon, start, markDeleted, state };
+  return { run, soon, start, markDeleted, setBusy, busyOf, state };
 }
 module.exports = { create, mirror, mergeSeen };

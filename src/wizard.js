@@ -574,6 +574,11 @@ async function runExportAll(onlyFailed) {
     const v = await showModal({ kind: 'warn', title: 'Похоже, включён VPN', text: vpnText(vpn), buttons: [{ label: 'Отмена', value: false }, { label: 'Всё равно выгружать', cls: 'primary', value: true }] });
     if (!v) return;
   }
+  // общий заказ уже выгружается на другом компьютере — предупредить
+  if (W.job && !onlyFailed) {
+    const jb = (await pvz.jobs().catch(() => [])).find(x => x.id === W.job.id);
+    if (jb && jb.busy && !(await showModal({ kind: 'warn', title: 'Заказ уже выгружается', text: `Заказ «${W.job.name}» сейчас выгружается на компьютере «${jb.busy.pcName}». Если продолжить, объявления могут выгрузиться дважды.`, buttons: [{ label: 'Отмена', value: false }, { label: 'Всё равно выгружать', cls: 'primary', value: true }] }))) return;
+  }
   const R = W.run; R.phase = 'export'; R.stop = false; W.liveSite = false; closeSiteView(); rerender();
   if (!onlyFailed) R.files = [];
   for (const k of Object.keys(R.src)) {

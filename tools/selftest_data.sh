@@ -11,5 +11,5 @@ echo "{\"files\":{\"$d/pvz/A/Ноябрь/Адреса 13/export_excel 13 1.xlsx
 cp "tools/fixtures/export_excel 13 1.xlsx" "$d/pvz/J/Выгрузки/Ноябрь/Циан 14/export_excel ЦИАН 14 1.xlsx"
 cp "tools/fixtures/out/Ноябрь/OZON export_excel 13 1.xlsx" "$d/pvz/J/Результаты/Ноябрь/OZON export_excel ЦИАН 14 1.xlsx"
 echo "{\"files\":{\"$d/pvz/J/Выгрузки/Ноябрь/Циан 14/export_excel ЦИАН 14 1.xlsx\":{\"size\":1,\"result\":\"$d/pvz/J/Результаты/Ноябрь/OZON export_excel ЦИАН 14 1.xlsx\"}}}" > "$d/pvz/J/Результаты/ozon_checked.json"
-cd "$(dirname "$0")/.." && HOME=$d/home PVZ_FAKE=1 PVZ_DEEP=1 PVZ_THEME=${2:-dark} PVZ_SHOT=$d/shots timeout 280 xvfb-run -a -s "-screen 0 1400x900x24" node_modules/.bin/electron --no-sandbox --ignore-certificate-errors . > $d/log.txt 2>&1
+cd "$(dirname "$0")/.." && HOME=$d/home PVZ_FAKE=1 PVZ_DEEP=1 PVZ_THEME=${2:-dark} PVZ_SHOT=$d/shots timeout 330 xvfb-run -a -s "-screen 0 1400x900x24" node_modules/.bin/electron --no-sandbox --ignore-certificate-errors . > $d/log.txt 2>&1
 grep -h "RENDERER\|JSERR\|JOB\|SCHED\|RJOB\|DEEP\|MORE\|KEYS\|HOMESUM\|JOKE\|ETA" $d/log.txt | head -30

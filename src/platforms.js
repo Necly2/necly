@@ -294,4 +294,4 @@ async function run(kind, files, ctx) {
   return { kind, label: spec.label, reason: stopped ? 'остановлено вручную' : 'проверка завершена', saved, errors, stats, main: mainN, excluded: exclN, unchecked, manual, addresses: coords.length, files: data.length };
 }
 
-module.exports = { run, SPEC, makeYandex, makeWB, wbClassify };
+module.exports = { run, SPEC, makeYandex, makeWB, wbClassify, Y_ZONES, WB_ZONES };

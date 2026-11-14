@@ -401,12 +401,19 @@ function zoneColor(r) {
   if (r.platform === 'Яндекс') return /оранж/.test(r.zone) ? '#fb923c' : /фиолет/.test(r.zone) ? '#c084fc' : /синий/.test(r.zone) ? '#6b99f5' : /голуб/.test(r.zone) ? '#67e8f9' : '#9ca3af';
   return /гарантир/.test(r.zone) ? '#d8b4fe' : /без выплат/.test(r.zone) ? '#fde047' : /другой/.test(r.zone) ? '#fdba74' : '#d1d5db';
 }
+// адрес для показа: если в объявлении не было номера дома (или стояло метро), а Ozon определил дом по координатам — показываем его
+function fixAddr(x) {
+  const m = String(x.note || '').match(/(?:нет номера дома|адрес по координатам объявления) \(Ozon: ([^)]+)\)/);
+  x.addrSrc = ''; x.noteShow = x.note || '';
+  if (m && /\d/.test(m[1])) { x.addrSrc = x.address; x.address = m[1].trim().replace(/^город\s+/i, ''); x.noteShow = x.noteShow.replace(/(проверить вручную: в таблице нет номера дома|адрес по координатам объявления) \(Ozon: [^)]+\);?\s*/, '').trim(); x.byCoords = true; }
+  return x;
+}
 function prepRows(rows) {
   R.sel = null;   // после перезагрузки списка старый номер строки указывал бы на другое объявление
-  R.rows = rows.map((x, i) => Object.assign(x, { id: i, mark: R.marks[markKey(x)] ? 1 : 0 }));
+  R.rows = rows.map((x, i) => Object.assign(x.addrSrc === undefined ? fixAddr(x) : x, { id: i, mark: R.marks[markKey(x)] ? 1 : 0 }));
   // отслеживаемые, которых уже нет в файлах результатов, — из сохранённой копии
   const have = new Set(R.rows.map(markKey));
-  for (const [k, w] of Object.entries(R.watch)) if (!have.has(k) && w.row) R.rows.push(Object.assign({}, w.row, { id: R.rows.length, mark: R.marks[k] ? 1 : 0, archived: true }));
+  for (const [k, w] of Object.entries(R.watch)) if (!have.has(k) && w.row) { const r0 = Object.assign({}, w.row); R.rows.push(Object.assign(r0.addrSrc === undefined ? fixAddr(r0) : r0, { id: R.rows.length, mark: R.marks[k] ? 1 : 0, archived: true })); }
   // одинаковые помещения в один день: первое оставляем, остальные скрываем (переключатель «Скрыть одинаковые»)
   const firstOf = new Map(); R.dupCount = 0;
   [...R.rows].sort((a, b) => (a.exported || a.checked) - (b.exported || b.checked)).forEach(x => { const k = dupKey(x); if (firstOf.has(k)) { x.dupHidden = true; R.dupCount++; } else firstOf.set(k, x); });
@@ -472,14 +479,16 @@ function renderResults(fit) {
   R.list = list;
   document.querySelectorAll('.r-table th').forEach(th => th.classList.toggle('sorted', th.dataset.k === k));
   const shown = list.slice(0, 1000);
-  $('rCount').textContent = `${fmtNum(list.length)} из ${fmtNum(R.rows.length)}`;
+  const jf = R.jobF && R.jobF !== '-' ? (R.jobs.find(j => j.id === R.jobF) || {}).name : R.jobF === '-' ? 'общие папки' : '';
+  $('rCount').textContent = `${fmtNum(list.length)} из ${fmtNum(R.rows.length)}` + (jf ? ' · ' + jf : '');
+  filtCount();
   const area = x => x.areaMin == null ? '' : (x.areaMax && x.areaMax !== x.areaMin ? `${fmtNum(x.areaMin)}–${fmtNum(x.areaMax)}` : fmtNum(x.areaMin)) + ' м²';
   $('rRows').innerHTML = shown.map((x, i) => `<tr data-id="${x.id}" class="${x.mark ? 'marked' : ''}${x.id === R.sel ? ' sel' : ''}${R.seen[markKey(x)] ? '' : ' unseen'}${x.also && x.also.length ? ' multi' : ''}">
     <td class="num-c">${i + 1}</td><td>${esc(x.platform)}</td>
     <td>${zoneCell(x)}</td>
-    <td class="addr">${R.seen[markKey(x)] ? '' : '<b class="new-dot" title="Ещё не просмотрено">●</b>'}<span class="addr-t">${esc(x.address)}</span><button class="copy-a" title="Скопировать адрес"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>${x.also && x.also.length ? x.also.map(y => `<span class="also" title="Это помещение есть и в проверке ${esc(y.platform)}"><i style="background:${zoneColor(y)}"></i>${esc(y.platform)}: ${esc(y.zone)}</span>`).join('') : ''}${x.archived ? '<span class="also">из архива</span>' : ''}${x.metro ? `<small>${esc(x.metro)}</small>` : ''}${x.note ? `<small class="note">${esc(x.note)}</small>` : ''}</td>
+    <td class="addr">${R.seen[markKey(x)] ? '' : '<b class="new-dot" title="Ещё не просмотрено">●</b>'}<span class="addr-t">${esc(x.address)}</span><button class="copy-a" title="Скопировать адрес"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>${x.also && x.also.length ? x.also.map(y => `<span class="also" title="Это помещение есть и в проверке ${esc(y.platform)}"><i style="background:${zoneColor(y)}"></i>${esc(y.platform)}: ${esc(y.zone)}</span>`).join('') : ''}${x.archived ? '<span class="also">из архива</span>' : ''}${watchBadges(x)}${x.metro ? `<small>${esc(x.metro)}</small>` : ''}${x.noteShow ? `<small class="note">${esc(x.noteShow)}</small>` : ''}</td>
     <td class="n">${area(x)}</td><td class="n flats" data-flats="${x.id}">${flatsCell(x)}</td><td class="n">${x.price != null ? fmtNum(x.price) + ' ₽' : ''}${x.money ? `<small class="pay">выплата ${fmtNum(x.money)} ₽</small>` : ''}</td>
-    <td>${fmtTime(x.checked)}</td><td class="acts">${x.url ? '<a class="open" href="#">Открыть ↗</a>' : ''}<button class="star${R.watch[markKey(x)] ? ' on' : ''}" title="${R.watch[markKey(x)] ? 'Убрать из отслеживаемых' : 'Отслеживать'}">${R.watch[markKey(x)] ? '★' : '☆'}</button></td><td class="mk"><label class="mbox"><input type="checkbox"${x.mark ? ' checked' : ''}><span></span></label></td></tr>`).join('');
+    <td>${fmtTime(x.checked)}</td><td class="acts">${x.url ? '<a class="open" href="#" title="Открыть объявление в браузере">↗</a>' : ''}<button class="star${R.watch[markKey(x)] ? ' on' : ''}" title="${R.watch[markKey(x)] ? 'Убрать из отслеживаемых' : 'Отслеживать'}">${R.watch[markKey(x)] ? '★' : '☆'}</button></td><td class="mk"><label class="mbox"><input type="checkbox"${x.mark ? ' checked' : ''}><span></span></label></td></tr>`).join('');
   $('rMore').textContent = list.length > shown.length ? `Показаны первые ${fmtNum(shown.length)} — уточните фильтры.` : (list.length ? '' : 'Ничего не найдено — измените фильтры или день.');
   R.layer.clearLayers(); R.markers.clear();
   const pts = [];
@@ -492,6 +501,7 @@ function renderResults(fit) {
   }
   // карта с точками может быть скрыта (выбрана другая карта) — тогда подогнать при показе
   if (fit && pts.length) { if (mapOn()) R.map.fitBounds(pts, { padding: [30, 30], maxZoom: 14 }); else R.fitLater = pts; }
+  renderDetail();
   setTimeout(loadFlats, 300);
 }
 // ---- карта Ozon по выбранному объявлению ----
@@ -541,7 +551,7 @@ function setMapMode(m) {
   pvz.setCfg({ resMap: m });
   layoutMaps();
   const x = R.sel != null ? R.rows[R.sel] : null;
-  if (!x) { if (shown().agg || GEN_EXT.includes(shown().gen)) $('rOzQ').textContent = 'Выберите объявление в таблице'; showIdleMaps(); return; }
+  if (!x) { $('rOzQ').textContent = ''; showIdleMaps(); return; }
   showOnMap(x);
 }
 // объявление ещё не выбрано — всё равно открыть выбранные карты (раньше они не показывались и висело «Загружаю карту…»)
@@ -579,7 +589,7 @@ function ymShow(x) {
   if (ymMarker) ymMarker.remove();
   ymMarker = L.marker([x.lat, x.lon]).addTo(m).bindPopup(`<b>${esc(x.address)}</b>${x.platform === 'Яндекс' ? '<br>' + esc(x.zone) : ''}`).openPopup();
   m.setView([x.lat, x.lon], 16);
-  $('rOzQ').textContent = x.address;
+  $('rOzQ').textContent = '';
 }
 function layoutMaps() {
   const s = shown(), live = !!s.agg || GEN_EXT.includes(s.gen);
@@ -606,7 +616,7 @@ async function showOnMap(x) {
   const s = shown(), q = ozQuery(x);
   if (s.agg === 'ym') ymShow(x);
   if (!(s.agg && s.agg !== 'ym') && !GEN_EXT.includes(s.gen)) return;
-  $('rOzQ').textContent = 'Ищу: ' + q;
+  $('rOzQ').textContent = '';   // строка над картой — только для ошибок (иначе карта «прыгает»)
   await new Promise(r => requestAnimationFrame(r));
   const jobs = [];
   if (s.agg === 'ozon') jobs.push(pvz.ozonMapShow(rectOf('rOzHost'), q));
@@ -615,7 +625,7 @@ async function showOnMap(x) {
   const res = (await Promise.all(jobs))[0];
   if (R.rows[R.sel] !== x) return;
   zoomShow($('rMapZoom').dataset.zoom); if ($('rMapZoom2').style.display !== 'none') zoomShow($('rMapZoom2').dataset.zoom); syncRects();
-  if (!res || res.ok) $('rOzQ').textContent = q + (res && res.how === 'enter' ? ' (подсказка не появилась — нажат Enter)' : '');
+  if (!res || res.ok) $('rOzQ').textContent = res && res.how === 'enter' ? q + ' (подсказка не появилась — нажат Enter)' : '';
   else { $('rOzQ').textContent = 'Не удалось ввести адрес (' + (res.why || 'ошибка') + ') — он скопирован, вставьте в поиск Ctrl+V'; navigator.clipboard && navigator.clipboard.writeText(q).catch(() => {}); }
 }
 const showOnOzon = x => showOnMap(x);
@@ -658,7 +668,7 @@ function syncRects() {
   for (const k of GEN_EXT) pvz.extRect(k, s.gen === k ? vis('rGenHost', k) : null);
   pvz.extRect('listing', R.showLst && has ? fit('rLstHost') : null);
 }
-['rOzHost', 'rGenHost', 'rLstHost', 'rMapArea'].forEach(id => new ResizeObserver(syncRects).observe($(id)));
+['rOzHost', 'rGenHost', 'rLstHost', 'rMapArea', 'rDetail'].forEach(id => new ResizeObserver(syncRects).observe($(id)));
 window.addEventListener('resize', syncRects);
 new MutationObserver(() => setTimeout(() => { syncRects(); if (document.body.dataset.mode === 'results' && R.sel == null && R.map) showIdleMaps(); }, 50)).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
 new MutationObserver(syncRects).observe($('modal'), { attributes: true, attributeFilter: ['class'] });
@@ -741,8 +751,9 @@ function markAllSeen() {
   pvz.setCfg({ resSeen: R.seen }); renderDays(); renderResults(false);
 }
 function selectRow(id, fly) {
-  R.sel = id; { const x = R.rows[id]; if (x && x.lat != null && (x.flats === undefined || (x.flats && x.flats.err))) pvz.flats(x.lat, x.lon, ozQuery(x)).then(f => { x.flats = f || { n: null }; paintFlats(x); }).catch(() => {}); }
+  R.sel = id; { const x = R.rows[id]; if (x && x.lat != null && (x.flats === undefined || (x.flats && (x.flats.err || (!x.flats.exact && !x.flats.mk))))) pvz.flats(x.lat, x.lon, ozQuery(x)).then(f => { x.flats = f || { n: null }; paintFlats(x); }).catch(() => {}); }
   if (R.rows[id]) markSeen(R.rows[id], document.querySelector(`#rRows tr[data-id="${id}"]`));
+  renderDetail();
   showOnMap(R.rows[id]);
   if (R.showLst) showListing(R.rows[id]);
   document.querySelectorAll('#rRows tr.sel').forEach(t => t.classList.remove('sel'));
@@ -763,11 +774,7 @@ $('rRows').addEventListener('click', e => {
     return;
   }
   if (e.target.closest('.star')) {
-    const k = markKey(x);
-    // удаление запоминается со временем — чтобы синхронизация не вернула объявление с другого компьютера
-    R.watchDel = R.watchDel || {};
-    if (R.watch[k]) { delete R.watch[k]; R.watchDel[k] = Date.now(); } else { const row = Object.assign({}, x); delete row.also; delete row.id; R.watch[k] = { added: Date.now(), row }; }
-    pvz.setCfg({ resWatch: R.watch, resWatchDel: R.watchDel }); renderDays(); renderResults(false); return;
+    toggleWatch(x); renderDays(); renderResults(false); return;
   }
   const cb = e.target.closest('.copy-a');
   if (cb) {
@@ -786,6 +793,66 @@ $('rJob').onchange = () => { R.jobF = $('rJob').value; R.up = 'all'; renderDays(
 ['rArea', 'rPrice', 'rSearch'].forEach(id => $(id).addEventListener('input', () => renderResults(false)));
 $('rPlat').querySelectorAll('input').forEach(i => (i.onchange = () => renderResults(true)));
 $('rReload').onclick = () => loadResults();
+// ---------- отслеживаемые: статус и заметка (общие для компьютеров при синхронизации) ----------
+const STATUSES = { call: 'Позвонил', view: 'Просмотр назначен', no: 'Отказ' };
+const saveWatch = () => pvz.setCfg({ resWatch: R.watch, resWatchDel: R.watchDel || {} });
+function toggleWatch(x) {
+  const k = markKey(x); R.watchDel = R.watchDel || {};
+  // удаление запоминается со временем — чтобы синхронизация не вернула объявление с другого компьютера
+  if (R.watch[k]) { delete R.watch[k]; R.watchDel[k] = Date.now(); } else { const row = Object.assign({}, x); delete row.also; delete row.id; delete row.flats; R.watch[k] = { added: Date.now(), row }; }
+  saveWatch();
+}
+// статус или заметка: объявление само попадает в отслеживаемые
+function watchPatch(x, patch) {
+  const k = markKey(x);
+  if (!R.watch[k]) { const row = Object.assign({}, x); delete row.also; delete row.id; delete row.flats; R.watch[k] = { added: Date.now(), row }; }
+  Object.assign(R.watch[k], patch, { upd: Date.now() });
+  saveWatch();
+}
+function watchBadges(x) {
+  const w = R.watch[markKey(x)]; if (!w) return '';
+  const pc = w.pc || {};
+  return (w.status && STATUSES[w.status] ? `<span class="st-b st-${w.status}">${STATUSES[w.status]}</span>` : '')
+    + (pc.gone ? '<span class="st-b st-no" title="Объявление снято с публикации">снято</span>' : pc.was && pc.price && pc.was !== pc.price ? `<span class="st-b ${pc.price < pc.was ? 'st-down' : 'st-up'}" title="Цена была ${fmtNum(pc.was)} ₽, стала ${fmtNum(pc.price)} ₽">${pc.price < pc.was ? '↓' : '↑'} ${fmtNum(pc.price)} ₽</span>` : '')
+    + (w.note ? `<span class="nt-b" title="${esc(w.note)}">✎</span>` : '');
+}
+// ---------- карточка выбранного объявления (под картой) ----------
+function renderDetail() {
+  const el = $('rDetail'), x = R.sel != null ? R.rows[R.sel] : null;
+  const was = el.classList.contains('on');
+  if (!x) { el.classList.remove('on'); el.innerHTML = ''; if (was) setTimeout(syncRects, 30); return; }
+  const k = markKey(x), w = R.watch[k] || {}, pc = w.pc || {};
+  if (R.watch[k] && pc.changedAt && !pc.seen) { R.watch[k].pc.seen = true; saveWatch(); }
+  const area = x.areaMin == null ? '—' : (x.areaMax && x.areaMax !== x.areaMin ? `${fmtNum(x.areaMin)}–${fmtNum(x.areaMax)}` : fmtNum(x.areaMin)) + ' м²';
+  const fact = (t, v, sub) => `<div><small>${t}</small><b>${v}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+  const sup = x.platform === 'Ozon' && x.supMonth != null ? fact('Поддержка Ozon', x.supMonth ? fmtNum(x.supMonth) + ' ₽/мес' : 'нет', (x.supTotal ? 'всего ' + fmtNum(x.supTotal) + ' ₽ · ' : '') + esc(x.supTier || '')) : '';
+  const price = pc.gone ? fact('Цена', x.price != null ? fmtNum(x.price) + ' ₽' : '—', '<em class="rd-gone">объявление снято</em>')
+    : pc.was && pc.price && pc.was !== pc.price ? fact('Цена', fmtNum(pc.price) + ' ₽', `<em class="${pc.price < pc.was ? 'rd-down' : 'rd-up'}">была ${fmtNum(pc.was)} ₽</em>`)
+    : fact('Цена', x.price != null ? fmtNum(x.price) + ' ₽' : '—', x.price != null ? 'в месяц' : '');
+  el.innerHTML = `<div class="rd-top"><span class="zb"><i style="background:${zoneColor(x)}"></i>${esc(x.platform)} · ${esc(x.zone)}</span><b class="rd-addr" title="${esc(x.address)}">${esc(x.address)}</b></div>
+    <div class="rd-meta">${[x.metro, x.source, x.date ? 'объявление от ' + x.date : '', (x.also || []).map(y => `${y.platform}: ${y.zone}`).join(', ')].filter(Boolean).map(esc).join(' · ')}</div>
+    <div class="rd-facts">${fact('Площадь', area)}${price}${sup}${x.money ? fact('Выплата', fmtNum(x.money) + ' ₽') : ''}${x.lat != null ? `<div><small>Квартир в доме</small><b id="rdFlats">${flatsCell(x) || '—'}</b></div>` : ''}${x.near != null ? fact('Ближайший ПВЗ Ozon', fmtNum(x.near) + ' м') : ''}
+      <span class="rd-btns"><button class="ghost sm${R.watch[k] ? ' on' : ''}" id="rdStar">${R.watch[k] ? '★ Отслеживается' : '☆ Отслеживать'}</button>${x.url ? '<button class="ghost sm" id="rdOpen">Открыть ↗</button>' : ''}</span></div>
+    ${x.noteShow || x.byCoords ? `<div class="rd-note" title="${esc(x.note || '')}">${esc([x.byCoords ? `адрес определён по координатам объявления${x.addrSrc ? ' (в объявлении: ' + x.addrSrc + ')' : ''}` : '', x.noteShow].filter(Boolean).join(' · '))}</div>` : ''}
+    <div class="rd-act"><select id="rdStatus" title="Статус — виден на всех компьютерах"><option value="">Без статуса</option>${Object.entries(STATUSES).map(([v, t]) => `<option value="${v}"${w.status === v ? ' selected' : ''}>${t}</option>`).join('')}</select>
+      <input id="rdNote" type="text" placeholder="Заметка — с кем говорили, условия…" value="${esc(w.note || '')}"></div>`;
+  el.classList.add('on');
+  const rowUpd = () => { const tr = document.querySelector(`#rRows tr[data-id="${x.id}"]`); if (tr) { tr.querySelectorAll('.st-b,.nt-b').forEach(e => e.remove()); const a = tr.querySelector('.addr-t'); if (a) { const t = document.createElement('template'); t.innerHTML = watchBadges(x); (tr.querySelector('.copy-a') || a).after(t.content); } const st = tr.querySelector('.star'); if (st) { st.classList.toggle('on', !!R.watch[k]); st.textContent = R.watch[k] ? '★' : '☆'; } } renderDays(); };
+  $('rdStatus').onchange = () => { watchPatch(x, { status: $('rdStatus').value }); rowUpd(); const b = $('rdStar'); b.classList.add('on'); b.textContent = '★ Отслеживается'; };
+  $('rdNote').onchange = () => { const v = $('rdNote').value.trim(); if (!v && !R.watch[k]) return; watchPatch(x, { note: v }); rowUpd(); const b = $('rdStar'); b.classList.add('on'); b.textContent = '★ Отслеживается'; };
+  $('rdNote').onkeydown = e => { if (e.key === 'Enter') $('rdNote').blur(); };
+  $('rdStar').onclick = () => { toggleWatch(x); rowUpd(); renderDetail(); if (R.day === 'watch') renderResults(false); };
+  if ($('rdOpen')) $('rdOpen').onclick = () => pvz.openExternal(x.url);
+  if (!was) setTimeout(syncRects, 30);
+}
+// ---------- «Фильтры»: площадки, заказ, зона, площадь, цена — под одной кнопкой ----------
+function filtCount() {
+  const n = ($('rPlat').querySelectorAll('input:not(:checked)').length ? 1 : 0) + (R.jobF ? 1 : 0) + ($('rZone').value ? 1 : 0) + (numOf($('rArea')) !== '' ? 1 : 0) + (numOf($('rPrice')) !== '' ? 1 : 0);
+  $('rFiltN').textContent = n || ''; $('rFiltBtn').classList.toggle('active', n > 0);
+}
+$('rFiltBtn').onclick = () => { const on = $('rFilters').classList.toggle('on'); $('rFiltBtn').classList.toggle('open', on); pvz.setCfg({ resFiltOpen: on }); setTimeout(() => { fixMap(); syncRects(); }, 60); };
+$('rFiltReset').onclick = () => { $('rPlat').querySelectorAll('input').forEach(i => (i.checked = true)); R.jobF = ''; $('rJob').value = ''; $('rZone').value = ''; $('rArea').value = ''; $('rPrice').value = ''; R.up = 'all'; renderDays(); renderResults(true); };
+pvz.getCfg().then(c => { if (c.resFiltOpen) { $('rFilters').classList.add('on'); $('rFiltBtn').classList.add('open'); } });
 // зона или (тестовая функция) поддержка Ozon под площадь объявления
 function zoneCell(x) {
   if (R.testSup && x.platform === 'Ozon' && x.supMonth != null) {
@@ -798,8 +865,8 @@ function zoneCell(x) {
 function flatsCell(x) {
   const f = x.flats; if (x.lat == null) return '';
   if (f === undefined) return '<span class="muted">…</span>';
-  if (!f || f.n == null) return '<span class="muted" title="Нет данных в OpenStreetMap">—</span>';
-  return f.exact ? `<span title="Источник: ${esc(f.src || 'OpenStreetMap')}">${fmtNum(f.n)}</span>` : `<span title="Оценка: ${f.levels} эт. × ${f.entrances || 1} подъезд(а) × 4">≈${fmtNum(f.n)}</span>`;
+  if (!f || f.n == null) return `<span class="muted" title="${f && f.err ? esc(f.err) : f && f.why ? esc(f.why) : 'Нет данных о доме в OpenStreetMap и МинЖКХ'}">—</span>`;
+  return f.exact ? `<span title="Источник: ${esc(f.src || 'OpenStreetMap')}">${fmtNum(f.n)}</span>` : `<span title="Оценка по OpenStreetMap: ${esc(f.how || `${f.levels} эт. × ${f.entrances || 1} подъезд(а) × 4`)}. Выберите объявление — уточню по МинЖКХ">≈${fmtNum(f.n)}</span>`;
 }
 let flatsBusy = false;
 async function loadFlats() {
@@ -810,15 +877,20 @@ async function loadFlats() {
   paintFlats();
   if (flatsBusy) return; flatsBusy = true;
   try {
-    for (const x of R.list.slice(0, 60)) {
-      if (document.body.dataset.mode !== 'results') break;
+    // фоном — только OpenStreetMap (быстро); точное число из МинЖКХ запрашивается при выборе объявления
+    let fails = 0;
+    for (const x of R.list.slice(0, 200)) {
+      if (document.body.dataset.mode !== 'results' || fails >= 4) break;
       if (x.lat == null || x.flats !== undefined) continue;
-      x.flats = await pvz.flats(x.lat, x.lon, ozQuery(x)).catch(() => null) || { n: null }; paintFlats(x);
+      const f = await pvz.flats(x.lat, x.lon, null).catch(() => null);
+      if (!f || f.err) { fails++; continue; }   // OpenStreetMap не отвечает — не ждём по каждой строке
+      fails = 0; x.flats = f; paintFlats(x);
     }
   } finally { flatsBusy = false; }
 }
 function paintFlats(only) {
   for (const x of only ? [only] : R.list.slice(0, 1000)) { const td = document.querySelector(`td[data-flats="${x.id}"]`); if (td) td.innerHTML = flatsCell(x); }
+  const e = $('rdFlats'); if (e && R.sel != null && R.rows[R.sel] && (!only || only === R.rows[R.sel])) e.innerHTML = flatsCell(R.rows[R.sel]) || '—';
 }
 // просмотренные: объявление считается просмотренным, когда вы его выбрали или открыли
 let seenT = null;
@@ -888,7 +960,7 @@ const S = { list: [], presets: {}, orders: [], jobs: [] };
 const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 async function loadSchedule() {
   const c = await pvz.getCfg();
-  S.list = c.schedules || [];
+  S.list = c.schedules || []; S.pc = c.pcId; S.sync = !!c.syncDir;
   S.presets = c.presets && Object.keys(c.presets).length ? c.presets : DEFAULT_PRESETS;
   S.orders = await pvz.bwOrders();
   S.jobs = (await pvz.jobs()).filter(j => !j.archived || S.list.some(s => s.kind === 'job' && s.job === j.id));
@@ -909,7 +981,7 @@ function renderSchedule() {
       <input type="time" class="tm" value="${s.time}">
       <select class="what">${whatOptions(s)}</select>
       <div class="s-days">${DAYS.map((d, k) => `<button class="${(s.days || []).includes(k + 1) ? 'on' : ''}" data-d="${k + 1}">${d}</button>`).join('')}</div>
-      <label class="chk"><input type="checkbox" class="ck"${s.check ? ' checked' : ''}>проверить зоны</label>
+      <span class="s-end"><label class="chk"><input type="checkbox" class="ck"${s.check ? ' checked' : ''}>проверить зоны</label>${S.sync && s.kind === 'job' && s.pc ? `<span class="s-pc${s.pc !== S.pc ? ' other' : ''}" title="Какой компьютер выполняет задание (меняется в карточке заказа)">💻 ${s.pc === S.pc ? 'этот компьютер' : esc(s.pcName || 'другой компьютер')}</span>` : ''}</span>
       <button class="del" title="Удалить">✕</button></div>`).join('')
     : '<div class="s-empty">Заданий нет. Нажмите «+ Добавить задание».</div>';
 }
@@ -1035,6 +1107,20 @@ document.addEventListener('keydown', e => {
 $('rCount').title = 'Клавиши: ↑/↓ — соседнее объявление, Пробел — просмотрено / не просмотрено, S — отслеживать';
 
 // ---------- сводка за сегодня на главном экране: выгружено · подходящих (зелёных) · не просмотрено ----------
+const plural = (n, one, few, many) => { const a = n % 100, b = n % 10; return a > 10 && a < 20 ? many : b === 1 ? one : b >= 2 && b <= 4 ? few : many; };
+// ближайшее задание расписания этого компьютера: «сегодня в 13:30» / «завтра в 09:00» / «Пн в 13:30»
+function nextRun(c) {
+  const list = (c.schedules || []).filter(s => s.enabled && (s.days || []).length && /^\d\d:\d\d$/.test(s.time || '') && !(s.kind === 'job' && s.pc && s.pc !== c.pcId));
+  if (!list.length) return 'нет заданий';
+  const now = new Date(); let best = null;
+  for (const s of list) for (let d = 0; d < 8; d++) {
+    const t = new Date(now); t.setDate(t.getDate() + d); t.setHours(+s.time.slice(0, 2), +s.time.slice(3), 0, 0);
+    if (t > now && s.days.includes(t.getDay() || 7)) { if (!best || t < best) best = t; break; }
+  }
+  if (!best) return 'нет заданий';
+  const dd = Math.round((new Date(best).setHours(0, 0, 0, 0) - new Date(now).setHours(0, 0, 0, 0)) / 864e5), hm = best.toTimeString().slice(0, 5);
+  return (dd === 0 ? 'сегодня' : dd === 1 ? 'завтра' : ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'][best.getDay()]) + ' в ' + hm;
+}
 async function homeSummary() {
   try {
     const today = dayKey(Date.now());
@@ -1043,6 +1129,15 @@ async function homeSummary() {
     const seen = c.resSeen || {}, rows = new Map();
     for (const x of r.rows) if (dayKey(x.exported || x.checked) === today) rows.set(markKey(x), x);
     const list = [...rows.values()], green = list.filter(x => x.platform === 'Ozon' && x.zone === 'зелёный').length, unseen = list.filter(x => !seen[markKey(x)]).length;
+    // плитки: новых в результатах, отслеживаемых (и изменений цены), ближайший запуск по расписанию
+    const all = new Map(); for (const x of r.rows) all.set(markKey(x), x);
+    const news = [...all.keys()].filter(k => !seen[k]).length, w = Object.values(c.resWatch || {});
+    const chg = w.filter(x => x.pc && !x.pc.seen && (x.pc.gone || (x.pc.was && x.pc.price && x.pc.was !== x.pc.price))).length;
+    $('htRes').textContent = news ? `${fmtNum(news)} ${plural(news, 'новое', 'новых', 'новых')}` : all.size ? 'всё просмотрено' : 'пока пусто';
+    $('htRes').classList.toggle('hot', news > 0);
+    $('htWatch').textContent = w.length ? fmtNum(w.length) + (chg ? ` · ${fmtNum(chg)} ${plural(chg, 'изменение', 'изменения', 'изменений')}` : '') : 'нет';
+    $('htWatch').classList.toggle('hot', chg > 0);
+    $('htSched').textContent = nextRun(c);
     const el = $('homeSum');
     if (!exported && !list.length) { el.style.display = 'none'; return; }
     el.innerHTML = `Сегодня: выгружено <b>${fmtNum(exported)}</b> · подходящих <b>${fmtNum(list.length)}</b>` + (green ? `, из них <b class="g">${fmtNum(green)} зелёных</b>` : '') + (unseen ? ` · не просмотрено <b class="u">${fmtNum(unseen)}</b>` : list.length ? ' · всё просмотрено ✓' : '');

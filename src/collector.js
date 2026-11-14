@@ -38,6 +38,42 @@ async function collector(C) {
     return map;
   }
 
+  // Адрес в карточке Авито: блок item-address — строка адреса (улица и дом, часто ссылками <a>) и строка метро
+  // (цветные значки линий, станция, «6–10 мин.»). Раньше адресом считался первый «листовой» элемент — когда улица и дом
+  // стали ссылками, им оказывалось название станции («Баррикадная») и терялся номер дома.
+  function addrParts(ad) {
+    if (!ad) return { address: '', metro: '', fromSt: '' };
+    const norm = t => String(t || '').replace(/\s+/g, ' ').replace(/\s+([,.])/g, '$1').replace(/^[,\s]+|[,\s]+$/g, '').trim();
+    const TIME = /\d\s*мин|до \d|от \d+ ?мин|пешком|транспортом/i;
+    const STREET = /(^|[\s,.])(ул|улица|пр-т|просп|проспект|пер|переулок|ш|шоссе|наб|набережная|б-р|бул|бульвар|пл|площадь|проезд|пр-д|туп|тупик|аллея|мкр|микрорайон|кв-л|квартал|линия|вал|д|дом|стр|к|корп)\.?([\s,]|$)/i;
+    // строки блока: абзацы; если абзацев нет — самые мелкие блоки
+    let lines = [...ad.querySelectorAll('p')].filter(p => !p.querySelector('p'));
+    if (!lines.length) lines = [...ad.querySelectorAll('div, span')].filter(x => !x.querySelector('div, span, p') && norm(x.textContent));
+    if (!lines.length) lines = [ad];
+    const isMetro = el => { const t = norm(el.textContent); return TIME.test(t) || !!el.querySelector('i, svg, [class*="icon" i], [class*="metro" i], [data-marker*="metro" i]') || /metro|subway/i.test(el.className || ''); };
+    let address = '', metro = '', fromSt = '', station = '';
+    for (const el of lines) {
+      const t = norm(el.textContent); if (!t) continue;
+      if (isMetro(el)) {
+        if (metro) continue;
+        // станция и время: по мелким элементам строки, иначе по запятой
+        let parts = [...el.querySelectorAll('span, a, div')].filter(x => !x.children.length).map(x => norm(x.textContent)).filter(x => x && !/^[,.·•]+$/.test(x));
+        if (parts.length < 2) parts = t.split(',').map(norm).filter(Boolean);
+        metro = parts.find(x => !TIME.test(x)) || '';
+        fromSt = parts.filter(x => TIME.test(x)).join(', ');
+      } else if (!address) address = t;
+      else if (!station) station = t;   // строка после адреса без времени — станция (разметка без абзацев)
+    }
+    if (!metro && station && !/\d/.test(station)) metro = station;
+    // явные ссылки «улица» и «дом», если разметка их помечает
+    const st = ad.querySelector('[data-marker*="street" i]'), hs = ad.querySelector('[data-marker*="house" i]');
+    if (st && hs && norm(st.textContent) && norm(hs.textContent)) address = norm(st.textContent) + ', ' + norm(hs.textContent);
+    // одна строка без цифр и без «ул./пр./…» при пустом метро — это станция, а не адрес
+    if (address && !metro && !/\d/.test(address) && !STREET.test(address)) { metro = address; address = ''; }
+    // адреса в карточке нет вовсе — помечаем станцию «м. …» (проверка зон идёт по координатам объявления)
+    if (!address) address = metro ? 'м. ' + metro : norm(ad.textContent);
+    return { address, metro, fromSt };
+  }
   function parsePage(html) {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const cm = coordsMap(html);
@@ -48,12 +84,7 @@ async function collector(C) {
       const a = q('a[data-marker="item-title"]');
       const href = a ? new URL(a.getAttribute('href'), location.origin).href.split('?')[0] : '';
       const priceTxt = (q('[data-marker="item-price"]')?.textContent || '').replace(/\s+/g, ' ').trim();
-      const ad = q('[data-marker="item-address"]');
-      const leaves = ad ? [...ad.querySelectorAll('p, span, div')].filter(x => !x.children.length).map(x => x.textContent.trim()).filter(Boolean) : [];
-      const uniq = [...new Set(leaves)];
-      let address = uniq[0] || (ad ? ad.textContent.trim() : ''), metro = '', fromSt = '';
-      const metroLine = uniq.slice(1).join(', ');
-      if (metroLine) { const p = metroLine.split(','); metro = p[0].trim(); fromSt = p.slice(1).join(',').trim(); }
+      const { address, metro, fromSt } = addrParts(q('[data-marker="item-address"]'));
       const dateTxt = q('[data-marker="item-date"]')?.textContent.trim() || '';
       const area = num((title.match(/([\d\s.,]+)\s*м²/) || [])[1]);
       let price = num(priceTxt); const low = priceTxt.toLowerCase();

@@ -177,7 +177,8 @@ function checkNote(addr, rec) {
 function addrNote(addr, rec) {
   const r = rec && rec.final, geo = r && r.geocode;
   if (!r || rec.found_by === "адрес" || addrMatch(addr, geo)) return "";
-  if (!splitAddr(addr)[1]) return "проверить вручную: в таблице нет номера дома" + (geo && geo.isHouse && geo.fullText ? ` (Ozon: ${geo.fullText})` : "");
+  // в объявлении нет номера дома (или вместо адреса — метро): дом определён по координатам объявления — это не ошибка
+  if (!splitAddr(addr)[1]) return geo && geo.isHouse && geo.fullText ? `адрес по координатам объявления (Ozon: ${geo.fullText})` : "проверить вручную: в объявлении нет номера дома, Ozon не нашёл дом по координатам";
   if (!geo || !geo.isHouse) return "проверить вручную: Ozon не нашёл дом ни по координатам, ни по адресу";
   return "проверить вручную: " + (geo.fullText || "");
 }
@@ -213,6 +214,31 @@ async function findByAddress(addr, lat, lon) {
 const slim = r => r && ({allowed: r.allowed, problem: r.problem, tariffs: r.tariffs, zhk: zhkFlag(r), geocode: r.geocode && {
   isHouse: r.geocode.isHouse, street: r.geocode.street, house: r.geocode.house, fullText: r.geocode.fullText, point: r.geocode.point}});
 
+
+// ближайший работающий ПВЗ Ozon: запрос идёт с withNearestPoints=true — в ответе ищем списки «nearest…» с координатами
+// (названия полей Ozon может менять, поэтому поиск общий); → {dist (м), name} или null
+function nearestPvz(r, lat, lon) {
+  let best = null;
+  const num = v => (typeof v === "number" || (typeof v === "string" && v.trim() !== "")) && isFinite(+v) ? +v : null;
+  const take = it => {
+    if (!it || typeof it !== "object") return;
+    for (const p of [it.location, it.point, it.coordinates, it.geo, it.position, it]) {
+      if (!p || typeof p !== "object") continue;
+      const la = num(p.lat ?? p.latitude), lo = num(p.lon ?? p.lng ?? p.longitude);
+      if (la === null || lo === null) continue;
+      const d = Math.round(distM(lat, lon, la, lo));
+      if (d < 50000 && (!best || d < best.dist)) best = {dist: d, name: String(it.address || it.name || it.title || "").slice(0, 120)};
+      return;
+    }
+  };
+  const visit = (o, key, depth) => {
+    if (!o || depth > 6) return;
+    if (Array.isArray(o)) { if (/nearest/i.test(key)) o.forEach(take); o.forEach(x => visit(x, key, depth + 1)); return; }
+    if (typeof o === "object") for (const [k, v] of Object.entries(o)) if (k !== "tariffs" && k !== "geocode") visit(v, /nearest/i.test(key) ? key : k, depth + 1);
+  };
+  try { visit(r, "", 0); } catch (e) {}
+  return best;
+}
 
 // ---------- регион для поиска по адресу (Suggest) ----------
 // Адреса Подмосковья: есть «гор. округ», «пгт», «обл.» или «<город> г.,» — кроме Зеленограда, Троицка, Щербинки, Московского.
@@ -251,7 +277,7 @@ async function one(addr, c) {
   if (!final) return null;
   const green = await greenInfo(final, lat, lon);
   const rec = {final: slim(final), found_by: foundBy, green};
-  return [classify(rec.final, green), checkNote(addr, rec), tiersOf(final)];
+  return [classify(rec.final, green), checkNote(addr, rec), tiersOf(final), nearestPvz(final, lat, lon)];
 }
 let STOP = false;
 async function worker() {
@@ -290,11 +316,20 @@ window.__reset = () => { for (const k of Object.keys(OUT)) delete OUT[k]; Q.leng
 window.__pad = (s) => s + "\n" + "#".repeat(Math.max(0, 105000 - s.length));
 // для отладки
 // «Поиск по адресу»: варианты адреса (геокодер карты Ozon) и проверка одной точки
+// → список вариантов или null, если геокодер не ответил; варианты из Москвы и области — первыми
 async function suggest(q) {
-  const pre = /москв|област|обл\.|(^|[\s,])г\.\s|город/i.test(q) ? "" : regionPrefix(q);
-  const body = await get(SUGGEST + "&query=" + encodeURIComponent(pre + String(q).replace(/\(.*?\)/g, "")));
-  return ((body && body.suggestions) || []).map(s => { const a = s.address || {}, c = a.components || {}, pt = (a.geometry || {}).point;
-    return pt ? {text: a.formattedFullText || a.fullText || "", lat: pt.lat, lon: pt.lon, house: (c.house || {}).number || ""} : null; }).filter(Boolean);
+  const ask = async text => {
+    const body = await get(SUGGEST + "&query=" + encodeURIComponent(String(text).replace(/\(.*?\)/g, "")));
+    if (!body) return null;
+    return (body.suggestions || []).map(s => { const a = s.address || {}, c = a.components || {}, pt = (a.geometry || {}).point;
+      return pt ? {text: a.formattedFullText || a.fullText || "", lat: pt.lat, lon: pt.lon, house: (c.house || {}).number || ""} : null; }).filter(Boolean);
+  };
+  const local = x => /Москва|Московская/i.test(x.text);
+  let list = await ask(q);
+  if (list === null) return null;
+  // в запросе нет города, и геокодер ушёл в другие регионы — уточняем «Москва, …»
+  if (!list.some(local) && !/москв|област|обл\./i.test(q)) { const l2 = await ask("Москва, " + q); if (l2 && l2.some(local)) list = l2.concat(list); }
+  return list.filter(local).concat(list.filter(x => !local(x)));
 }
 window.__ozon = {query, classify, addrMatch, greenAt, regionPrefix, suggest, one};
 console.log("ozon_runner загружен; сохранено результатов:", Object.keys(OUT).length);

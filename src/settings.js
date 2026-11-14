@@ -38,6 +38,9 @@ async function loadSettings() {
   $('setExpert').checked = !!c.showExpert;
   $('setTestSup').checked = c.testSupport !== false;
   mapChecks(c);
+  $('setPriceWatch').checked = c.priceWatch !== false;
+  { const w = Object.values(c.resWatch || {}), n = w.filter(x => x.row && x.row.url).length, last = Math.max(0, ...w.map(x => (x.pc && x.pc.at) || 0));
+    $('setPriceInfo').textContent = n ? `Объявлений со ссылкой: ${fmtNum(n)}` + (last ? ` · последняя проверка ${new Date(last).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : '') : 'Отслеживаемых объявлений пока нет'; }
   syncInfo();
   $('sTray').checked = c.tray !== false; $('sAuto').checked = !!c.autostart;
   const mode = window.getThemeMode ? getThemeMode() : 'auto';
@@ -95,6 +98,14 @@ $('syncHow').onclick = async () => {
   const v = await showModal({ kind: 'info', title: 'Как подключить другие компьютеры', html: true, text: `<pre class="how">${esc(SYNC_HOW(st))}</pre>`, buttons: [{ label: 'Скопировать, чтобы отправить коллеге', value: 'copy' }, { label: 'Понятно', cls: 'primary', value: true }] });
   if (v === 'copy') { navigator.clipboard.writeText(SYNC_HOW(st)).then(() => toast('Инструкция скопирована')).catch(() => toast('Не удалось скопировать')); }
 };
+$('setPriceWatch').onchange = () => pvz.setCfg({ priceWatch: $('setPriceWatch').checked });
+$('setPriceNow').onclick = async () => {
+  $('setPriceNow').disabled = true; $('setPriceNow').textContent = 'Проверяю…'; toast('Проверяю отслеживаемые — это занимает около полминуты на объявление');
+  const r = await pvz.priceCheck().catch(() => null);
+  $('setPriceNow').disabled = false; $('setPriceNow').textContent = 'Проверить сейчас';
+  showModal({ kind: 'info', title: 'Отслеживаемые', text: !r ? 'Не удалось проверить.' : r.skipped ? 'Сейчас идёт выгрузка или проверка — попробуйте позже.' : `Проверено объявлений: ${r.checked || 0}.\nПодешевело: ${r.down || 0}, подорожало: ${r.up || 0}, снято: ${r.gone || 0}.` + (r.blocked && r.blocked.length ? `\n\nСайт показал проверку на робота: ${r.blocked.join(', ')} — попробую в следующий раз.` : '') });
+  loadSettings();
+};
 $('syncPick').onclick = async () => { const r = await pvz.syncPick(); if (r) { syncInfo(); toast('Синхронизация включена'); } };
 $('syncOpen').onclick = async () => { const st = await pvz.syncState(); if (st.dir) pvz.openFolder(st.dir); };
 $('syncNowB').onclick = async () => { await pvz.syncNow(); syncInfo(); toast('Синхронизировано'); };
@@ -121,6 +132,15 @@ $('sTray').onchange = () => pvz.setCfg({ tray: $('sTray').checked });
 $('sAuto').onchange = () => pvz.setAutostart($('sAuto').checked);
 $('setLogs').onclick = () => pvz.openLogs();
 $('setZip').onclick = () => pvz.makeReport();
+// разделы настроек (меню слева)
+function setTab(t) {
+  $('setNav').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  document.querySelectorAll('#settings .set-wrap .box').forEach(b => (b.style.display = b.dataset.tab === t ? '' : 'none'));
+  try { localStorage.setItem('pvzSetTab', t); } catch {}
+}
+$('setNav').querySelectorAll('button').forEach(b => (b.onclick = () => setTab(b.dataset.tab)));
+setTab((() => { try { return localStorage.getItem('pvzSetTab'); } catch { return null; } })() || 'folders');
+window.setTab = setTab;
 window.loadSettings = loadSettings;
 pvz.getCfg().then(c => { if (c.showExpert) $('expertBtn').style.display = ''; });
 })();
