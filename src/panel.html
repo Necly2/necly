@@ -101,6 +101,7 @@
     </div>
     <div class="r-mapcol" id="rMapCol">
       <div class="r-maptools">
+        <div class="o-seg r-view" id="rView" title="Что показывать на месте карты"><button data-v="gen">Карта</button><button data-v="agg">Ozon</button><button data-v="lst">Объявление</button></div>
         <select id="rMapSel" class="map-sel" title="Обычная карта (список — в «Настройки → Карты в «Результатах»»)"></select>
         <select id="rAggSel" class="map-sel" title="Карта площадки (список — в «Настройки → Карты в «Результатах»»)"></select>
         <button class="ghost sm icon-sq" id="rSplit" title="Разделить: сверху карта площадки, снизу обычная карта"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 12h18"/></svg></button>
@@ -109,7 +110,7 @@
         <div class="zoom" data-zoom="map" id="rMapZoom" style="display:none" title="Масштаб верхней карты"><button class="ghost sm" data-z="-1">−</button><span class="zv">100 %</span><button class="ghost sm" data-z="1">+</button></div>
         <div class="zoom" data-zoom="map2" id="rMapZoom2" style="display:none" title="Масштаб нижней карты"><span class="zl">низ</span><button class="ghost sm" data-z="-1">−</button><span class="zv">100 %</span><button class="ghost sm" data-z="1">+</button></div>
         <button class="ghost sm" id="rOzReload" title="Перезагрузить карту" style="display:none">↻</button>
-        <label class="tgl" title="Показывать сайт объявления рядом с картой"><input type="checkbox" id="rShowLst"><span>Сайт</span></label>
+        <label class="tgl" title="Сайт объявления отдельной колонкой рядом с картой"><input type="checkbox" id="rShowLst"><span>＋ колонка</span></label>
         <button class="ghost sm fs-btn" data-fs="rMapCol" title="Во весь экран">⤢</button>
       </div>
       <div class="hint r-ozq" id="rOzQ"></div>
@@ -118,6 +119,7 @@
         <div class="r-map" id="rYmMap" style="display:none"></div>
         <div class="r-map" id="rMap"></div>
         <div class="r-map oz-host" id="rGenHost"><div class="oz-wait">Загружаю карту…</div></div>
+        <div class="r-map oz-host" id="rLstIn" style="display:none"><div class="oz-wait">Выберите объявление в таблице</div></div>
       </div>
       <div class="r-detail" id="rDetail"></div>
     </div>

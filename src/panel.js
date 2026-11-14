@@ -541,8 +541,35 @@ function setMapLists(gen, agg) {
 window.setMapLists = setMapLists;
 setMapLists();
 const extPoint = x => x && x.lat != null ? { lat: x.lat, lon: x.lon } : null;
-const shown = () => R.split ? { agg: R.agg, gen: R.gen } : AGG.includes(R.mapMode) ? { agg: R.mapMode, gen: null } : { agg: null, gen: R.mapMode };
+const shown = () => R.mapMode === 'lst' ? { agg: null, gen: null, lst: true } : R.split ? { agg: R.agg, gen: R.gen } : AGG.includes(R.mapMode) ? { agg: R.mapMode, gen: null } : { agg: null, gen: R.mapMode };
+// «Карта | Ozon | Объявление» — одно место, одно нажатие: обычная карта, карта площадки или сайт объявления
+const AGG_SHORT = { ozon: 'Ozon', wb: 'WB', ym: 'Маркет' };
+function paintView() {
+  const s = shown(), v = s.lst ? 'lst' : R.split ? '' : s.agg ? 'agg' : 'gen';
+  $('rView').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  $('rView').querySelector('[data-v=agg]').textContent = AGG_SHORT[R.agg] || 'Ozon';
+  // списки карт нужны, только когда в настройках включено больше одной
+  $('rMapSel').style.display = R.mapsGen.length > 1 ? '' : 'none'; $('rAggSel').style.display = R.mapsAgg.length > 1 ? '' : 'none';
+}
+function setView(v) {
+  if (R.split) { R.split = false; pvz.setCfg({ resSplit: false }); }
+  if (v !== 'lst') { setMapMode(v === 'agg' ? R.agg : R.gen); return; }
+  // сайт объявления на месте карты (отдельная колонка при этом не нужна)
+  if (R.showLst) { R.showLst = false; pvz.setCfg({ resShowLst: false }); applyLst(); }
+  R.mapMode = 'lst'; R.ozon = false; pvz.setCfg({ resMap: 'lst' });
+  layoutMaps(); showLstIn(R.sel != null ? R.rows[R.sel] : null);
+}
+async function showLstIn(x) {
+  const w = $('rLstIn').querySelector('.oz-wait');
+  if (!x || !x.url) { pvz.extRect('listing', null); w.textContent = x ? 'У объявления нет ссылки' : 'Выберите объявление в таблице'; return; }
+  w.textContent = 'Загружаю объявление…';
+  await new Promise(r => requestAnimationFrame(r));
+  await pvz.extShow('listing', rectOf('rLstIn'), x.url);
+  zoomShow('listing'); syncRects();
+}
+$('rView').querySelectorAll('button').forEach(b => (b.onclick = () => setView(b.dataset.v)));
 function setMapMode(m) {
+  if (m === 'lst') return setView('lst');
   // карта, убранная в настройках, — заменяется первой из включённых того же вида
   if (AGG.includes(m) ? !R.mapsAgg.includes(m) : !R.mapsGen.includes(m)) m = AGG.includes(m) ? R.mapsAgg[0] : R.mapsGen[0];
   if (AGG.includes(m)) R.agg = m; else R.gen = m;
@@ -566,7 +593,7 @@ async function showIdleMaps() {
 R.fail = {};
 const hostOf = k => (k === 'ozon' || AGG.includes(k)) ? 'rOzHost' : GEN_EXT.includes(k) ? 'rGenHost' : k === 'listing' ? 'rLstHost' : null;
 pvz.onMapFail(d => {
-  R.fail[d.key] = d.why; const h = hostOf(d.key); if (!h) return;
+  R.fail[d.key] = d.why; const h = d.key === 'listing' && R.mapMode === 'lst' ? 'rLstIn' : hostOf(d.key); if (!h) return;
   const w = $(h).querySelector('.oz-wait');
   if (w) w.textContent = d.why ? `Карта не загрузилась: ${d.why}. Проверьте интернет и VPN, затем нажмите ↻ над картой.` : (h === 'rLstHost' ? 'Выберите объявление в таблице' : 'Загружаю карту…');
   syncRects();
@@ -598,6 +625,7 @@ function layoutMaps() {
   $('rYmMap').style.display = s.agg === 'ym' ? '' : 'none'; if (s.agg === 'ym') { ymInit(); setTimeout(() => ymMap.invalidateSize(), 50); }
   $('rMap').style.display = s.gen === 'res' ? '' : 'none';
   $('rGenHost').style.display = GEN_EXT.includes(s.gen) ? 'block' : 'none';
+  $('rLstIn').style.display = s.lst ? 'block' : 'none'; paintView();
   $('rAggSel').classList.toggle('active', !!s.agg); $('rMapSel').classList.toggle('active', !!s.gen);
   $('rSplit').classList.toggle('on', R.split); if (!R.split) { $('rOzHost').style.flex = ''; $('rMap').style.flex = ''; $('rGenHost').style.flex = ''; } setTimeout(restoreSizes, 0);
   $('rOzReload').style.display = live ? '' : 'none'; $('rBase').style.display = s.gen === 'res' ? '' : 'none'; $('rMapZoom').style.display = live ? '' : 'none';
@@ -609,11 +637,13 @@ function layoutMaps() {
   if (both) { $('rMapZoom').dataset.zoom = s.agg === 'ozon' ? 'ozonmap' : s.agg; $('rMapZoom').title = 'Масштаб верхней карты'; }
   else if (R.split && s.agg === 'ym' && GEN_EXT.includes(s.gen)) { $('rMapZoom').style.display = ''; $('rMapZoom').dataset.zoom = s.gen; }
   if (!live) $('rOzQ').textContent = '';
+  if (s.lst) { $('rMapZoom').style.display = ''; $('rMapZoom').dataset.zoom = 'listing'; $('rOzReload').style.display = ''; $('rMapZoom2').style.display = 'none'; }
   if (live && R.sel == null) showIdleMaps();
   setTimeout(() => { fixMap(); syncRects(); }, 40);
 }
 async function showOnMap(x) {
   const s = shown(), q = ozQuery(x);
+  if (s.lst) return showLstIn(x);
   if (s.agg === 'ym') ymShow(x);
   if (!(s.agg && s.agg !== 'ym') && !GEN_EXT.includes(s.gen)) return;
   $('rOzQ').textContent = '';   // строка над картой — только для ошибок (иначе карта «прыгает»)
@@ -633,8 +663,8 @@ $('rMapSel').onchange = () => setMapMode($('rMapSel').value);
 $('rAggSel').onchange = () => setMapMode($('rAggSel').value);
 $('rMapSel').addEventListener('mousedown', () => { if (!$('rMapSel').classList.contains('active')) setMapMode($('rMapSel').value); });
 $('rAggSel').addEventListener('mousedown', () => { if (!$('rAggSel').classList.contains('active')) setMapMode($('rAggSel').value); });
-$('rSplit').onclick = () => { R.split = !R.split; pvz.setCfg({ resSplit: R.split }); layoutMaps(); const x = R.rows[R.sel]; if (x) showOnMap(x); };
-$('rOzReload').onclick = async () => { const s = shown(); R.fail = {}; document.querySelectorAll('#rOzHost .oz-wait, #rGenHost .oz-wait').forEach(w => (w.textContent = 'Загружаю карту…')); if (s.agg === 'ozon') await pvz.ozonMapReload(); else if (s.agg) await pvz.extReload(s.agg); if (GEN_EXT.includes(s.gen)) await pvz.extReload(s.gen); const x = R.rows[R.sel]; if (x) setTimeout(() => showOnMap(x), 1800); };
+$('rSplit').onclick = () => { if (R.mapMode === 'lst') { R.mapMode = R.gen; } R.split = !R.split; pvz.setCfg({ resSplit: R.split }); layoutMaps(); const x = R.rows[R.sel]; if (x) showOnMap(x); };
+$('rOzReload').onclick = async () => { const s = shown(); R.fail = {}; if (s.lst) { await pvz.extReload('listing'); syncRects(); return; } document.querySelectorAll('#rOzHost .oz-wait, #rGenHost .oz-wait').forEach(w => (w.textContent = 'Загружаю карту…')); if (s.agg === 'ozon') await pvz.ozonMapReload(); else if (s.agg) await pvz.extReload(s.agg); if (GEN_EXT.includes(s.gen)) await pvz.extReload(s.gen); const x = R.rows[R.sel]; if (x) setTimeout(() => showOnMap(x), 1800); };
 // сайт объявления — средняя колонка
 function lstAuto() { return window.innerWidth >= 1700; }
 function applyLst() {
@@ -651,7 +681,7 @@ async function showListing(x) {
   await pvz.extShow('listing', rectOf('rLstHost'), x.url);
   zoomShow('listing'); syncRects();
 }
-$('rShowLst').onchange = () => { R.showLst = $('rShowLst').checked; pvz.setCfg({ resShowLst: R.showLst }); applyLst(); };
+$('rShowLst').onchange = () => { if ($('rShowLst').checked && R.mapMode === 'lst') setMapMode(R.gen); R.showLst = $('rShowLst').checked; pvz.setCfg({ resShowLst: R.showLst }); applyLst(); };
 $('rLstExt').onclick = () => { const x = R.rows[R.sel]; if (x && x.url) pvz.openExternal(x.url); };
 // встроенные сайты — точно на свои места (или спрятать)
 const modalIsOpen = () => $('modal').classList.contains('on');
@@ -666,9 +696,9 @@ function syncRects() {
   pvz.ozonMapRect(s.agg === 'ozon' ? vis('rOzHost', 'ozon') : null);
   pvz.extRect('wb', s.agg === 'wb' ? vis('rOzHost', 'wb') : null); pvz.extRect('ym', null);
   for (const k of GEN_EXT) pvz.extRect(k, s.gen === k ? vis('rGenHost', k) : null);
-  pvz.extRect('listing', R.showLst && has ? fit('rLstHost') : null);
+  pvz.extRect('listing', s.lst ? (has && R.rows[R.sel] && R.rows[R.sel].url && !R.fail.listing ? fit('rLstIn') : null) : R.showLst && has ? fit('rLstHost') : null);
 }
-['rOzHost', 'rGenHost', 'rLstHost', 'rMapArea', 'rDetail'].forEach(id => new ResizeObserver(syncRects).observe($(id)));
+['rOzHost', 'rGenHost', 'rLstHost', 'rLstIn', 'rMapArea', 'rDetail'].forEach(id => new ResizeObserver(syncRects).observe($(id)));
 window.addEventListener('resize', syncRects);
 new MutationObserver(() => setTimeout(() => { syncRects(); if (document.body.dataset.mode === 'results' && R.sel == null && R.map) showIdleMaps(); }, 50)).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
 new MutationObserver(syncRects).observe($('modal'), { attributes: true, attributeFilter: ['class'] });

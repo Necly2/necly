@@ -1106,6 +1106,9 @@ async function selfTest(dir) {
       await J(`$('rdStatus').value = 'call'; $('rdStatus').onchange(); $('rdNote').value = 'Тест: перезвонить в 15:00'; $('rdNote').onchange(); $('rFiltBtn').click(); 1`); await W8(900); await shot('31-results-detail');
       console.log('DETAIL', await J(`JSON.stringify({ on: $('rDetail').classList.contains('on'), w: (w => ({ st: w.status, note: w.note }))(R.watch[markKey(R.rows[R.sel])] || {}), badge: !!document.querySelector('#rRows .st-b'), filt: $('rFilters').classList.contains('on'), tools: Math.round($('rMapCol').querySelector('.r-maptools').getBoundingClientRect().height) })`));
       await J(`$('rFiltBtn').click(); 1`); await W8(300);
+      // «Карта | Ozon | Объявление» — на одном месте
+      const vw = async v => { await J(`document.querySelector('#rView [data-v=${v}]').click(); 1`); await W8(1500); return J(`JSON.stringify({ mode: R.mapMode, on: (document.querySelector('#rView .on') || {}).textContent, lstIn: $('rLstIn').style.display, oz: $('rOzHost').style.display, gen: $('rGenHost').style.display, col: R.showLst })`); };
+      console.log('VIEW3', await vw('lst'), await vw('agg'), await vw('gen')); await shot('32-view-switch');
       await J(`document.body.dataset.mode='welcome'; 1`); await W8(1500); await shot('15-home-sum');
       console.log('HOMESUM', await J(`$('homeSum').style.display + '|' + $('homeSum').textContent`));
       await J(`$('jokeBest') && $('jokeBest').click(); 1`); await W8(3000); console.log('JOKE', await J(`$('jokeBest').checked + '|' + $('jokeWrap').style.display + '|' + $('jokeT').textContent.slice(0, 60)`));

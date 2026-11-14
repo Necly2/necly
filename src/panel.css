@@ -1050,3 +1050,5 @@ body[data-mode="addr"] #addr{display:flex}
   .hero{gap:10px}
   .hero h1{font-size:36px}
 }
+.r-view{flex:none}
+.r-view button{padding:6px 12px;font-size:12.5px;white-space:nowrap}
