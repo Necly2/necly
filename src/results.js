@@ -40,32 +40,38 @@ function readFile(file, spec, mtime, exported) {
   return out;
 }
 
-function collect(outDir) {
+// dirs: папка результатов (строка) или список [{dir, job}] — общая папка и папки заказов
+function collect(dirs) {
+  if (!Array.isArray(dirs)) dirs = [{ dir: dirs, job: '' }];
   const files = [];
-  const walk = (d, depth) => {
+  const walk = (d, depth, job) => {
     let list = []; try { list = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
     for (const e of list) {
       const p = path.join(d, e.name);
-      if (e.isDirectory()) { if (depth < 3) walk(p, depth + 1); continue; }
+      if (e.isDirectory()) { if (depth < 3) walk(p, depth + 1, job); continue; }
       if (!/\.xlsx$/i.test(e.name) || e.name.startsWith('~$')) continue;
-      const spec = PLAT.find(x => x.re.test(e.name)); if (spec) files.push([p, spec]);
+      const spec = PLAT.find(x => x.re.test(e.name)); if (spec) files.push([p, spec, job]);
     }
   };
-  if (outDir && fs.existsSync(outDir)) walk(outDir, 0);
-  const rows = [], errors = [];
-  const seen = new Set();
   // когда была выгрузка (по журналам проверок: файл результата → исходная выгрузка) — по ней строятся «дни» и «выгрузки»
   const srcOf = {};
-  for (const jn of ['ozon_checked.json', 'yandex_checked.json', 'wb_checked.json']) {
-    try { const j = JSON.parse(fs.readFileSync(path.join(outDir, jn), 'utf8')); for (const [src, v] of Object.entries(j.files || {})) if (v && v.result) srcOf[v.result] = src; } catch {}
+  for (const { dir, job } of dirs) {
+    if (!dir || !fs.existsSync(dir)) continue;
+    walk(dir, 0, job || '');
+    for (const jn of ['ozon_checked.json', 'yandex_checked.json', 'wb_checked.json']) {
+      try { const j = JSON.parse(fs.readFileSync(path.join(dir, jn), 'utf8')); for (const [src, v] of Object.entries(j.files || {})) if (v && v.result) srcOf[v.result] = src; } catch {}
+    }
   }
+  const rows = [], errors = [];
+  const seen = new Set();
   const exportedAt = p => { const s = srcOf[p]; if (!s) return null; try { return fs.statSync(s).mtimeMs; } catch { return null; } };
-  for (const [p, spec] of files) {
+  for (const [p, spec, job] of files) {
+    if (seen.has(p)) continue;
     seen.add(p);
     let st; try { st = fs.statSync(p); } catch { continue; }
     const c = cache.get(p), ex = exportedAt(p);
-    if (c && c.mtime === st.mtimeMs && c.ex === ex) { rows.push(...c.rows); continue; }
-    try { const r = readFile(p, spec, st.mtimeMs, ex); cache.set(p, { mtime: st.mtimeMs, ex, rows: r }); rows.push(...r); }
+    if (c && c.mtime === st.mtimeMs && c.ex === ex) { rows.push(...c.rows.map(r => Object.assign({}, r, { job }))); continue; }
+    try { const r = readFile(p, spec, st.mtimeMs, ex); cache.set(p, { mtime: st.mtimeMs, ex, rows: r }); rows.push(...r.map(x => Object.assign({}, x, { job }))); }
     catch (e) { errors.push(`${path.basename(p)}: ${e.message}`); }
   }
   for (const k of [...cache.keys()]) if (!seen.has(k)) cache.delete(k);

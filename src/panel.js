@@ -279,7 +279,7 @@ function waitManual(lines, hint) {
 }
 
 async function runOrder(p, presetName, opt = {}) {
-  const extra = { days: p.days === '' ? 0 : p.days, forceCheck: !!opt.forceCheck, noNewMoscow: p.region === 'msk_nonew' };
+  const extra = Object.assign({ days: p.days === '' ? 0 : p.days, forceCheck: !!opt.forceCheck, noNewMoscow: p.region === 'msk_nonew' }, opt.job ? { job: opt.job } : {});
   const report = [];
   document.body.dataset.mode = 'work';
   if (p.cian) {
@@ -303,7 +303,7 @@ async function runOrder(p, presetName, opt = {}) {
       go = await waitManual(m, presetName ? `Фильтры запомнятся в пресете «${presetName}» — в следующий раз вводить не придётся.` : 'Сохраните пресет в форме, чтобы в следующий раз не вводить это заново.');
       if (go && presetName) {
         const u = await pvz.currentUrl();
-        if (/avito\.ru/.test(u)) { presets[presetName] = Object.assign({}, presets[presetName] || p, { avitoUrl: u }); pvz.setCfg({ presets }); }
+        if (/avito\.ru/.test(u)) { if (opt.job) pvz.jobSave({ id: opt.job, avitoUrl: u }); else { presets[presetName] = Object.assign({}, presets[presetName] || p, { avitoUrl: u }); pvz.setCfg({ presets }); } }
       }
     }
     if (go) {
@@ -319,7 +319,7 @@ async function runOrder(p, presetName, opt = {}) {
       setSite('winner'); setStatus(`Winner: ${o.name || 'заказ'}…`);
       await pvz.navUrl('winner', `https://w7.baza-winner.ru/search/${guid}/params`);
       await wait(6000); bwGuid = null; await refreshBw();
-      const { r, text } = await runExport({ title: o.name, forceCheck: !!opt.forceCheck, bw: { tag: o.tag || '', hide: o.hide !== false, name: o.name || '' } });
+      const { r, text } = await runExport(Object.assign({ title: o.name, forceCheck: !!opt.forceCheck, bw: { tag: o.tag || '', hide: o.hide !== false, name: o.name || '' } }, opt.job ? { job: opt.job } : {}));
       report.push(`Winner «${o.name || guid.slice(0, 8)}»: ` + (r.ok ? `${r.total} объявл., файлов ${r.saved.length}` : 'ошибка — ' + r.error));
       setStatus(text, r.ok ? 'done' : 'err');
     }
@@ -340,7 +340,7 @@ function openPage(page) {
   if (page === 'schedule') loadSchedule();
   if (page === 'settings') window.loadSettings && loadSettings();
 }
-document.querySelectorAll('[data-page]').forEach(el => (el.onclick = e => { e.preventDefault(); if (el.dataset.page === 'watch') { window.openWatch && openWatch(); return; } openPage(el.dataset.page); }));
+document.querySelectorAll('[data-page]').forEach(el => (el.onclick = e => { e.preventDefault(); if (el.dataset.page === 'watch') { window.openWatch && openWatch(); return; } if (el.dataset.page === 'results') R.jobF = ''; openPage(el.dataset.page); }));
 // при возврате на главный экран центр всегда видим (раньше оставался класс анимации ухода — кнопки пропадали)
 new MutationObserver(() => { if (document.body.dataset.mode === 'welcome') $('welcome').classList.remove('leave'); }).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
 let backTo = 'welcome';
@@ -355,7 +355,7 @@ window.addEventListener('unhandledrejection', e => pvz.logError('интерфе�
 const fmtTime = t => { const d = new Date(t); return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) + ' ' + d.toTimeString().slice(0, 5); };
 
 // ---------- Результаты ----------
-const R = { rows: [], sort: { k: 'checked', dir: -1 }, map: null, layer: null, markers: new Map(), sel: null, list: [], day: 'all', up: 'all', marks: {}, seen: {}, watch: {}, dedup: true, onlyNew: false, onlyMatch: false };
+const R = { jobF: '', jobs: [], rows: [], sort: { k: 'checked', dir: -1 }, map: null, layer: null, markers: new Map(), sel: null, list: [], day: 'all', up: 'all', marks: {}, seen: {}, watch: {}, dedup: true, onlyNew: false, onlyMatch: false };
 const dayKey = t => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const markKey = x => x.url || (x.platform + '|' + x.address);
 // одинаковые помещения: тот же адрес и та же площадь в один день (в рамках выгрузки и между выгрузками)
@@ -365,14 +365,16 @@ const upDay = x => dayKey(x.exported || x.checked);
 const dupKey = x => x.platform + '|' + upDay(x) + '|' + normAddr(x.address) + '|' + (x.areaMin ?? '');
 const matchKey = x => normAddr(x.address) + '|' + (x.areaMin ?? '');
 const upKey = x => x.file.replace(/^(OZON|ЯНДЕКС|WB) /i, '');
+// фильтр «Заказ»: '' — все, '-' — общие папки, иначе id заказа
+const inJob = x => !R.jobF || (R.jobF === '-' ? !x.job : x.job === R.jobF);
 function renderDays() {
   const cnt = {}; let marked = 0, watched = 0, unseen = 0, matched = 0;
-  for (const x of R.rows) { if ((x.dupHidden && R.dedup) || x.archived) continue; const k = upDay(x); cnt[k] = (cnt[k] || 0) + 1; if (x.mark) marked++; if (!R.seen[markKey(x)]) unseen++; if (x.also && x.also.length) matched++; }
+  for (const x of R.rows) { if ((x.dupHidden && R.dedup) || x.archived || !inJob(x)) continue; const k = upDay(x); cnt[k] = (cnt[k] || 0) + 1; if (x.mark) marked++; if (!R.seen[markKey(x)]) unseen++; if (x.also && x.also.length) matched++; }
   watched = Object.keys(R.watch).length;
   const days = [];
   for (let i = 0; i < 5; i++) { const d = new Date(); d.setDate(d.getDate() - i); days.push([dayKey(d), i === 0 ? 'Сегодня' : i === 1 ? 'Вчера' : d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) + ', ' + d.toLocaleDateString('ru-RU', { weekday: 'short' })]); }
   const b = (k, label, n) => `<button data-day="${k}" class="${R.day === k ? 'on' : ''}${n ? '' : ' empty'}">${label}<span>${fmtNum(n)}</span></button>`;
-  const total = R.rows.filter(x => !(x.dupHidden && R.dedup) && !x.archived).length;
+  const total = R.rows.filter(x => !(x.dupHidden && R.dedup) && !x.archived && inJob(x)).length;
   $('rDays').innerHTML = b('all', 'Все', total) + days.map(([k, l]) => b(k, l, cnt[k] || 0)).join('') + '<i></i>' + b('marked', '✓ Отмеченные', marked) + b('watch', '★ Отслеживаемые', watched)
     + `<span class="grow"></span><label class="tgl"><input type="checkbox" id="rNew"${R.onlyNew ? ' checked' : ''}><span>● Непросмотренные ${fmtNum(unseen)}</span></label>`
     + `<label class="tgl"><input type="checkbox" id="rMatch"${R.onlyMatch ? ' checked' : ''}><span>⇄ Есть в нескольких проверках ${fmtNum(matched)}</span></label>`;
@@ -385,7 +387,7 @@ function renderDays() {
   let ups = [];
   if (isDay) {
     const m = new Map();
-    for (const x of R.rows) { if (upDay(x) !== R.day || (x.dupHidden && R.dedup) || x.archived) continue; const k = upKey(x); const t = x.exported || x.checked, u = m.get(k) || { k, t, n: 0 }; u.n++; u.t = Math.min(u.t, t); m.set(k, u); }
+    for (const x of R.rows) { if (upDay(x) !== R.day || (x.dupHidden && R.dedup) || x.archived || !inJob(x)) continue; const k = upKey(x); const t = x.exported || x.checked, u = m.get(k) || { k, t, n: 0 }; u.n++; u.t = Math.min(u.t, t); m.set(k, u); }
     ups = [...m.values()].sort((a, b) => a.t - b.t);
   }
   $('rUps').classList.toggle('on', isDay && ups.length > 0);
@@ -423,6 +425,13 @@ async function loadResults() {
   R.testSup = cfg.testSupport !== false;
   R.marks = cfg.resMarks || {}; R.seen = cfg.resSeen || {}; R.watch = cfg.resWatch || {}; if (cfg.resDedup === false) R.dedup = false;
   prepRows(r.rows);
+  // заказы со своими папками — фильтр «Заказ»
+  R.jobs = (await pvz.jobs().catch(() => [])).filter(j => !j.shared);
+  const hasGen = R.rows.some(x => !x.job && !x.archived);
+  if (R.jobF && R.jobF !== '-' && !R.jobs.some(j => j.id === R.jobF)) R.jobF = '';
+  $('rJobF').style.display = R.jobs.length ? '' : 'none';
+  $('rJob').innerHTML = '<option value="">все</option>' + (hasGen ? '<option value="-">общие папки</option>' : '') + R.jobs.map(j => `<option value="${esc(j.id)}">${esc(j.name)}${j.archived ? ' (архив)' : ''}</option>`).join('');
+  $('rJob').value = R.jobF;
   renderDays();
   const zones = [...new Set(R.rows.map(x => x.platform + ' · ' + x.zone))].sort();
   const cur = $('rZone').value;
@@ -441,7 +450,7 @@ function filteredResults() {
   const plats = [...$('rPlat').querySelectorAll('input:checked')].map(i => i.value);
   const zone = $('rZone').value, area = numOf($('rArea')), price = numOf($('rPrice')), day = R.day;
   const q = $('rSearch').value.trim().toLowerCase();
-  return R.rows.filter(x => plats.includes(x.platform) && (!zone || zone === x.platform + ' · ' + x.zone)
+  return R.rows.filter(x => plats.includes(x.platform) && inJob(x) && (!zone || zone === x.platform + ' · ' + x.zone)
     && !(R.dedup && x.dupHidden) && (!R.onlyNew || !R.seen[markKey(x)]) && (!R.onlyMatch || (x.also && x.also.length))
     && (R.up === 'all' || !/^\d{4}-/.test(day) || upKey(x) === R.up)
     && (day !== 'watch' || R.watch[markKey(x)]) && (day === 'watch' || !x.archived)
@@ -741,6 +750,7 @@ $('rRows').addEventListener('click', e => {
 $('rMap').addEventListener('click', e => { const a = e.target.closest('a[data-url]'); if (a) { e.preventDefault(); pvz.openExternal(a.dataset.url); } });
 document.querySelectorAll('.r-table th[data-k]').forEach(th => (th.onclick = () => { R.sort = { k: th.dataset.k, dir: R.sort.k === th.dataset.k ? -R.sort.dir : (['price', 'areaMin', 'zone', 'address', 'platform'].includes(th.dataset.k) ? 1 : -1) }; renderResults(false); }));
 ['rZone'].forEach(id => ($(id).onchange = () => renderResults(true)));
+$('rJob').onchange = () => { R.jobF = $('rJob').value; R.up = 'all'; renderDays(); renderResults(true); };
 ['rArea', 'rPrice', 'rSearch'].forEach(id => $(id).addEventListener('input', () => renderResults(false)));
 $('rPlat').querySelectorAll('input').forEach(i => (i.onchange = () => renderResults(true)));
 $('rReload').onclick = () => loadResults();
@@ -785,7 +795,7 @@ function markSeen(x, tr) {
   R.seen[k] = Date.now(); if (tr) { tr.classList.remove('unseen'); const d = tr.querySelector('.new-dot'); if (d) d.remove(); }
   clearTimeout(seenT); seenT = setTimeout(() => { pvz.setCfg({ resSeen: R.seen }); renderDays(); }, 800);
 }
-window.openWatch = () => { R.day = 'watch'; openPage('results'); };
+window.openWatch = () => { R.day = 'watch'; R.jobF = ''; openPage('results'); };
 // перепроверка зон: заново (без памяти результатов) для выгрузок, строки которых сейчас в списке
 $('rRecheck').onclick = async () => {
   closeMore();
@@ -842,20 +852,24 @@ $('eLogs').onclick = () => pvz.openLogs();
 $('eClear').onclick = async () => { await pvz.clearErrors(); loadHistory(); };
 
 // ---------- Расписание ----------
-const S = { list: [], presets: {}, orders: [] };
+const S = { list: [], presets: {}, orders: [], jobs: [] };
 const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 async function loadSchedule() {
   const c = await pvz.getCfg();
   S.list = c.schedules || [];
   S.presets = c.presets && Object.keys(c.presets).length ? c.presets : DEFAULT_PRESETS;
   S.orders = await pvz.bwOrders();
-    renderSchedule();
+  S.jobs = (await pvz.jobs()).filter(j => !j.archived || S.list.some(s => s.kind === 'job' && s.job === j.id));
+  renderSchedule();
 }
 const saveSchedule = () => pvz.setCfg({ schedules: S.list });
 function whatOptions(s) {
-  const cur = s.kind === 'winner' ? 'winner:' + s.guid : 'preset:' + s.preset;
-  return `<optgroup label="Baza Winner — заказ">${S.orders.map(o => `<option value="winner:${o.guid}"${cur === 'winner:' + o.guid ? ' selected' : ''}>${esc(o.name)}</option>`).join('')}</optgroup>` +
-    `<optgroup label="Циан и Авито — пресет">${Object.keys(S.presets).map(n => `<option value="preset:${esc(n)}"${cur === 'preset:' + n ? ' selected' : ''}>${esc(n)}</option>`).join('')}</optgroup>`;
+  const cur = s.kind === 'winner' ? 'winner:' + s.guid : s.kind === 'job' ? 'job:' + s.job : 'preset:' + s.preset;
+  const lost = s.kind === 'job' && !S.jobs.some(j => j.id === s.job);
+  return (lost ? `<option value="" selected>Заказ удалён — выберите другой</option>` : '') +
+    (S.jobs.length ? `<optgroup label="Заказы">${S.jobs.map(j => `<option value="job:${esc(j.id)}"${cur === 'job:' + j.id ? ' selected' : ''}>${esc(j.name)}</option>`).join('')}</optgroup>` : '') +
+    `<optgroup label="Baza Winner — заказ">${S.orders.map(o => `<option value="winner:${o.guid}"${cur === 'winner:' + o.guid ? ' selected' : ''}>${esc(o.name)}</option>`).join('')}</optgroup>` +
+    (s.kind === 'preset' ? `<optgroup label="Старый сценарий"><option value="preset:${esc(s.preset)}" selected>${esc(s.preset)}</option></optgroup>` : '');
 }
 function renderSchedule() {
   $('sList').innerHTML = S.list.length ? S.list.map((s, i) => `<div class="s-item${s.enabled ? '' : ' off'}" data-i="${i}">
@@ -874,7 +888,11 @@ $('sList').addEventListener('change', e => {
   if (e.target.classList.contains('ck')) s.check = e.target.checked;
   if (e.target.classList.contains('what')) {
     const [kind, ...rest] = e.target.value.split(':'); const v = rest.join(':');
-    s.kind = kind; if (kind === 'winner') { s.guid = v; s.name = (S.orders.find(o => o.guid === v) || {}).name; delete s.preset; } else { s.preset = v; s.name = v; delete s.guid; }
+    if (!kind) return;
+    s.kind = kind; delete s.preset; delete s.guid; delete s.job;
+    if (kind === 'winner') { s.guid = v; s.name = (S.orders.find(o => o.guid === v) || {}).name; }
+    else if (kind === 'job') { s.job = v; s.name = (S.jobs.find(j => j.id === v) || {}).name; }
+    else { s.preset = v; s.name = v; }
   }
   saveSchedule(); renderSchedule();
 });
@@ -885,9 +903,10 @@ $('sList').addEventListener('click', e => {
   if (d) { const n = +d.dataset.d; s.days = (s.days || []).includes(n) ? s.days.filter(x => x !== n) : [...(s.days || []), n].sort(); saveSchedule(); renderSchedule(); }
 });
 $('sAdd').onclick = () => {
-  const o = S.orders[0];
+  const o = S.orders[0], j = S.jobs.find(x => !x.archived);
+  if (!j && !o) { showModal({ kind: 'info', title: 'Нет заказов', text: 'Сначала создайте заказ («Заказы» на главном экране) — по расписанию выгружается заказ.' }); return; }
   S.list.push(Object.assign({ id: Date.now().toString(36), enabled: true, time: '13:30', days: [1, 2, 3, 4, 5], check: true },
-    o ? { kind: 'winner', guid: o.guid, name: o.name } : { kind: 'preset', preset: Object.keys(S.presets)[0], name: Object.keys(S.presets)[0] }));
+    j ? { kind: 'job', job: j.id, name: j.name } : { kind: 'winner', guid: o.guid, name: o.name }));
   saveSchedule(); renderSchedule();
 };
 
@@ -905,6 +924,15 @@ pvz.onRunSchedule(async s => {
       const { r, text } = await runExport({ title: s.name, forceCheck: !!s.check });
       setStatus(text, r.ok ? 'done' : 'err');
       report.push(r.ok ? `выгружено ${fmtNum(r.total)}, файлов ${r.saved.length}` : 'ошибка: ' + r.error);
+    } else if (s.kind === 'job') {
+      const j = (await pvz.jobs()).find(x => x.id === s.job);
+      if (!j) report.push('заказ не найден (удалён)');
+      else {
+        // проверка по расписанию — на площадках, выбранных в заказе
+        if (s.check && j.checks) await pvz.setCfg({ chkOzon: !!j.checks.ozon, chkYandex: !!j.checks.yandex, chkWb: !!j.checks.wb });
+        const p = Object.assign({}, j.params, { cian: !!(j.sources && j.sources.cian), avito: !!(j.sources && j.sources.avito), winner: !!(j.sources && j.sources.winner), avitoUrl: j.avitoUrl, orders: j.orders });
+        report = await runOrder(p, j.name, { unattended: true, forceCheck: !!s.check, job: j.id });
+      }
     } else {
       const c = await pvz.getCfg();
       const all = c.presets && Object.keys(c.presets).length ? c.presets : DEFAULT_PRESETS;
@@ -988,7 +1016,7 @@ async function homeSummary() {
     el.style.display = '';
   } catch (e) { pvz.logError('сводка дня', String(e && e.message || e)); }
 }
-$('homeSum').onclick = () => { R.day = dayKey(Date.now()); R.up = 'all'; openPage('results'); };
+$('homeSum').onclick = () => { R.day = dayKey(Date.now()); R.up = 'all'; R.jobF = ''; openPage('results'); };
 new MutationObserver(() => { if (document.body.dataset.mode === 'welcome') homeSummary(); }).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
 pvz.onOzonDone(() => { if (document.body.dataset.mode === 'welcome') setTimeout(homeSummary, 500); });
 homeSummary();

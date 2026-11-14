@@ -16,14 +16,24 @@ const STEP_INFO = { select: ['Выбор', '#8B5CF6'], cian: ['Циан', '#0468
 const ICON_OK = '<svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>';
 const DEF_PARAMS = { region: 'msk', types: ['shop', 'psn', 'food', 'serv'], areaFrom: 24, areaTo: 130, priceFrom: '', priceTo: '', floor1: true, floorsFrom: 3, days: 7 };
 const W = { sources: { cian: true, avito: true, winner: true }, checks: { ozon: true, yandex: false, wb: false }, params: Object.assign({}, DEF_PARAMS),
-  avitoUrl: null, orders: {}, scenario: '', step: 0, steps: [], siteOpen: false, siteKind: null, run: null, ordersList: [] };
+  avitoUrl: null, orders: {}, scenario: '', step: 0, steps: [], siteOpen: false, siteKind: null, run: null, ordersList: [], job: null, dirty: false };
+const DEF_SOURCES = { cian: true, avito: true, winner: true }, DEF_CHECKS = { ozon: true, yandex: false, wb: false };
+const jobName = () => (W.job ? W.job.name : '');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const tick = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
 // ---------------- сохранение состояния ----------------
 let saveT = null;
-const snapshot = () => ({ sources: W.sources, checks: W.checks, params: W.params, avitoUrl: W.avitoUrl, orders: W.orders, scenario: W.scenario });
-const persist = () => { clearTimeout(saveT); saveT = setTimeout(() => pvz.setCfg({ wizard: snapshot() }), 300); };
+// мастер заказа: изменения помечаются и сохраняются в заказ кнопкой «Сохранить в заказ» (или при выходе — по вопросу)
+const persist = () => { if (W.job) { W.dirty = true; const b = $('ccSave'); if (b) b.classList.add('dirty'); } };
+const jobData = () => ({ sources: Object.assign({}, W.sources), checks: Object.assign({}, W.checks), params: Object.assign({}, W.params), avitoUrl: W.avitoUrl, orders: JSON.parse(JSON.stringify(W.orders || {})) });
+// папки, куда пойдут файлы: у заказа со своими папками — его, иначе общие
+const dirsCfg = c => (W.job && W.job.exp ? Object.assign({}, c, { root: W.job.exp, cianRoot: W.job.exp, ozonOut: W.job.res || c.ozonOut }) : c);
+function renderJobTag() {
+  const e = $('wzJob'); if (!e) return;
+  e.style.display = W.job ? '' : 'none';
+  if (W.job) e.innerHTML = `<i style="background:${esc(W.job.color || '#2F7BFF')}"></i>Заказ: <b>${esc(W.job.name)}</b>`;
+}
 
 // ---------------- окно по центру ----------------
 let modalOpen = false;
@@ -150,6 +160,7 @@ function bindNav(onNext) {
 // ---------------- куда сохраняются файлы ----------------
 const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 function saveRows(c) {
+  c = dirsCfg(c);
   const d = new Date(), dd = String(d.getDate()).padStart(2, '0'), mon = MONTHS_RU[d.getMonth()];
   const sep = /\\/.test(c.root || '') ? '\\' : '/';
   const j = (...a) => a.join(sep);
@@ -177,7 +188,11 @@ function saveBlock(c, compact) {
     </div>`).join('')}</div>`;
 }
 function bindSaveBlock(root) {
-  root.querySelectorAll('[data-pick]').forEach(b => (b.onclick = async () => { await pvz.pickFolder(b.dataset.pick); render(); }));
+  root.querySelectorAll('[data-pick]').forEach(b => (b.onclick = async () => {
+    if (W.job && W.job.exp) { const j = await pvz.jobPickFolder(W.job.id, b.dataset.pick === 'ozon' ? 'res' : 'exp'); if (j) W.job = j; }
+    else await pvz.pickFolder(b.dataset.pick);
+    render();
+  }));
   root.querySelectorAll('[data-open]').forEach(b => (b.onclick = () => b.dataset.open && pvz.openFolder(b.dataset.open)));
 }
 
@@ -187,9 +202,8 @@ function card(key, info, on) {
 }
 async function renderSelect() {
   const c = await pvz.getCfg();
-  presets = c.presets && Object.keys(c.presets).length ? c.presets : JSON.parse(JSON.stringify(DEFAULT_PRESETS));
-  $('wzStep').innerHTML = `<h2>Где работаем?</h2>
-    <div class="scen-inline">${tip('Сценарий', 'Сохранённый набор: источники, проверки, параметры поиска, фильтры Авито и заказы Winner. Сохраняется кнопкой «Сохранить сценарий» на последнем шаге.')}<select id="wzScen"><option value="">— текущие настройки —</option>${Object.keys(presets).map(n => `<option${n === W.scenario ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></div>
+  $('wzStep').innerHTML = `<h2>${W.job ? 'Заказ «' + esc(W.job.name) + '»: где работаем?' : 'Где работаем?'}</h2>
+    ${W.job ? '' : '<p class="lead">Новая выгрузка с настройками по умолчанию. В конце её можно сохранить как заказ — со своими папками.</p>'}
     <h3>Источники объявлений</h3><div class="pick" id="wzSrc">${Object.entries(SRC).map(([k, v]) => card(k, v, W.sources[k])).join('')}</div>
     <h3>Проверка зон</h3><div class="pick" id="wzChk">${Object.entries(CHK).map(([k, v]) => card(k, v, W.checks[k])).join('')}</div>
     <details class="fold" id="wzSaveF"><summary>Куда сохранять<span class="sum" id="wzSaveSum">${esc(saveSum(c))}</span></summary><div id="wzSave">${saveBlock(c, false)}</div></details>
@@ -198,20 +212,8 @@ async function renderSelect() {
   $('wzSrc').querySelectorAll('.pc-card').forEach(b => (b.onclick = () => { W.sources[b.dataset.k] = !W.sources[b.dataset.k]; b.classList.toggle('on'); buildSteps(); renderRibbon(); $('wzNext').disabled = !Object.values(W.sources).some(Boolean); persist(); refreshSave(); }));
   $('wzChk').querySelectorAll('.pc-card').forEach(b => (b.onclick = () => { W.checks[b.dataset.k] = !W.checks[b.dataset.k]; b.classList.toggle('on'); persist(); refreshSave(); }));
   bindSaveBlock($('wzSave'));
-  $('wzScen').onchange = () => { applyScenario($('wzScen').value); render(); };
   bindNav();
 }
-function applyScenario(name) {
-  W.scenario = name;
-  const p = presets[name]; if (!p) { persist(); return; }
-  W.params = Object.assign({}, DEF_PARAMS, ...Object.keys(DEF_PARAMS).filter(k => k in p).map(k => ({ [k]: p[k] })));
-  if ('cian' in p || 'avito' in p) W.sources = { cian: p.cian !== false, avito: p.avito !== false, winner: !!p.winner };
-  if (p.checks) W.checks = Object.assign({ ozon: false, yandex: false, wb: false }, p.checks);
-  W.avitoUrl = p.avitoUrl || null;
-  if (p.orders) W.orders = p.orders;
-  persist();
-}
-
 // ---------------- параметры поиска (общие для Циана и Авито) ----------------
 function paramsForm() {
   const p = W.params;
@@ -405,7 +407,7 @@ function renderCenter() {
       ${R.check.st === 'err' && !checking ? '<button class="ghost" id="ccContinue">▶ Продолжить проверку</button>' : ''}
       ${(R.check.st === 'ok' || R.check.st === 'err') && !checking && checks.length ? '<button class="ghost" id="ccCheckAgain">↻ Проверить снова</button>' : ''}
       ${exporting ? `<button class="ghost" id="ccLive">${W.siteOpen ? '▣ Свернуть сайт' : '👁 Показать сайт'}</button>` : ''}
-      <button class="ghost" id="ccSave">Сохранить сценарий</button>
+      <button class="ghost${W.dirty ? ' dirty' : ''}" id="ccSave" title="${W.job ? 'Сохранить источники, проверки, параметры, фильтры Авито и заказы Winner в этот заказ' : 'Сохранить эти настройки как заказ — со своими папками для выгрузок и результатов'}">${W.job ? '💾 Сохранить в заказ' : '☆ Сохранить как заказ'}</button>
       ${R.files.length ? '<button class="ghost" id="ccFolder">Открыть папку</button>' : ''}
       ${R.check.st === 'ok' || R.check.st === 'err' ? '<button class="ghost" id="ccResults">Результаты</button>' : ''}
     </div>
@@ -438,9 +440,12 @@ function renderCenter() {
   on('ccCheckAgain', () => runCheck(true));
   pvz.getCfg().then(c => {
     if (!$('ccOnlyNew')) return;
-    $('ccOnlyNew').checked = c.onlyNew !== false; $('ccSeenDays').value = String(c.seenDays || 0); $('ccSeenDays').disabled = c.onlyNew === false; $('ccAuto').checked = !!c.autoCheck;
-    $('ccOnlyNew').onchange = () => { pvz.setCfg({ onlyNew: $('ccOnlyNew').checked, cianOnlyNew: $('ccOnlyNew').checked }); $('ccSeenDays').disabled = !$('ccOnlyNew').checked; };
-    $('ccSeenDays').onchange = () => pvz.setCfg({ seenDays: +$('ccSeenDays').value });
+    // у заказа — свой журнал «уже выгруженных» и свой период
+    const src = W.job || c;
+    $('ccOnlyNew').checked = src.onlyNew !== false; $('ccSeenDays').value = String(src.seenDays || 0); $('ccSeenDays').disabled = src.onlyNew === false; $('ccAuto').checked = !!c.autoCheck;
+    const setSeen = o => { if (W.job) { Object.assign(W.job, o); pvz.jobSave(Object.assign({ id: W.job.id }, o)); } else pvz.setCfg(Object.assign(o, 'onlyNew' in o ? { cianOnlyNew: o.onlyNew } : {})); };
+    $('ccOnlyNew').onchange = () => { setSeen({ onlyNew: $('ccOnlyNew').checked }); $('ccSeenDays').disabled = !$('ccOnlyNew').checked; };
+    $('ccSeenDays').onchange = () => setSeen({ seenDays: +$('ccSeenDays').value });
     $('ccAuto').onchange = () => pvz.setCfg({ autoCheck: $('ccAuto').checked });
     if (exporting || checking) ['ccOnlyNew', 'ccSeenDays'].forEach(id => ($(id).disabled = true));
   });
@@ -456,14 +461,14 @@ function renderCenter() {
     sum();
   });
   if (!exporting && !checking) showEta();
-  on('ccSave', saveScenario);
+  on('ccSave', () => (W.job ? saveToJob(true) : saveAsJob()));
   on('ccLive', async () => {
     if (W.siteOpen) { W.liveSite = false; closeSiteView(); }
     else { W.liveSite = true; await openSiteView(W.siteKind || 'cian'); }
     rerender();
   });
   on('ccFolder', () => pvz.showFile(R.files[0]));
-  on('ccResults', () => openPage('results'));
+  on('ccResults', openRes);
   $('wzStep').querySelectorAll('a[data-file]').forEach(a => (a.onclick = () => pvz.showFile(a.dataset.file)));
   $('wzStep').querySelectorAll('[data-fix]').forEach(b => (b.onclick = () => {
     const S = Object.values(W.run.src).find(s => s.fix); if (!S) return;
@@ -472,6 +477,8 @@ function renderCenter() {
   $('wzBack').onclick = () => goTo(W.step - 1);
   on('wzNext', () => goHome());
 }
+// результаты: у заказа со своими папками — сразу с фильтром «Заказ»
+const openRes = () => { R.jobF = W.job && W.job.exp ? W.job.id : ''; R.day = 'all'; R.up = 'all'; openPage('results'); };
 const rerender = () => { if (cur() === 'center') renderCenter(); renderRibbon(); };
 
 // сколько примерно займёт: по прошлым запускам (История хранит длительность); проверка — по скорости прошлых проверок
@@ -499,7 +506,7 @@ async function showEta() {
 }
 async function baseCfg(extra) {
   const c = await pvz.getCfg();
-  return Object.assign({ pages: c.pages || 40, delay: Math.max(3, c.delay || 4), part: c.part || 300, days: W.params.days === '' ? 0 : W.params.days, noNewMoscow: W.params.region === 'msk_nonew' && !(extra && extra.bw) }, extra);
+  return Object.assign({ pages: c.pages || 40, delay: Math.max(3, c.delay || 4), part: c.part || 300, days: W.params.days === '' ? 0 : W.params.days, noNewMoscow: W.params.region === 'msk_nonew' && !(extra && extra.bw) }, W.job ? { job: W.job.id } : {}, extra);
 }
 const isBad = r => !r.ok || /ошибк|робот|войти|не удалось|не найден/i.test(r.reason || '');
 const isRobot = r => /робот|captcha|Доступ ограничен|проблема с IP|ответил 403|ответил 429/i.test((r.error || '') + ' ' + (r.reason || ''));
@@ -542,11 +549,11 @@ async function exportOne(k) {
   try {
     if (k === 'cian') {
       for (const reg of (W.params.region === 'msk_mo' ? ['1', '4593'] : ['1'])) {
-        const r = await go(cianUrl(W.params, reg), { title: (W.scenario || 'Циан') + (reg === '1' ? ' · Москва' : ' · МО') }, reg === '1' ? 'Москва' : 'МО');
+        const r = await go(cianUrl(W.params, reg), { title: (jobName() || 'Циан') + (reg === '1' ? ' · Москва' : ' · МО') }, reg === '1' ? 'Москва' : 'МО');
         if (!r) break; if (isBad(r)) { bad = r; break; }
       }
     } else if (k === 'avito') {
-      const r = await go(W.avitoUrl || avitoUrl(W.params), { title: W.scenario || 'Авито' });
+      const r = await go(W.avitoUrl || avitoUrl(W.params), { title: jobName() || 'Авито' });
       if (r && isBad(r)) bad = r;
     } else {
       for (const o of chosenOrders()) {
@@ -627,16 +634,24 @@ pvz.onOzonDone(async res => {
     if (v === 'cont') runCheck(false); else if (v === 'retry') runCheck(true);
   } else {
     const v = await showModal({ kind: 'ok', title: 'Проверка завершена', text: C.text, buttons: [{ label: 'Закрыть', value: 'close' }, { label: 'Открыть результаты', cls: 'primary', value: 'res' }] });
-    if (v === 'res') openPage('results');
+    if (v === 'res') openRes();
   }
 });
-async function saveScenario() {
-  const v = await showModal({ kind: 'info', title: 'Сохранить сценарий', text: 'Сохранятся источники, проверки, параметры, фильтры Авито и выбранные заказы Winner.', input: { value: W.scenario, placeholder: 'Название, например «Заказ #4»' },
+async function saveAsJob() {
+  const v = await showModal({ kind: 'info', title: 'Сохранить как заказ', text: 'Сохранятся источники, проверки, параметры поиска, фильтры Авито и заказы Winner. У заказа будут свои папки для выгрузок и результатов (их можно сменить в карточке заказа).', input: { value: '', placeholder: 'Название, например «Заказ #4 — Москва»' },
     buttons: [{ label: 'Отмена', value: null }, { label: 'Сохранить', cls: 'primary', value: 'save' }] });
   if (!v || !v.input) return;
-  presets[v.input] = Object.assign({}, W.params, { cian: !!W.sources.cian, avito: !!W.sources.avito, winner: !!W.sources.winner, checks: W.checks, avitoUrl: W.avitoUrl, orders: W.orders });
-  W.scenario = v.input; await pvz.setCfg({ presets, lastPreset: v.input }); persist();
-  showModal({ kind: 'ok', title: 'Сценарий сохранён', text: `«${v.input}» — выберите его на шаге «Выбор» в следующий раз.` });
+  const c = await pvz.getCfg();
+  const exported = !!(W.run && W.run.phase === 'exported');
+  W.job = await pvz.jobSave(Object.assign({ name: v.input, onlyNew: c.onlyNew !== false, seenDays: c.seenDays || 0 }, jobData()), { copySeen: exported });
+  W.dirty = false; renderJobTag(); rerender();
+  showModal({ kind: 'ok', title: 'Заказ сохранён', text: `«${W.job.name}» — на главном экране в «Заказах».\n\nВыгрузки: ${W.job.exp}\nРезультаты: ${W.job.res}` + (exported ? '\n\nУже выгруженные сейчас файлы остались в общих папках; следующие выгрузки этого заказа пойдут в его папки.' : '') });
+}
+async function saveToJob(show) {
+  if (!W.job) return;
+  W.job = await pvz.jobSave(Object.assign({ id: W.job.id }, jobData()));
+  W.dirty = false; const b = $('ccSave'); if (b) b.classList.remove('dirty');
+  if (show) toast(`Сохранено в заказ «${W.job.name}»`);
 }
 
 // ---------------- VPN ----------------
@@ -654,20 +669,41 @@ async function goHome() {
     if (!v) return;
     W.run.stop = true; pvz.stop(); pvz.ozonStop();
   }
+  if (W.job && W.dirty) {
+    const v = await showModal({ kind: 'warn', title: 'Сохранить изменения?', text: `Параметры заказа «${W.job.name}» изменены. Сохранить их в заказ?`, buttons: [{ label: 'Не сохранять', value: 'no' }, { label: 'Сохранить', cls: 'primary', value: 'yes' }] });
+    if (v === null) return;
+    if (v === 'yes') await saveToJob(false);
+    W.dirty = false;
+  }
   closeSiteView(); $('wzFoot').innerHTML = '';
+  if (W.job && window.jobsBack) { document.body.dataset.mode = 'welcome'; pvz.nav('welcome'); jobsBack(W.job.id); return; }
   document.body.dataset.mode = 'welcome'; $('welcome').classList.remove('leave');
   pvz.nav('welcome');
 }
 // идёт выгрузка в мастере — задания по расписанию не должны забирать сайт
 window.wizBusy = () => !!(W.run && W.run.phase === 'export');
 window.wizResume = () => { document.body.dataset.mode = 'wizard'; pvz.siteRect(null); setTimeout(sendRect, 60); render(); };
-window.openWizard = async function () {
-  const c = await pvz.getCfg();
-  if (c.wizard) { Object.assign(W, { sources: c.wizard.sources || W.sources, checks: c.wizard.checks || W.checks, params: Object.assign({}, DEF_PARAMS, c.wizard.params || {}), avitoUrl: c.wizard.avitoUrl || null, orders: c.wizard.orders || {}, scenario: c.wizard.scenario || '' }); }
+// opts: нет — «Новая выгрузка» (настройки по умолчанию); { job, mode: 'edit' } — изменить заказ; { job, mode: 'run' } — сразу к выгрузке
+window.openWizard = async function (opts = {}) {
+  const j = opts.job || null;
+  Object.assign(W, j ? { sources: Object.assign({}, DEF_SOURCES, j.sources), checks: Object.assign({}, DEF_CHECKS, j.checks), params: Object.assign({}, DEF_PARAMS, j.params || {}), avitoUrl: j.avitoUrl || null, orders: JSON.parse(JSON.stringify(j.orders || {})) }
+    : { sources: Object.assign({}, DEF_SOURCES), checks: Object.assign({}, DEF_CHECKS), params: Object.assign({}, DEF_PARAMS), avitoUrl: null, orders: {} });
+  W.job = j; W.dirty = false; W.scenario = j ? j.name : '';
   W.step = 0; W.run = null; closeSiteView();
+  if (j && opts.mode === 'run') {
+    // сразу к шагу «Выгрузка и проверка»: заказы Winner нужны уже здесь
+    W.ordersList = await pvz.bwOrders().catch(() => []);
+    for (const o of W.ordersList) if (W.orders[o.guid]) W.orders[o.guid].name = W.orders[o.guid].name || o.name;
+    buildSteps(); W.step = W.steps.indexOf('center');
+  }
+  renderJobTag();
   document.body.dataset.mode = 'wizard'; pvz.siteRect(null);
   render(); $('wzStep').classList.add('enter');
 };
-$('startBtn').onclick = async () => { if (window.ensureFolders && !(await ensureFolders())) return; $('welcome').classList.add('leave'); setTimeout(() => window.openWizard(), 320); };
+window.wizParamChips = p => paramChips(Object.assign({}, DEF_PARAMS, p || {}));
+window.wizDefaults = () => ({ sources: Object.assign({}, DEF_SOURCES), checks: Object.assign({}, DEF_CHECKS), params: Object.assign({}, DEF_PARAMS) });
+const goNew = async () => { if (window.ensureFolders && !(await ensureFolders())) return; $('welcome').classList.add('leave'); setTimeout(() => window.openWizard(), 320); };
+$('newBtn').onclick = goNew;
+$('jobsBtn').onclick = async () => { if (window.ensureFolders && !(await ensureFolders())) return; window.openJobs && openJobs(); };
 $('wzHome').onclick = goHome;
 })();

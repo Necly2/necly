@@ -20,7 +20,10 @@
   <div class="hero">
     <h1>PVZ Master</h1>
     <p class="muted">Поиск помещений под пункты выдачи</p>
-    <button class="start" id="startBtn">Начать работу</button>
+    <div class="start-row">
+      <button class="start" id="newBtn"><svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>Новая выгрузка</button>
+      <button class="start alt" id="jobsBtn"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/></svg>Заказы<span class="jn" id="jobsN"></span></button>
+    </div>
     <button class="home-sum" id="homeSum" style="display:none" title="Открыть результаты за сегодня"></button>
     <div class="zone-note" id="zoneNote" style="display:none"><b>Ozon обновил карту зон</b><span id="zoneNoteT"></span>
       <div class="zn-act"><button class="ghost sm" id="zoneNoteRes">Открыть результаты</button><button class="ghost sm" id="zoneNoteHide">Понятно</button></div></div>
@@ -37,6 +40,7 @@
   <header class="wz-top">
     <button class="ghost home-btn" id="wzHome" title="На главный экран"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>Главная</button>
     <ol class="steps" id="wzSteps"></ol>
+    <span class="wz-job" id="wzJob" style="display:none"></span>
     <button class="ghost home-btn gear-btn" data-settings title="Настройки"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Настройки</button>
   </header>
   <div class="wz-bar" id="wzBar"></div>
@@ -77,6 +81,7 @@
   </div>
   <div class="r-filters">
     <div class="r-chips" id="rPlat"><label><input type="checkbox" value="Ozon" checked><span>Ozon</span></label><label><input type="checkbox" value="Яндекс" checked><span>Яндекс</span></label><label><input type="checkbox" value="WB" checked><span>WB</span></label></div>
+    <label class="field" id="rJobF" style="display:none">Заказ<select id="rJob"><option value="">все</option></select></label>
     <label class="field">Зона<select id="rZone"><option value="">все зоны</option></select></label>
     <label class="field">Площадь от, м²<input id="rArea" type="text" inputmode="numeric" class="num"></label>
     <label class="field">Цена до, ₽/мес<input id="rPrice" type="text" inputmode="numeric" class="num"></label>
@@ -125,6 +130,19 @@
     </div>
     <button class="fs-exit" id="fsExit">✕ Выйти из полноэкранного режима <small>Esc</small></button>
   </div>
+</section>
+
+<!-- ================= ЗАКАЗЫ ================= -->
+<section id="jobs" class="page">
+  <div class="p-head">
+    <button class="icon-btn back-home" title="На главный экран"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <h1>Заказы</h1><span class="muted" id="jCount"></span><span class="grow"></span>
+    <label class="tgl j-arch"><input type="checkbox" id="jArch"><span>Архив <em id="jArchN"></em></span></label>
+    <button class="primary small-p" id="jNew" style="padding:10px 18px !important">+ Новый заказ</button>
+    <button class="ghost gear-btn" data-settings title="Настройки"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+  </div>
+  <div class="j-grid" id="jGrid"></div>
+  <div class="j-card" id="jCard"></div>
 </section>
 
 <!-- ================= ИСТОРИЯ ================= -->
@@ -334,4 +352,5 @@
 <script src="panel.js"></script>
 <script src="wizard.js"></script>
 <script src="settings.js"></script>
+<script src="jobs.js"></script>
 </body></html>

@@ -1,0 +1,141 @@
+// PVZ Master — «Заказы»: сохранённые параметры выгрузки, у каждого своё название, цвет и свои папки
+// для выгрузок и результатов. Плитки → карточка заказа: запустить, изменить, результаты, папки, архив.
+(() => {
+const J = { list: [], rows: [], seen: {}, open: null, arch: false };
+const COLORS = ['#2F7BFF', '#14B8A6', '#F97316', '#8B5CF6', '#EC4899', '#22C55E', '#EAB308', '#06B6D4', '#EF4444', '#64748B'];
+const SRC_N = { cian: 'Циан', avito: 'Авито', winner: 'Winner' }, CHK_N = { ozon: 'Ozon', yandex: 'Яндекс Маркет', wb: 'WB' };
+const fmtDate = t => { const d = new Date(t); return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) + ' ' + d.toTimeString().slice(0, 5); };
+const short = p => (p || '').split(/[\\/]/).filter(Boolean).slice(-3).join(' / ');
+
+async function load() {
+  const [list, r, c] = await Promise.all([pvz.jobs(), pvz.results().catch(() => ({ rows: [] })), pvz.getCfg()]);
+  J.list = list; J.rows = r.rows || []; J.seen = c.resSeen || {};
+}
+// подходящие / непросмотренные — по файлам результатов в папке заказа (у заказов с общими папками не различить)
+function stats(j) {
+  if (j.shared) return null;
+  const m = new Map(); for (const x of J.rows) if (x.job === j.id) m.set(markKey(x), x);
+  const l = [...m.values()];
+  return { n: l.length, green: l.filter(x => x.platform === 'Ozon' && x.zone === 'зелёный').length, unseen: l.filter(x => !J.seen[markKey(x)]).length };
+}
+const srcLine = j => Object.keys(SRC_N).filter(k => j.sources && j.sources[k]).map(k => SRC_N[k]).join(' · ') || 'источники не выбраны';
+const chkLine = j => Object.keys(CHK_N).filter(k => j.checks && j.checks[k]).map(k => CHK_N[k]).join(', ') || 'без проверки';
+const parLine = j => (window.wizParamChips ? wizParamChips(j.params).slice(0, 4).join(' · ') : '');
+
+function renderGrid() {
+  const act = J.list.filter(j => !j.archived), arc = J.list.filter(j => j.archived), list = J.arch ? arc : act;
+  $('jCount').textContent = J.arch ? `в архиве ${fmtNum(arc.length)}` : fmtNum(act.length) ? `${fmtNum(act.length)}` : '';
+  $('jArchN').textContent = arc.length ? fmtNum(arc.length) : '';
+  $('jArch').checked = J.arch; $('jArch').parentNode.style.display = arc.length || J.arch ? '' : 'none';
+  $('jGrid').innerHTML = list.map(j => {
+    const s = stats(j);
+    return `<button class="j-tile" data-id="${esc(j.id)}" style="--c:${esc(j.color || '#2F7BFF')}">
+      <div class="jt-h"><i></i><b>${esc(j.name)}</b></div>
+      <div class="jt-l">${esc(srcLine(j))} <span class="muted">→ ${esc(chkLine(j))}</span></div>
+      <div class="jt-l muted">${esc(parLine(j))}</div>
+      <div class="jt-st">${s ? `<span>подходящих <b>${fmtNum(s.n)}</b>${s.green ? `, <b class="g">${fmtNum(s.green)} зел.</b>` : ''}</span>${s.unseen ? `<span class="u">не просмотрено <b>${fmtNum(s.unseen)}</b></span>` : ''}` : '<span class="muted">общие папки программы</span>'}</div>
+      <div class="jt-d">${j.lastRun ? 'Последняя выгрузка: ' + fmtDate(j.lastRun) : 'Ещё не запускался'}</div></button>`;
+  }).join('') + (J.arch ? '' : `<button class="j-tile j-add" id="jAddTile"><span>+</span>Новый заказ</button>`)
+    + (J.arch && !list.length ? '<div class="s-empty">Архив пуст.</div>' : '');
+  $('jGrid').querySelectorAll('.j-tile[data-id]').forEach(b => (b.onclick = () => openCard(b.dataset.id)));
+  if ($('jAddTile')) $('jAddTile').onclick = newJob;
+}
+
+function openCard(id) {
+  const j = J.list.find(x => x.id === id); if (!j) { J.open = null; return show(); }
+  J.open = id; show();
+  const s = stats(j), w = window.wizParamChips ? wizParamChips(j.params) : [];
+  const orders = Object.values(j.orders || {}).filter(o => o && o.on);
+  const chips = [...Object.keys(SRC_N).filter(k => j.sources && j.sources[k]).map(k => SRC_N[k]), ...w];
+  if (j.sources && j.sources.avito) chips.push(j.avitoUrl ? 'фильтры Авито сохранены ✓' : 'фильтры Авито не сохранены');
+  const folder = (label, which, dir) => `<div class="jc-f"><span class="jc-fl">${label}</span><span class="jc-fp" title="${esc(dir || '')}">${esc(dir ? '…/' + short(dir) : '—')}</span>
+      <span class="jc-fb"><button class="ghost sm" data-open="${esc(dir || '')}">Открыть</button>${j.shared ? '' : `<button class="ghost sm" data-pick="${which}">Сменить…</button>`}</span></div>`;
+  $('jCard').innerHTML = `<div class="jc-top" style="--c:${esc(j.color || '#2F7BFF')}">
+      <button class="ghost" id="jcBack"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>Все заказы</button>
+      <i class="jc-dot"></i><h2>${esc(j.name)}</h2><button class="ghost sm" id="jcRename" title="Переименовать">✎</button>${j.archived ? '<span class="jc-badge">в архиве</span>' : ''}</div>
+    <div class="jc-actions">
+      <button class="primary" id="jcRun">▶ Запустить</button>
+      <button class="ghost" id="jcEdit">✎ Изменить параметры</button>
+      <button class="ghost" id="jcRes"${j.shared ? ' title="У заказа общие папки — откроются все результаты"' : ''}>Результаты заказа${s ? ` <b>${fmtNum(s.n)}</b>` : ''}</button>
+    </div>
+    <div class="jc-grid">
+      <div class="box"><div class="box-h">Параметры</div>
+        <div class="jc-chips">${chips.map(c => `<span>${esc(c)}</span>`).join('')}</div>
+        <div class="hint">Проверка зон: ${esc(chkLine(j))}${orders.length ? '<br>Заказы Winner: ' + orders.map(o => esc(o.name || '') + (o.tag ? ' · метка ' + esc(o.tag) : '')).join('; ') : ''}</div></div>
+      <div class="box"><div class="box-h">Итоги</div>
+        <div class="jc-st"><span>Последняя выгрузка</span><b>${j.lastRun ? fmtDate(j.lastRun) : '—'}</b></div>
+        ${s ? `<div class="jc-st"><span>Подходящих помещений</span><b>${fmtNum(s.n)}</b></div><div class="jc-st"><span>из них зелёных Ozon</span><b class="g">${fmtNum(s.green)}</b></div><div class="jc-st"><span>Не просмотрено</span><b class="u">${fmtNum(s.unseen)}</b></div>`
+          : '<p class="hint">У заказа общие папки программы — его результаты не отделить от остальных. Сделайте отдельные папки, чтобы видеть итоги заказа.</p>'}</div>
+      <div class="box jc-folders"><div class="box-h">Папки</div>
+        ${j.shared ? `<p class="hint">Общие папки программы (как у «Новой выгрузки»).</p>${folder('Результаты', 'res', j.resDir)}
+          <button class="ghost" id="jcOwn">Сделать отдельные папки заказа</button><p class="hint">Будут созданы: ${esc(short(j.defDirs.exp))} и ${esc(short(j.defDirs.res))}. Старые файлы останутся на месте.</p>`
+        : folder('Выгрузки', 'exp', j.expDir) + folder('Результаты', 'res', j.resDir) + '<p class="hint">Переименование заказа папки не меняет.</p>'}</div>
+      <div class="box"><div class="box-h">Не повторять уже выгруженные</div>
+        <div class="jc-row"><label class="switch"><input type="checkbox" id="jcOnlyNew"${j.onlyNew !== false ? ' checked' : ''}><span></span><span class="lbl">Только новые объявления</span></label>
+          <select id="jcSeenDays">${[[3, 'за 3 дня'], [7, 'за 7 дней'], [14, 'за 14 дней'], [30, 'за 30 дней'], [0, 'за всё время']].map(([v, t]) => `<option value="${v}"${(j.seenDays || 0) === v ? ' selected' : ''}>${t}</option>`).join('')}</select></div>
+        <div class="jc-row"><span class="hint" id="jcSeenInfo">…</span><button class="ghost sm" id="jcForget">Забыть</button></div>
+        <p class="hint">У каждого заказа свой список — объявление, выгруженное в другом заказе, здесь выгрузится.</p></div>
+      <div class="box"><div class="box-h">Цвет</div><div class="jc-colors">${COLORS.map(c => `<button data-color="${c}" style="--c:${c}" class="${c === j.color ? 'on' : ''}"></button>`).join('')}</div></div>
+    </div>
+    <div class="jc-foot"><button class="ghost" id="jcDup">⧉ Дублировать</button><button class="ghost" id="jcArch">${j.archived ? '↩ Вернуть из архива' : '🗄 В архив'}</button><span class="grow"></span><button class="ghost jc-del" id="jcDel">Удалить заказ</button></div>`;
+  const save = async o => { await pvz.jobSave(Object.assign({ id: j.id }, o)); await load(); openCard(j.id); };
+  $('jcBack').onclick = () => { J.open = null; show(); renderGrid(); };
+  $('jcRun').onclick = () => window.openWizard({ job: j, mode: 'run' });
+  $('jcEdit').onclick = () => window.openWizard({ job: j, mode: 'edit' });
+  $('jcRes').onclick = () => { R.jobF = j.shared ? '' : j.id; R.day = 'all'; R.up = 'all'; openPage('results'); };
+  $('jcRename').onclick = async () => {
+    const v = await showModal({ kind: 'info', title: 'Переименовать заказ', text: 'Папки заказа останутся прежними.', input: { value: j.name }, buttons: [{ label: 'Отмена', value: null }, { label: 'Сохранить', cls: 'primary', value: 'ok' }] });
+    if (v && v.input) save({ name: v.input });
+  };
+  $('jCard').querySelectorAll('[data-open]').forEach(b => (b.onclick = () => b.dataset.open && pvz.openFolder(b.dataset.open)));
+  $('jCard').querySelectorAll('[data-pick]').forEach(b => (b.onclick = async () => { await pvz.jobPickFolder(j.id, b.dataset.pick); await load(); openCard(j.id); }));
+  if ($('jcOwn')) $('jcOwn').onclick = async () => { await pvz.jobOwnFolders(j.id); await load(); openCard(j.id); toast('Папки заказа созданы'); };
+  $('jcOnlyNew').onchange = () => { $('jcSeenDays').disabled = !$('jcOnlyNew').checked; pvz.jobSave({ id: j.id, onlyNew: $('jcOnlyNew').checked }); j.onlyNew = $('jcOnlyNew').checked; };
+  $('jcSeenDays').disabled = j.onlyNew === false;
+  $('jcSeenDays').onchange = () => { pvz.jobSave({ id: j.id, seenDays: +$('jcSeenDays').value }); j.seenDays = +$('jcSeenDays').value; };
+  const seenInfo = async () => { const n = await pvz.jobSeen(j.id); if ($('jcSeenInfo')) $('jcSeenInfo').textContent = `Запомнено: Циан ${fmtNum(n.cian)}, Авито ${fmtNum(n.avito)}`; };
+  seenInfo();
+  $('jcForget').onclick = async () => {
+    const v = await showModal({ kind: 'warn', title: 'Забыть выгруженные?', text: `В следующий раз заказ «${j.name}» выгрузит все объявления заново.`, buttons: [{ label: 'Отмена', value: false }, { label: 'Забыть', cls: 'primary', value: true }] });
+    if (v) { await pvz.jobSeen(j.id, true); seenInfo(); }
+  };
+  $('jCard').querySelectorAll('[data-color]').forEach(b => (b.onclick = () => save({ color: b.dataset.color })));
+  $('jcDup').onclick = async () => {
+    const { id, exp, res, expDir, resDir, shared, defDirs, lastRun, created, migrated, archived, ...rest } = j;
+    const n = await pvz.jobSave(Object.assign(rest, { name: j.name + ' (копия)' }));
+    await load(); openCard(n.id); toast('Заказ скопирован');
+  };
+  $('jcArch').onclick = async () => { await save({ archived: !j.archived }); toast(j.archived ? 'Заказ возвращён' : 'Заказ в архиве'); };
+  $('jcDel').onclick = async () => {
+    const v = await showModal({ kind: 'warn', title: 'Удалить заказ?', text: `Заказ «${j.name}» будет удалён. Файлы выгрузок и результатов в папках останутся. Задания расписания этого заказа отключатся.`, buttons: [{ label: 'Отмена', value: false }, { label: 'Удалить', cls: 'primary', value: true }] });
+    if (!v) return;
+    await pvz.jobDelete(j.id); J.open = null; await load(); show(); renderGrid();
+  };
+}
+function show() { $('jobs').classList.toggle('detail', !!J.open); }
+
+async function newJob() {
+  const v = await showModal({ kind: 'info', title: 'Новый заказ', text: 'Дальше откроется мастер: выберите источники, проверки и параметры и нажмите «Сохранить в заказ». У заказа будут свои папки.', input: { value: '', placeholder: 'Название, например «Заказ #6 — Химки»' },
+    buttons: [{ label: 'Отмена', value: null }, { label: 'Создать', cls: 'primary', value: 'ok' }] });
+  if (!v || !v.input) return;
+  const j = await pvz.jobSave(Object.assign({ name: v.input }, window.wizDefaults ? wizDefaults() : {}));
+  window.openWizard({ job: j, mode: 'edit' });
+}
+
+window.openJobs = async (id) => {
+  document.body.dataset.mode = 'jobs'; pvz.nav('welcome');
+  await load();
+  J.open = id && J.list.some(x => x.id === id) ? id : null;
+  if (J.open && J.list.find(x => x.id === id).archived) J.arch = true;
+  renderGrid(); show();
+  if (J.open) openCard(J.open);
+};
+window.jobsBack = id => window.openJobs(id);
+$('jNew').onclick = newJob;
+$('jArch').onchange = () => { J.arch = $('jArch').checked; J.open = null; show(); renderGrid(); };
+
+// число заказов на кнопке главного экрана
+async function homeJobs() { try { const l = await pvz.jobs(); const n = l.filter(j => !j.archived).length; $('jobsN').textContent = n ? String(n) : ''; } catch {} }
+new MutationObserver(() => { if (document.body.dataset.mode === 'welcome') homeJobs(); }).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
+homeJobs();
+})();

@@ -1,6 +1,12 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('pvz', {
   getCfg: () => ipcRenderer.invoke('getCfg'),
+  jobs: () => ipcRenderer.invoke('jobs'),
+  jobSave: (j, o) => ipcRenderer.invoke('jobSave', j, o),
+  jobDelete: id => ipcRenderer.invoke('jobDelete', id),
+  jobPickFolder: (id, w) => ipcRenderer.invoke('jobPickFolder', id, w),
+  jobOwnFolders: id => ipcRenderer.invoke('jobOwnFolders', id),
+  jobSeen: (id, forget) => ipcRenderer.invoke('jobSeen', id, forget),
   seenInfo: () => ipcRenderer.invoke('seenInfo'),
   forgetSeen: () => ipcRenderer.invoke('forgetSeen'),
   folderState: () => ipcRenderer.invoke('folderState'),

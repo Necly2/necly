@@ -47,8 +47,92 @@ function loadCfg() {
   if (!c.ozonAutoOff) { c.ozonAuto = false; c.ozonAutoOff = 1; try { saveCfg(c); } catch {} }
   if (c.cianOnlyNew === false && !c.onlyNewMigrated) { c.onlyNew = false; }
   c.onlyNewMigrated = 1;
+  if (!c.jobsMigrated) { try { migrateJobs(c); c.jobsMigrated = 1; saveCfg(c); } catch (e) { console.error('migrateJobs', e); } }
+  if (!Array.isArray(c.jobs)) c.jobs = [];
   return c;
 }
+// ---------- заказы: сохранённые параметры выгрузки со своими папками (cfg.jobs) ----------
+const DEF_PARAMS = { region: 'msk', types: ['shop', 'psn', 'food', 'serv'], areaFrom: 24, areaTo: 130, priceFrom: '', priceTo: '', floor1: true, floorsFrom: 3, days: 7 };
+const DEF_PRESETS = {
+  'Заказ #4 (Москва)': { cian: true, avito: true, region: 'msk' },
+  'Заказ #5 (Москва и МО, до 120 тыс.)': { cian: true, avito: true, region: 'msk_mo', priceTo: 120000 }
+};
+const JOB_COLORS = ['#2F7BFF', '#14B8A6', '#F97316', '#8B5CF6', '#EC4899', '#22C55E', '#EAB308', '#06B6D4'];
+const newJobId = () => 'j' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const jobSeenPath = id => path.join(app.getPath('userData'), 'jobs', id + '_seen.json');
+const safeName = n => String(n || 'Заказ').replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Заказ';
+const pvzBase = c => (c.root ? path.dirname(c.root) : PVZ_BASE);
+function defJobDirs(c, name) { const d = path.join(pvzBase(c), 'Заказы', safeName(name)); return { exp: path.join(d, 'Выгрузки'), res: path.join(d, 'Результаты') }; }
+// сохранённые сценарии мастера становятся заказами (со старыми, общими папками); журнал «уже выгруженных» копируется каждому
+function migrateJobs(c) {
+  c.jobs = Array.isArray(c.jobs) ? c.jobs : [];
+  let src = c.presets && Object.keys(c.presets).length ? c.presets : null;
+  if (!src && (c.schedules || []).some(s => s.kind === 'preset')) src = DEF_PRESETS;
+  if (!src && c.wizard && c.wizard.params) src = { 'Основной': Object.assign({}, c.wizard.params, { cian: c.wizard.sources ? c.wizard.sources.cian !== false : true, avito: c.wizard.sources ? c.wizard.sources.avito !== false : true, winner: !!(c.wizard.sources && c.wizard.sources.winner), checks: c.wizard.checks, avitoUrl: c.wizard.avitoUrl, orders: c.wizard.orders }) };
+  let seen = null; try { seen = fs.readFileSync(path.join(app.getPath('userData'), 'seen.json')); } catch {}
+  Object.entries(src || {}).forEach(([name, p], i) => {
+    if (c.jobs.some(j => j.name === name)) return;
+    const params = Object.assign({}, DEF_PARAMS); for (const k of Object.keys(DEF_PARAMS)) if (k in p) params[k] = p[k];
+    const job = { id: newJobId() + i, name, color: JOB_COLORS[c.jobs.length % JOB_COLORS.length], exp: '', res: '', params,
+      sources: { cian: p.cian !== false, avito: p.avito !== false, winner: !!p.winner }, checks: Object.assign({ ozon: true, yandex: false, wb: false }, p.checks || {}),
+      avitoUrl: p.avitoUrl || null, orders: p.orders || {}, onlyNew: c.onlyNew !== false, seenDays: c.seenDays || 0, archived: false, created: Date.now(), migrated: true };
+    if (seen) { try { fs.mkdirSync(path.dirname(jobSeenPath(job.id)), { recursive: true }); fs.writeFileSync(jobSeenPath(job.id), seen); } catch {} }
+    c.jobs.push(job);
+  });
+  // задания расписания по сценариям → по заказам
+  for (const s of c.schedules || []) if (s.kind === 'preset') { const j = c.jobs.find(x => x.name === s.preset); if (j) { s.kind = 'job'; s.job = j.id; s.name = j.name; } }
+}
+const findJob = (c, id) => (id && (c.jobs || []).find(j => j.id === id)) || null;
+// настройки для запуска выгрузки в папки заказа (в общий config.json не сохраняются)
+function jobRunCfg(c, job) {
+  const o = { seenPath: jobSeenPath(job.id), onlyNew: job.onlyNew !== false, seenDays: job.seenDays || 0, jobId: job.id };
+  if (job.exp) { fs.mkdirSync(job.exp, { recursive: true }); o.root = job.exp; o.cianRoot = job.exp; }
+  return o;
+}
+const inside = (dir, f) => { if (!dir) return false; const r = path.relative(IS_WIN ? dir.toLowerCase() : dir, IS_WIN ? f.toLowerCase() : f); return !!r && !r.startsWith('..') && !path.isAbsolute(r); };
+const IS_WIN = process.platform === 'win32';
+// папка результатов для файла выгрузки: файл в папке выгрузок заказа → папка результатов заказа, иначе общая
+function outFor(c, file) { for (const j of c.jobs || []) if (j.exp && j.res && inside(j.exp, file)) return j.res; return c.ozonOut; }
+// все папки результатов: общая + заказов со своими папками
+function outDirs(c) {
+  const m = new Map(); if (c.ozonOut) m.set(c.ozonOut, { dir: c.ozonOut, job: '' });
+  for (const j of c.jobs || []) if (j.res && !m.has(j.res)) m.set(j.res, { dir: j.res, job: j.id });
+  return [...m.values()];
+}
+function touchJob(id) { const c = loadCfg(), j = findJob(c, id); if (j) { j.lastRun = Date.now(); saveCfg(c); } }
+ipcMain.handle('jobs', () => { const c = loadCfg(); return c.jobs.map(j => Object.assign({}, j, { expDir: j.exp || '', resDir: j.res || c.ozonOut, shared: !j.exp, defDirs: defJobDirs(c, j.name) })); });
+ipcMain.handle('jobSave', (_e, job, opt) => {
+  const c = loadCfg(); let j = findJob(c, job.id);
+  if (!j) {
+    const used = new Set(c.jobs.map(x => x.color));
+    j = Object.assign({ id: newJobId(), color: JOB_COLORS.find(x => !used.has(x)) || JOB_COLORS[c.jobs.length % JOB_COLORS.length], onlyNew: c.onlyNew !== false, seenDays: c.seenDays || 0, archived: false, created: Date.now() }, defJobDirs(c, job.name), job, { id: undefined });
+    j.id = newJobId(); c.jobs.push(j);
+    if (opt && opt.copySeen) { try { fs.mkdirSync(path.dirname(jobSeenPath(j.id)), { recursive: true }); fs.copyFileSync(path.join(app.getPath('userData'), 'seen.json'), jobSeenPath(j.id)); } catch {} }
+  } else Object.assign(j, job, { id: j.id });
+  for (const d of [j.exp, j.res]) if (d) { try { fs.mkdirSync(d, { recursive: true }); } catch {} }
+  saveCfg(c); return j;
+});
+ipcMain.handle('jobDelete', (_e, id) => {
+  const c = loadCfg(); c.jobs = c.jobs.filter(j => j.id !== id);
+  for (const s of c.schedules || []) if (s.kind === 'job' && s.job === id) s.enabled = false;
+  saveCfg(c); try { fs.unlinkSync(jobSeenPath(id)); } catch {} return true;
+});
+ipcMain.handle('jobPickFolder', async (_e, id, which) => {
+  const c = loadCfg(), j = findJob(c, id); if (!j) return null;
+  const r = await dialog.showOpenDialog(win, { title: which === 'res' ? `Папка результатов проверки — «${j.name}»` : `Папка выгрузок — «${j.name}»`, defaultPath: j[which] || pvzBase(c), properties: ['openDirectory', 'createDirectory'] });
+  if (r.canceled || !r.filePaths[0]) return j;
+  j[which] = r.filePaths[0];
+  if (which === 'exp' && !j.res) j.res = defJobDirs(c, j.name).res;   // свои выгрузки — и свои результаты
+  for (const d of [j.exp, j.res]) if (d) { try { fs.mkdirSync(d, { recursive: true }); } catch {} }
+  saveCfg(c); return j;
+});
+ipcMain.handle('jobOwnFolders', (_e, id) => { const c = loadCfg(), j = findJob(c, id); if (!j) return null; Object.assign(j, defJobDirs(c, j.name)); for (const d of [j.exp, j.res]) fs.mkdirSync(d, { recursive: true }); saveCfg(c); return j; });
+ipcMain.handle('jobSeen', (_e, id, forget) => {
+  const p = jobSeenPath(id); if (forget) { try { fs.unlinkSync(p); } catch {} return { cian: 0, avito: 0 }; }
+  let s = {}; try { s = JSON.parse(fs.readFileSync(p, 'utf8')); } catch {}
+  return { cian: Object.keys(s.cian || {}).length, avito: Object.keys(s.avito || {}).length };
+});
+
 function saveCfg(c) { fs.mkdirSync(path.dirname(cfgPath()), { recursive: true }); fs.writeFileSync(cfgPath(), JSON.stringify(c, null, 2)); }
 
 let siteRect = null;   // место под сайт в мастере (присылает интерфейс)
@@ -165,10 +249,10 @@ const isNewMoscow = a => NEW_MSK.test(String(a || ''));
 // журнал уже выгруженных объявлений Циана (чтобы в следующий раз брать только новые)
 // журнал уже выгруженных объявлений (Циан, Авито): {site: {id: время}} в папке данных программы.
 // Старый журнал Циана (cian_seen.json в папке АДРЕСА ЦИАН) подхватывается один раз.
-const seenFile = () => path.join(app.getPath('userData'), 'seen.json');
+const seenFile = cfg => (cfg && cfg.seenPath) || path.join(app.getPath('userData'), 'seen.json');
 function readSeenAll(cfg) {
-  let s; try { s = JSON.parse(fs.readFileSync(seenFile(), 'utf8')); } catch { s = {}; }
-  if (!s.cian && cfg && cfg.cianRoot) { try { const old = JSON.parse(fs.readFileSync(path.join(cfg.cianRoot, 'cian_seen.json'), 'utf8')); const t = Date.parse(old.updated) || Date.now(); s.cian = Object.fromEntries((old.ids || []).map(i => [String(i), t])); } catch {} }
+  let s; try { s = JSON.parse(fs.readFileSync(seenFile(cfg), 'utf8')); } catch { s = {}; }
+  if (!s.cian && cfg && cfg.cianRoot && !cfg.seenPath) { try { const old = JSON.parse(fs.readFileSync(path.join(cfg.cianRoot, 'cian_seen.json'), 'utf8')); const t = Date.parse(old.updated) || Date.now(); s.cian = Object.fromEntries((old.ids || []).map(i => [String(i), t])); } catch {} }
   return s;
 }
 function loadSeen(cfg, site = 'cian') {
@@ -179,7 +263,8 @@ function loadSeen(cfg, site = 'cian') {
 function addSeen(cfg, ids, site = 'cian') {
   const s = readSeenAll(cfg), now = Date.now(); s[site] = s[site] || {};
   ids.forEach(i => (s[site][String(i)] = now));
-  fs.writeFileSync(seenFile(), JSON.stringify(s));
+  fs.mkdirSync(path.dirname(seenFile(cfg)), { recursive: true });
+  fs.writeFileSync(seenFile(cfg), JSON.stringify(s));
 }
 ipcMain.handle('seenInfo', () => { const c = loadCfg(), s = readSeenAll(c), lim = c.seenDays ? Date.now() - c.seenDays * 864e5 : 0;
   const n = k => Object.values(s[k] || {}).filter(t => t >= lim).length; return { cian: n('cian'), avito: n('avito') }; });
@@ -264,9 +349,13 @@ ipcMain.handle('bwOrder', () => {
 ipcMain.handle('start', async (_e, c) => {
   if (running) return { ok: false, error: 'Выгрузка уже идёт' };
   const t0 = Date.now();   // длительность — для оценки времени в мастере
-  const cfg = Object.assign(loadCfg(), c);
+  const { job: jobId, ...cc } = c;
+  const cfg = Object.assign(loadCfg(), cc);
   cfg.delay = Math.max(3, cfg.delay);
   saveCfg(cfg);
+  // выгрузка заказа: его папки и его журнал «уже выгруженных» (только на этот запуск)
+  const job = findJob(cfg, jobId);
+  if (job) Object.assign(cfg, jobRunCfg(cfg, job));
   const url = view.webContents.getURL();
   const site = /^https:\/\/(www\.)?avito\.ru\//.test(url) ? 'avito' : /^https:\/\/([a-z0-9-]+\.)?cian\.ru\//.test(url) ? 'cian'
              : /^https:\/\/w7\.baza-winner\.ru\//.test(url) ? 'winner' : '';
@@ -278,12 +367,13 @@ ipcMain.handle('start', async (_e, c) => {
     running = true; stopFlag = false;
     try {
       const m = url.match(/\/search\/([0-9a-f-]{36})/i);
-      if (m && c.bw) { cfg.bwOrders = Object.assign({}, cfg.bwOrders, { [m[1]]: { tag: c.bw.tag, hide: c.bw.hide, name: c.bw.name || (cfg.bwOrders && cfg.bwOrders[m[1]] && cfg.bwOrders[m[1]].name) || '' } }); saveCfg(cfg); }
+      if (m && c.bw) { const b = loadCfg(); b.bwOrders = Object.assign({}, b.bwOrders, { [m[1]]: { tag: c.bw.tag, hide: c.bw.hide, name: c.bw.name || (b.bwOrders && b.bwOrders[m[1]] && b.bwOrders[m[1]].name) || '' } }); saveCfg(b); cfg.bwOrders = b.bwOrders; }
       const r = await winner.run(view.webContents, cfg, c.bw || {}, st => send('status', st), () => stopFlag);
       const q = autoOzon(cfg, r.saved, c.forceCheck);
       if (!r.ok) journal.logError('Winner', r.error);
       else if (/ошибк/i.test(r.reason || '')) journal.logError('Winner', r.reason);
-      journal.addHistory({ type: 'export', site, dur: Date.now() - t0, title: c.title || (r.extra || '').replace(/^Заказ: /, '').split(';')[0], ok: !!r.ok, total: r.total || 0, files: r.saved || [], reason: r.reason || r.error });
+      journal.addHistory({ type: 'export', site, job: jobId || '', dur: Date.now() - t0, title: c.title || (r.extra || '').replace(/^Заказ: /, '').split(';')[0], ok: !!r.ok, total: r.total || 0, files: r.saved || [], reason: r.reason || r.error });
+      if (job && r.ok) touchJob(job.id);
       return Object.assign({ site, withCoords: r.total, ozonQueued: q }, r);
     } catch (e) { journal.logError('Winner', e); journal.addHistory({ type: 'export', site, ok: false, total: 0, files: [], reason: String(e && e.message || e) }); return { ok: false, error: String(e && e.message || e) }; }
     finally { running = false; delete procs.export; procUpdate(); }
@@ -314,7 +404,8 @@ ipcMain.handle('start', async (_e, c) => {
       if (res.ids) addSeen(cfg, res.ids, site);
     }
     const q = autoOzon(cfg, out.saved, c.forceCheck);
-    journal.addHistory({ type: 'export', site, dur: Date.now() - t0, title: c.title || '', ok: true, total: res.rows.length, files: out.saved, reason: res.reason });
+    journal.addHistory({ type: 'export', site, job: jobId || '', dur: Date.now() - t0, title: c.title || '', ok: true, total: res.rows.length, files: out.saved, reason: res.reason });
+    if (job) touchJob(job.id);
     return { ok: true, site, reason: res.reason, extra: res.extra || '', total: res.rows.length, withCoords: res.withCoords, ozonQueued: q, ...out };
   } catch (e) {
     clearInterval(timer);
@@ -369,14 +460,21 @@ async function pumpOzon() {
       if (ozonFresh) { cfg.ozonCache = false; ozonFresh = false; }
       const paths = ozonQueue.splice(0), t0 = Date.now();
       const results = [];
+      // у файлов из папки выгрузок заказа — своя папка результатов
+      const groups = new Map();
+      for (const f of paths) { const d = outFor(cfg, f); if (!groups.has(d)) groups.set(d, []); groups.get(d).push(f); }
+      for (const [outDir, gpaths] of groups) {
+      if (ozonStop) break;
+      try { fs.mkdirSync(outDir, { recursive: true }); } catch {}
+      const gcfg = Object.assign({}, cfg, { ozonOut: outDir });
       for (const p of enabledPlatforms(cfg)) {
         if (ozonStop) break;
-        const files = needs(cfg, p, paths);
+        const files = needs(gcfg, p, gpaths);
         if (!files.length) continue;
         const status = (text, extra) => send('ozonStatus', Object.assign({ text, running: true }, extra || {}));
         if (p.key === 'ozon') {
           results.push(Object.assign({ kind: 'ozon', label: 'Ozon' }, await ozon.run(files, {
-            wc: ozonView.webContents, cfg, log: m => trace.log('Ozon', m), cachePath: path.join(app.getPath('userData'), 'ozon_cache.json'), status, isStopped: () => ozonStop, takeSkip: () => { const v = ozonSkip; ozonSkip = false; return v; } })));
+            wc: ozonView.webContents, cfg: gcfg, log: m => trace.log('Ozon', m), cachePath: path.join(app.getPath('userData'), 'ozon_cache.json'), status, isStopped: () => ozonStop, takeSkip: () => { const v = ozonSkip; ozonSkip = false; return v; } })));
         } else {
           let fetchFn = trace.wrapFetch(u => net.fetch(u), p.key === 'wb' ? 'WB' : 'Яндекс');
           if (p.key === 'wb') {
@@ -384,8 +482,9 @@ async function pumpOzon() {
             if (!(await ensureWb())) { results.push({ kind: 'wb', label: 'Wildberries', reason: 'карта WB не ответила — откройте вкладку позже и повторите', saved: [], errors: [], stats: {}, main: 0, excluded: 0, unchecked: 0, manual: [], files: files.length, addresses: 0 }); continue; }
             fetchFn = wbFetch;
           }
-          results.push(await platforms.run(p.key, files, { fetch: fetchFn, status, isStopped: () => ozonStop, outDir: cfg.ozonOut }));
+          results.push(await platforms.run(p.key, files, { fetch: fetchFn, status, isStopped: () => ozonStop, outDir }));
         }
+      }
       }
       send('ozonDone', { ok: true, results });
       if (results.length && (!win.isVisible() || !win.isFocused())) scheduler.notify('PVZ Master — проверка зон завершена', results.map(r => `${r.label}: ${r.kind === 'ozon' ? 'файлов ' + r.saved.length : 'в «Результат» ' + r.main}`).join(' · '));
@@ -405,7 +504,8 @@ ipcMain.handle('ozonScan', () => {
   const cfg = loadCfg();
   const map = new Map();
   for (const p of enabledPlatforms(cfg)) {
-    for (const f of ozon.scan([cfg.root, cfg.cianRoot], cfg.ozonOut, cfg.ozonDays, p.journal)) {
+    const sets = [[[cfg.root, cfg.cianRoot], cfg.ozonOut], ...cfg.jobs.filter(j => j.exp && !j.archived).map(j => [[j.exp], j.res || cfg.ozonOut])];
+    for (const f of sets.flatMap(([roots, out]) => ozon.scan(roots, out, cfg.ozonDays, p.journal))) {
       const e = map.get(f.path) || { path: f.path, name: path.basename(f.path), folder: path.basename(path.dirname(f.path)), partial: false, platforms: [] };
       e.platforms.push(p.key); e.partial = e.partial || f.partial; map.set(f.path, e);
     }
@@ -418,8 +518,8 @@ ipcMain.handle('ozonStart', (_e, paths, opts) => {
   if (!paths || !paths.length) return { ok: false, error: 'Нет файлов для проверки' };
   if (opts && opts.fresh) {   // «Попробовать снова»: забыть, что эти файлы уже проверялись, и не брать результаты из памяти
     const cfg = loadCfg();
-    for (const p of PLATFORMS) {
-      const jp = path.join(cfg.ozonOut, p.journal);
+    for (const dir of new Set(paths.map(f => outFor(cfg, f)))) for (const p of PLATFORMS) {
+      const jp = path.join(dir, p.journal);
       try { const j = JSON.parse(fs.readFileSync(jp, 'utf8')); for (const f of paths) if (j.files[f]) j.files[f] = { size: -1, result: j.files[f].result, forced: true }; fs.writeFileSync(jp, JSON.stringify(j, null, 1)); } catch {}
     }
     ozonFresh = true;
@@ -430,8 +530,8 @@ ipcMain.handle('ozonStop', () => { ozonStop = true; return true; });
 // «Перепроверить зоны»: по файлам результатов находим исходные выгрузки (по журналам проверок)
 ipcMain.handle('resultSources', (_e, results) => {
   const cfg = loadCfg(), want = new Set(results), out = new Set();
-  for (const p of PLATFORMS) {
-    try { const j = JSON.parse(fs.readFileSync(path.join(cfg.ozonOut, p.journal), 'utf8')); for (const [src, v] of Object.entries(j.files || {})) if (v && want.has(v.result) && fs.existsSync(src)) out.add(src); } catch {}
+  for (const { dir } of outDirs(cfg)) for (const p of PLATFORMS) {
+    try { const j = JSON.parse(fs.readFileSync(path.join(dir, p.journal), 'utf8')); for (const [src, v] of Object.entries(j.files || {})) if (v && want.has(v.result) && fs.existsSync(src)) out.add(src); } catch {}
   }
   return [...out];
 });
@@ -668,7 +768,7 @@ ipcMain.handle('ozonClearCache', () => {
 ipcMain.handle('ozonState', () => ({ running: ozonRunning, queued: ozonQueue.length }));
 
 ipcMain.handle('history', () => journal.readHistory());
-ipcMain.handle('results', () => results.collect(loadCfg().ozonOut));
+ipcMain.handle('results', () => results.collect(outDirs(loadCfg())));
 ipcMain.handle('bwOrders', () => {
   const cfg = loadCfg(), out = {};
   for (const [g, o] of Object.entries(winner.KNOWN)) out[g] = { guid: g, name: o.name };
@@ -786,7 +886,7 @@ async function selfTest(dir) {
   const J = c => win.webContents.executeJavaScript(c, true).catch(e => console.log('JSERR', e.message));
   if (process.env.PVZ_THEME) await J(`localStorage.setItem('pvzTheme','${process.env.PVZ_THEME}'); location.reload(); 1`).catch(()=>{}), await W8(2500);
   await shot('01-home');
-  await J(`$('startBtn').click(); 1`); await W8(1200); await shot('02-select');
+  await J(`$('newBtn').click(); 1`); await W8(1200); await shot('02-select');
   await J(`$('wzNext').click(); 1`); await W8(900); await shot('03-cian');
   await J(`$('wzNext').click(); 1`); await W8(900); await shot('04-avito');
   await J(`$('aOpen').click(); 1`); await W8(3500); await shot('04b-avito-site');
@@ -797,6 +897,19 @@ async function selfTest(dir) {
   await J(`document.querySelector('#oList .on') && document.querySelector('#oList .on').click(); 1`); await W8(300);
   await J(`$('wzNext').click(); 1`); await W8(900); await J(`document.querySelectorAll('#wzStep details.fold').forEach(d=>d.open=true); 1`); await W8(400); await shot('07-center');
   for (const page of ['results', 'history', 'schedule', 'settings']) { await J(`openPage('${page}'); 1`); await W8(1800); await shot('08-' + page); }
+  // заказы: создать, карточка, «Запустить» (сразу шаг выгрузки), выход обратно в карточку, фильтр «Заказ» в результатах
+  await J(`$('wzHome').click(); 1`); await W8(600); await J(`document.querySelector('#mBtns button') && document.querySelector('#mBtns button').click(); 1`); await W8(400);
+  await J(`pvz.jobSave(Object.assign({ name: 'Заказ #4 — тест' }, wizDefaults())).then(() => $('jobsBtn').click()); 1`); await W8(1800); await shot('20-jobs');
+  console.log('JOBS', await J(`JSON.stringify({ tiles: document.querySelectorAll('.j-tile[data-id]').length, home: $('jobsN').textContent })`));
+  await J(`document.querySelector('.j-tile[data-id]').click(); 1`); await W8(1200); await shot('21-job-card');
+  await J(`$('jcRun').click(); 1`); await W8(1800); await shot('22-job-run');
+  console.log('JOBRUN', await J(`JSON.stringify({ step: document.querySelector('#wzStep h2').textContent, job: $('wzJob').textContent, save: ($('ccSave') || {}).textContent, dirs: ($('ccSaveSum') || {}).textContent })`));
+  await J(`$('wzHome').click(); 1`); await W8(1200);
+  console.log('JOBBACK', await J(`document.body.dataset.mode + '|' + document.getElementById('jobs').className`));
+  await J(`openPage('schedule'); 1`); await W8(1200); await J(`$('sAdd').click(); 1`); await W8(800); await shot('23-schedule-job');
+  console.log('SCHED', await J(`[...document.querySelectorAll('#sList select.what')].map(s => s.selectedOptions[0] && s.selectedOptions[0].textContent).join('|')`));
+  await J(`openPage('results'); 1`); await W8(1800); await shot('24-results-jobs');
+  console.log('RJOB', await J(`JSON.stringify({ shown: $('rJobF').style.display, opts: [...$('rJob').options].map(o => o.textContent), rows: R.rows.length, jobRows: R.rows.filter(x => x.job).length })`));
   if (process.env.PVZ_FAKE) {
     await J(`openPage('results'); 1`); await W8(1500);
     await J(`(()=>{const z=['голубой','синий','зелёный'];const rows=Array.from({length:14},(_,i)=>({platform:'Ozon',zone:z[i%3],address:'Москва, ул. Тестовая, '+(i%10+1),metro:'м. Пример',note:'',areaMin:30+(i%10),price:50000+i*5000,checked:Date.now()-Math.floor(i/6)*864e5-(i%2)*3600e3,url:'https://x/'+i,lat:55.7+i*0.01,lon:37.5+i*0.01,file:'OZON export_excel ЦИАН 13 '+(1+i%2)+'.xlsx'}));rows.push({platform:'Яндекс',zone:'синий',address:'ул. Тестовая, 2',metro:'',note:'',areaMin:31,price:55000,checked:Date.now(),url:'https://x/y',lat:55.71,lon:37.51,file:'ЯНДЕКС export_excel ЦИАН 13 1.xlsx'});R.marks={};R.seen={'https://x/3':1};R.watch={};prepRows(rows);R.day=dayKey(Date.now());renderDays();renderResults(true);})(); 1`);
