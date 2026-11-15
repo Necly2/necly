@@ -21,7 +21,6 @@ svg:not(.leaflet-zoom-animated){width:18px;height:18px;fill:none;stroke:currentC
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
 .muted{color:var(--muted)}
-::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:var(--line2);border-radius:8px}
 
 /* ---------- режимы ---------- */
 #welcome{display:none;height:100vh;overflow:auto;background:
@@ -285,7 +284,7 @@ body[data-mode="wizard"] #wiz{display:flex}
 .hero h1{font-size:44px;letter-spacing:-.5px;margin:6px 0 0}
 .hero p{font-size:15.5px;line-height:1.55;margin:0 0 14px}
 .start{position:relative;display:flex;align-items:center;gap:12px;padding:20px 44px;border:0;border-radius:20px;font-size:21px;font-weight:700;color:var(--strong);cursor:pointer;
-  background:linear-gradient(120deg,#0468FF,#14B8A6 45%,#F97316);background-size:200% 200%;animation:shift 6s ease infinite;box-shadow:0 18px 50px rgba(4,104,255,.35);transition:transform .2s}
+  background:linear-gradient(120deg,#0468FF,#14B8A6 45%,#F97316);background-size:200% 200%;box-shadow:0 18px 50px rgba(4,104,255,.35);transition:transform .2s}
 .start svg{width:26px;height:26px;stroke-width:2.4}
 .start:hover{transform:translateY(-3px) scale(1.02)}
 .start:active{transform:scale(.98)}
@@ -400,10 +399,8 @@ body.site-open .fgrid{grid-template-columns:1fr 1fr}
 .chips-inline span{font-size:12px;padding:4px 10px;border-radius:999px;background:color-mix(in srgb,var(--b) 18%,transparent);border:1px solid color-mix(in srgb,var(--b) 50%,transparent);color:var(--strong)}
 
 /* окно по центру */
-.modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(5,7,10,.62);backdrop-filter:blur(4px);z-index:100}
-.modal.on{display:flex;animation:fade .2s ease}
 @keyframes fade{from{opacity:0}}
-.m-box{position:relative;width:min(560px,92vw);max-height:84vh;overflow:auto;background:var(--card);border:1px solid var(--line2);border-radius:20px;padding:26px 26px 20px;box-shadow:0 30px 80px rgba(0,0,0,.6);animation:pop .3s cubic-bezier(.2,.8,.2,1)}
+.m-box{position:relative;width:min(560px,92vw);max-height:84vh;overflow:auto;background:var(--card);border:1px solid var(--line2);border-radius:20px;padding:26px 26px 20px;box-shadow:0 30px 80px rgba(0,0,0,.6);}
 .m-ico{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font-size:22px;margin-bottom:10px}
 .modal.err .m-ico{background:rgba(239,68,68,.18);color:var(--err-t)}
 .modal.warn .m-ico{background:rgba(234,179,8,.18);color:var(--warn-t)}
@@ -468,11 +465,9 @@ body.site-open .save-row{grid-template-columns:1fr}
 .sv-file{color:var(--accent)}
 .go-export,.go-check{background:var(--accent) !important}
 .m-box{background:var(--card);box-shadow:var(--shadow)}
-.modal{background:color-mix(in srgb,var(--bg) 60%,transparent)}
 .modal.info .m-ico{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}
 .logo,.hero-logo{filter:drop-shadow(var(--shadow))}
 .danger{color:var(--err-t)}
-::-webkit-scrollbar-thumb{background:var(--line2)}
 .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--card)}
 /* переключатель темы */
 .theme-btn{display:flex;align-items:center;gap:6px}
@@ -673,10 +668,6 @@ body.r-full .fs-exit{display:block}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 #rYmMap{flex:1;min-height:0}
 /* окна по центру — всегда поверх карты; без размытия фона (оно тормозило на больших экранах с картой) */
-.modal{z-index:5000;backdrop-filter:none;background:rgba(5,7,10,.55)}
-html[data-theme="light"] .modal{background:rgba(20,26,36,.35)}
-.modal.on{animation:fade .14s ease-out}
-.m-box{animation:popFast .18s ease-out;will-change:transform,opacity}
 @keyframes popFast{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:none}}
 .leaflet-container{isolation:isolate;z-index:0}
 .ticon{backdrop-filter:none}
@@ -705,7 +696,6 @@ html[data-theme="light"] .modal{background:rgba(20,26,36,.35)}
 .cols-btn{border:none;background:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0 0 0 4px}
 .cols-btn.on{color:var(--accent)}
 .cols-menu{display:none;position:absolute;right:0;top:100%;z-index:30;background:var(--card);border:1px solid var(--line2);border-radius:10px;box-shadow:var(--shadow);padding:10px 12px;min-width:240px;text-align:left;font-weight:400;flex-direction:column;gap:6px}
-.cols-menu.on{display:flex}
 .cols-menu b{font-size:12px;color:var(--muted);margin-bottom:2px}
 .cols-menu label{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--text);cursor:pointer;text-transform:none}
 .r-table-wrap{overflow:auto visible}
@@ -734,7 +724,6 @@ html[data-theme="light"] .modal{background:rgba(20,26,36,.35)}
 .more-wrap{position:relative}
 .more-btn{font-size:18px;line-height:1;padding:6px 12px;letter-spacing:1px}
 .more-menu{display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:60;background:var(--card);border:1px solid var(--line2);border-radius:12px;box-shadow:var(--shadow);padding:6px;min-width:270px;flex-direction:column;gap:2px}
-.more-menu.on{display:flex}
 .more-menu>button{display:flex;align-items:center;gap:10px;text-align:left;border:0;background:none;color:var(--text);padding:9px 12px;border-radius:8px;font-size:13px;cursor:pointer}
 .more-menu>button i{font-style:normal;width:16px;text-align:center;color:var(--muted)}
 .more-menu>button:hover:not(:disabled){background:color-mix(in srgb,var(--accent) 10%,transparent)}
@@ -1052,3 +1041,55 @@ body[data-mode="addr"] #addr{display:flex}
 }
 .r-view{flex:none}
 .r-view button{padding:6px 12px;font-size:12.5px;white-space:nowrap}
+
+/* =================== современные встроенные возможности (Chromium в Electron) =================== */
+/* тема: системные элементы (полосы прокрутки, флажки, списки, выбор времени) — в цвет темы */
+:root{color-scheme:var(--scheme);accent-color:var(--accent);
+  --sb-thumb:light-dark(#9aa3b2,#4a5261);
+  scrollbar-color:var(--sb-thumb) transparent}
+*{scrollbar-width:thin;scrollbar-color:var(--sb-thumb) transparent}
+
+/* окно сообщений — <dialog>, открывается showModal(): фокус внутри окна, Esc, поверх всего */
+dialog.modal{padding:0;border:0;background:transparent;color:inherit;max-width:none;max-height:none;overflow:visible;overscroll-behavior:contain}
+dialog.modal[open]{display:grid;place-items:center;inset:0;width:100vw;height:100vh;margin:0}
+dialog.modal::backdrop{background:rgba(5,7,10,.55);overflow:hidden;overscroll-behavior:contain}
+html[data-theme="light"] dialog.modal::backdrop{background:rgba(20,26,36,.35)}
+dialog.modal .m-box{opacity:1;transition-property:opacity,transform;transition-duration:.18s;transition-timing-function:ease-out}
+dialog.modal[open] .m-box{@starting-style{opacity:0}}
+@media (prefers-reduced-motion:no-preference){dialog.modal[open] .m-box{@starting-style{transform:translateY(8px) scale(.98)}}}
+dialog.modal::backdrop{transition-property:background-color,display,overlay;transition-duration:.18s;transition-behavior:allow-discrete}
+dialog.modal[open]::backdrop{@starting-style{background-color:rgba(0,0,0,0)}}
+
+/* меню «⋯» и «Столбцы» — всплывающие панели (popover), привязаны к своей кнопке */
+#rMoreBtn{anchor-name:--more}
+#rColsBtn{anchor-name:--cols}
+.more-menu[popover],.cols-menu[popover]{position:fixed;inset:auto;margin:0;top:anchor(bottom);right:anchor(right);margin-top:6px;position-try-fallbacks:flip-block;color:var(--text)}
+.more-menu[popover]{position-anchor:--more}
+.cols-menu[popover]{position-anchor:--cols}
+/* закрытое состояние (и куда уходит при закрытии) — затем открытое: оно должно стоять ниже и весить не меньше */
+.more-menu[popover],.cols-menu[popover]{opacity:0;transition-property:opacity,display,overlay;transition-duration:.14s;transition-behavior:allow-discrete}
+.more-menu[popover]:popover-open,.cols-menu[popover]:popover-open{display:flex;opacity:1;@starting-style{opacity:0}}
+#rMoreBtn:has(+ .more-menu:popover-open){border-color:var(--accent);color:var(--accent)}
+
+/* движение: бесконечная анимация и всплытия — только если в системе не включено «уменьшить движение» */
+@media (prefers-reduced-motion:reduce){
+  .page,.hero,.r-filters.on,.r-detail.on,.wz-step.enter,.joke-t.in,.h-tile,.j-tile,.jt-run{animation:none;transition-duration:.01s}
+  .h-tile:hover,.j-tile:hover,.jt-run:hover{transform:none}
+}
+
+/* правая колонка «Результатов» подстраивается под свою ширину (а не под ширину окна):
+   узкая колонка (MacBook, «+ колонка») — компактная панель и карточка */
+.r-mapcol{container-type:inline-size;container-name:mapcol}
+@container mapcol (max-width:560px){
+  .r-maptools{gap:4px}
+  .r-maptools .zoom .zv{display:none}
+  .r-view button{padding:5px 9px;font-size:12px}
+  .rd-facts{gap:12px}
+  .rd-facts small{font-size:10.5px}
+  .rd-btns{width:100%;justify-content:flex-end}
+  .rd-act{flex-wrap:wrap}
+  .rd-act input[type=text]{flex-basis:100%}
+}
+@container mapcol (max-width:420px){
+  .r-maptools .fs-btn,#rSplit{display:none}
+}

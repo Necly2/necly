@@ -46,13 +46,18 @@ window.showModal = function ({ kind = 'info', title = '', text = '', html = fals
     $('mText')[html ? 'innerHTML' : 'textContent'] = html ? text : prettyNums(text);
     if (input) { const i = document.createElement('input'); i.type = 'text'; i.id = 'mInput'; i.value = input.value || ''; i.placeholder = input.placeholder || ''; $('mText').appendChild(i); setTimeout(() => i.focus(), 50); }
     $('mBtns').innerHTML = '';
-    const close = v => { m.className = 'modal'; modalOpen = false; sendRect(); res(v); };
+    let done = false;
+    const close = v => { if (done) return; done = true; m.onclose = null; m.className = 'modal'; if (m.open) m.close(); modalOpen = false; sendRect(); res(v); };
+    // Esc и щелчок мимо окна закрывают его средствами браузера — это «закрыть без выбора»
+    // (событие close от предыдущего окна приходит позже — если окно уже снова открыто, это не наше закрытие)
+    m.onclose = () => { if (!m.open) close(null); };
     buttons.forEach(b => {
       const el = document.createElement('button'); el.className = b.cls || 'ghost'; el.textContent = b.label;
       el.onclick = () => close(input && b.value !== null && b.value !== false ? { value: b.value, input: $('mInput').value.trim() } : b.value);
       $('mBtns').appendChild(el);
     });
     $('mX').onclick = () => close(null);
+    if (!m.open) m.showModal();
     modalOpen = true; sendRect();
   });
 };

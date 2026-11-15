@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="ru"><head><meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.maps.2gis.com https://*.tile.openstreetmap.org https://tile.openstreetmap.org https://tiles.s3.yandex.net https://core-renderer-tiles.maps.yandex.net">
 <link rel="stylesheet" href="../node_modules/leaflet/dist/leaflet.css">
 <title>PVZ Master</title>
@@ -59,7 +60,7 @@
 
 <div class="toast" id="toast"></div>
 <!-- ================= ОКНО ПО ЦЕНТРУ (ошибки, вопросы) ================= -->
-<div id="modal" class="modal"><div class="m-box"><div class="m-ico" id="mIco"></div><h3 id="mTitle"></h3><div class="m-text" id="mText"></div><div class="m-btns" id="mBtns"></div><button class="m-x" id="mX" title="Закрыть">✕</button></div></div>
+<dialog id="modal" class="modal" aria-labelledby="mTitle" aria-describedby="mText"><div class="m-box"><div class="m-ico" id="mIco" aria-hidden="true"></div><h3 id="mTitle"></h3><div class="m-text" id="mText"></div><div class="m-btns" id="mBtns"></div><button type="button" class="m-x" id="mX" title="Закрыть" aria-label="Закрыть">✕</button></div></dialog>
 
 <!-- ================= РЕЗУЛЬТАТЫ ================= -->
 <section id="results" class="page">
@@ -70,8 +71,8 @@
     <span class="muted r-busy" id="rBusy"></span>
     <button class="ghost" id="rFiltBtn" title="Площадки, заказ, зона, площадь, цена"><svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Фильтры<b class="fb" id="rFiltN"></b></button>
     <button class="ghost" id="rReload"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>Обновить</button>
-    <div class="more-wrap"><button class="ghost more-btn" id="rMoreBtn" title="Ещё действия">⋯</button>
-      <div class="more-menu" id="rMoreMenu">
+    <div class="more-wrap"><button type="button" class="ghost more-btn" id="rMoreBtn" title="Ещё действия" aria-label="Ещё действия" commandfor="rMoreMenu" command="toggle-popover">⋯</button>
+      <div class="more-menu" id="rMoreMenu" popover="auto" aria-labelledby="rMoreBtn">
         <button id="rExport"><i>⬇</i>Экспорт отмеченных</button>
         <button id="rSeenAll" title="Все объявления, которые сейчас в списке (выбранный день / выгрузка / фильтры)"><i>✓</i>Отметить все просмотренными</button>
         <button id="rRecheck" title="Проверить зоны заново для выгрузок, которые сейчас в списке (без памяти результатов)"><i>↻</i>Перепроверить зоны</button>
@@ -91,7 +92,7 @@
   <div class="r-days r-ups" id="rUps"></div>
   <div class="r-body">
     <div class="r-table-wrap"><table class="r-table"><thead><tr>
-      <th class="num-c">№</th><th data-k="platform">Площадка</th><th data-k="zone">Зона</th><th data-k="address">Адрес</th><th data-k="areaMin" class="n">Площадь</th><th class="n" title="Квартир в доме — по данным OpenStreetMap; ≈ — оценка по этажам и подъездам">Квартир</th><th data-k="price" class="n">Цена</th><th data-k="checked">Проверено</th><th class="acts-h"></th><th class="mk" data-k="mark" title="Отмеченные — щёлкните, чтобы отсортировать">✓<button class="cols-btn" id="rColsBtn" title="Столбцы">⋮</button><div class="cols-menu" id="rColsMenu"></div></th>
+      <th class="num-c">№</th><th data-k="platform">Площадка</th><th data-k="zone">Зона</th><th data-k="address">Адрес</th><th data-k="areaMin" class="n">Площадь</th><th class="n" title="Квартир в доме — по данным OpenStreetMap; ≈ — оценка по этажам и подъездам">Квартир</th><th data-k="price" class="n">Цена</th><th data-k="checked">Проверено</th><th class="acts-h"></th><th class="mk" data-k="mark" title="Отмеченные — щёлкните, чтобы отсортировать">✓<button type="button" class="cols-btn" id="rColsBtn" title="Столбцы" aria-label="Столбцы" commandfor="rColsMenu" command="toggle-popover">⋮</button><div class="cols-menu" id="rColsMenu" popover="auto" aria-label="Показывать столбцы"></div></th>
     </tr></thead><tbody id="rRows"></tbody></table><div class="hint" id="rMore"></div></div>
     <div class="r-lst" id="rLstCol">
       <div class="r-maptools"><b>Объявление</b><span class="hint grow" id="rLstQ"></span>

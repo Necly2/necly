@@ -684,10 +684,11 @@ async function showListing(x) {
 $('rShowLst').onchange = () => { if ($('rShowLst').checked && R.mapMode === 'lst') setMapMode(R.gen); R.showLst = $('rShowLst').checked; pvz.setCfg({ resShowLst: R.showLst }); applyLst(); };
 $('rLstExt').onclick = () => { const x = R.rows[R.sel]; if (x && x.url) pvz.openExternal(x.url); };
 // встроенные сайты — точно на свои места (или спрятать)
-const modalIsOpen = () => $('modal').classList.contains('on');
+const modalIsOpen = () => $('modal').open;
 const visRect = id => { const e = $(id); if (!e || !e.getClientRects().length || getComputedStyle(e).display === 'none') return null; const r = rectOf(id); return r.width > 50 && r.height > 50 ? r : null; };
 function syncRects() {
-  const away = document.body.dataset.mode !== 'results' || modalIsOpen() || R.dragging || $('rMoreMenu').classList.contains('on');
+  // встроенные карты рисуются поверх страницы — прячем их, пока открыто окно или меню
+  const away = document.body.dataset.mode !== 'results' || modalIsOpen() || R.dragging || $('rMoreMenu').matches(':popover-open') || $('rColsMenu').matches(':popover-open');
   const s = shown(), has = R.sel != null && !away;
   const full = document.querySelector('.r-body .full');
   const fit = id => (!full || full.contains($(id))) ? visRect(id) : null;
@@ -701,7 +702,7 @@ function syncRects() {
 ['rOzHost', 'rGenHost', 'rLstHost', 'rLstIn', 'rMapArea', 'rDetail'].forEach(id => new ResizeObserver(syncRects).observe($(id)));
 window.addEventListener('resize', syncRects);
 new MutationObserver(() => setTimeout(() => { syncRects(); if (document.body.dataset.mode === 'results' && R.sel == null && R.map) showIdleMaps(); }, 50)).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
-new MutationObserver(syncRects).observe($('modal'), { attributes: true, attributeFilter: ['class'] });
+new MutationObserver(syncRects).observe($('modal'), { attributes: true, attributeFilter: ['class', 'open'] });
 // во весь экран: сайт объявления или карты; выход — кнопкой или Esc
 function setFull(id) {
   document.querySelectorAll('.r-body .full').forEach(e => e.classList.remove('full'));
@@ -769,11 +770,10 @@ new ResizeObserver(() => placeSplitters()).observe(document.querySelector('.r-bo
 $('rSeenAll').onclick = () => { closeMore(); markAllSeen(); };
 $('rDedup').onchange = e => { R.dedup = e.target.checked; pvz.setCfg({ resDedup: R.dedup }); renderDays(); renderResults(true); };
 // меню «⋯»: пока открыто, встроенные карты и сайт прячутся (иначе они перекрыли бы меню)
-const moreOpen = () => $('rMoreMenu').classList.contains('on');
-function closeMore() { if (moreOpen()) { $('rMoreMenu').classList.remove('on'); syncRects(); } }
-$('rMoreBtn').onclick = e => { e.stopPropagation(); $('rMoreMenu').classList.toggle('on'); syncRects(); };
-document.addEventListener('click', e => { if (!e.target.closest('.more-wrap')) closeMore(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMore(); });
+// меню «⋯» — встроенная всплывающая панель: открывается кнопкой (command), закрывается щелчком мимо и Esc
+const moreOpen = () => $('rMoreMenu').matches(':popover-open');
+function closeMore() { if (moreOpen()) $('rMoreMenu').hidePopover(); }
+['rMoreMenu', 'rColsMenu'].forEach(id => $(id).addEventListener('toggle', () => syncRects()));
 function markAllSeen() {
   const now = Date.now(); let n = 0;
   for (const x of R.list) { const k = markKey(x); if (!R.seen[k]) { R.seen[k] = now; n++; } }
@@ -870,7 +870,8 @@ function renderDetail() {
   const rowUpd = () => { const tr = document.querySelector(`#rRows tr[data-id="${x.id}"]`); if (tr) { tr.querySelectorAll('.st-b,.nt-b').forEach(e => e.remove()); const a = tr.querySelector('.addr-t'); if (a) { const t = document.createElement('template'); t.innerHTML = watchBadges(x); (tr.querySelector('.copy-a') || a).after(t.content); } const st = tr.querySelector('.star'); if (st) { st.classList.toggle('on', !!R.watch[k]); st.textContent = R.watch[k] ? '★' : '☆'; } } renderDays(); };
   $('rdStatus').onchange = () => { watchPatch(x, { status: $('rdStatus').value }); rowUpd(); const b = $('rdStar'); b.classList.add('on'); b.textContent = '★ Отслеживается'; };
   $('rdNote').onchange = () => { const v = $('rdNote').value.trim(); if (!v && !R.watch[k]) return; watchPatch(x, { note: v }); rowUpd(); const b = $('rdStar'); b.classList.add('on'); b.textContent = '★ Отслеживается'; };
-  $('rdNote').onkeydown = e => { if (e.key === 'Enter') $('rdNote').blur(); };
+  // Enter — сохранить заметку (кроме подтверждения слова в методе ввода — isComposing)
+  $('rdNote').onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); $('rdNote').blur(); } };
   $('rdStar').onclick = () => { toggleWatch(x); rowUpd(); renderDetail(); if (R.day === 'watch') renderResults(false); };
   if ($('rdOpen')) $('rdOpen').onclick = () => pvz.openExternal(x.url);
   if (!was) setTimeout(syncRects, 30);
@@ -1100,14 +1101,15 @@ document.querySelectorAll('.r-table thead th').forEach((th, i) => {
   const b = document.createElement('button'); b.className = 'col-x'; b.title = 'Скрыть столбец'; b.textContent = '×';
   b.onclick = e => { e.stopPropagation(); setHidden(c, true); }; th.appendChild(b);
 });
-$('rColsBtn').onclick = e => {
-  e.stopPropagation();
-  const m = $('rColsMenu'); if (m.classList.contains('on')) { m.classList.remove('on'); return; }
+// меню «Столбцы» — всплывающая панель; список строится при открытии
+$('rColsBtn').addEventListener('click', e => e.stopPropagation());   // щелчок по кнопке не сортирует столбец
+$('rColsMenu').addEventListener('beforetoggle', e => {
+  if (e.newState !== 'open') return;
+  const m = $('rColsMenu');
   m.innerHTML = '<b>Показывать столбцы</b>' + COLS.map(([c, n]) => `<label><input type="checkbox" data-col="${c}"${hiddenCols.includes(String(c)) ? '' : ' checked'}> ${n}</label>`).join('');
   m.querySelectorAll('input').forEach(i => (i.onchange = () => setHidden(i.dataset.col, !i.checked)));
-  m.classList.add('on');
-};
-document.addEventListener('click', e => { if (!e.target.closest('#rColsMenu')) $('rColsMenu').classList.remove('on'); });
+});
+$('rColsMenu').addEventListener('click', e => e.stopPropagation());
 // на небольшом окне, пока столбцы не настраивали, «Проверено» скрыт (есть в карточке) — адресу больше места
 pvz.getCfg().then(c => { hiddenCols = c.resHiddenCols ? c.resHiddenCols.map(String) : (window.innerWidth < 1750 ? ['8'] : []); applyCols(); });
 // сменился размер интерфейса — встроенные карты и сайты на новые места

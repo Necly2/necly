@@ -1065,7 +1065,10 @@ async function selfTest(dir) {
   await J(`$('wzHome').click(); 1`); await W8(1200);
   console.log('JOBBACK', await J(`document.body.dataset.mode + '|' + document.getElementById('jobs').className`));
   await J(`setTab('sync'); openPage('settings'); 1`); await W8(1500); await shot('27-settings-sync');
-  await J(`$('syncHow').click(); 1`); await W8(800); await shot('28-sync-how'); await J(`$('mX').click(); 1`); await W8(300);
+  await J(`$('syncHow').click(); 1`); await W8(800); await shot('28-sync-how');
+  console.log('DIALOG', await J(`JSON.stringify({ open: $('modal').open, modal: $('modal').matches(':modal'), focusIn: $('modal').contains(document.activeElement) })`));
+  await J(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); $('modal').requestClose ? $('modal').requestClose() : $('modal').close(); 1`); await W8(400);
+  console.log('DIALOG2', await J(`JSON.stringify({ open: $('modal').open, cls: $('modal').className })`));
   // поиск по адресу (в облаке карта Ozon может быть недоступна — тогда будет понятная ошибка)
   await J(`document.body.dataset.mode = 'welcome'; 1`); await W8(800); await J(`$('homeAddrQ').value = 'Москва, Тверская улица, 7'; $('homeAddr').requestSubmit(); 1`); await W8(1500); await shot('29-addr-wait');
   for (let i = 0; i < 40; i++) { await W8(1500); if (await J(`!$('aGo').disabled`)) break; }
@@ -1108,7 +1111,8 @@ async function selfTest(dir) {
       // меню «⋯», клавиши, сводка дня, оценка времени в мастере, «Только смешные»
       await J(`openPage('results'); 1`); await W8(1200);
       await J(`$('rMoreBtn').click(); 1`); await W8(400); await shot('14-more-menu');
-      console.log('MORE', await J(`JSON.stringify({open: $('rMoreMenu').classList.contains('on'), dedup: $('rDedup').checked})`));
+      console.log('POPOVER', await J(`JSON.stringify({ more: $('rMoreMenu').matches(':popover-open'), top: Math.round($('rMoreMenu').getBoundingClientRect().top), op: getComputedStyle($('rMoreMenu')).opacity, btnBottom: Math.round($('rMoreBtn').getBoundingClientRect().bottom) })`));
+      console.log('MORE', await J(`JSON.stringify({open: $('rMoreMenu').matches(':popover-open'), dedup: $('rDedup').checked})`));
       await J(`document.body.click(); 1`); await W8(300);
       await J(`(()=>{const z=['голубой','синий','зелёный'];const rows=Array.from({length:14},(_,i)=>({platform:'Ozon',zone:z[i%3],address:'Москва, ул. Тестовая, '+(i%10+1),metro:'м. Пример',note:'',areaMin:30+(i%10),price:50000+i*5000,checked:Date.now()-Math.floor(i/6)*864e5-(i%2)*3600e3,url:'https://x/'+i,lat:55.7+i*0.01,lon:37.5+i*0.01,file:'OZON export_excel ЦИАН 13 '+(1+i%2)+'.xlsx'}));rows.push({platform:'Яндекс',zone:'синий',address:'ул. Тестовая, 2',metro:'',note:'',areaMin:31,price:55000,checked:Date.now(),url:'https://x/y',lat:55.71,lon:37.51,file:'ЯНДЕКС export_excel ЦИАН 13 1.xlsx'});R.marks={};R.seen={'https://x/3':1};R.watch={};prepRows(rows);R.day=dayKey(Date.now());R.up='all';R.jobF='';renderDays();renderResults(true);})(); 1`); await W8(500);
       const key = k => J(`document.dispatchEvent(new KeyboardEvent('keydown', { key: '${k}', code: '${k === ' ' ? 'Space' : k === 's' ? 'KeyS' : k}', bubbles: true })); R.sel`);
