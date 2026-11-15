@@ -1114,3 +1114,12 @@ dialog.modal[open]::backdrop{@starting-style{background-color:rgba(0,0,0,0)}}
 .st-pvz{border-color:#ef4444;color:var(--err-t);background:color-mix(in srgb,#ef4444 10%,transparent)}
 .pvz-b:empty{display:none}
 #rdPvz{flex:none}
+
+/* заголовок: «⋮» (столбцы) и «✓» (сортировка по отмеченным) — разнесены по разным столбцам, цели не меньше 24×24 */
+.r-table th.acts-h{text-align:right;padding-right:4px}
+.r-table .cols-btn{min-inline-size:26px;min-block-size:26px;padding:0;border-radius:7px;font-size:15px;line-height:1;display:inline-grid;place-items:center}
+.r-table .cols-btn:hover{background:var(--hover);color:var(--text)}
+.r-table th.mk .mk-h{display:inline-grid;place-items:center;min-inline-size:26px;min-block-size:26px;border-radius:7px}
+.r-table th.mk:hover .mk-h{background:var(--hover)}
+.seen-all{padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--sub);font-size:12px;font-weight:600;white-space:nowrap}
+.seen-all:hover{border-color:var(--accent);color:var(--accent)}

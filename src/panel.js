@@ -377,10 +377,12 @@ function renderDays() {
   const total = R.rows.filter(x => !(x.dupHidden && R.dedup) && !x.archived && inJob(x)).length;
   $('rDays').innerHTML = b('all', 'Все', total) + days.map(([k, l]) => b(k, l, cnt[k] || 0)).join('') + '<i></i>' + b('marked', '✓ Отмеченные', marked) + b('watch', '★ Отслеживаемые', watched)
     + `<span class="grow"></span><label class="tgl"><input type="checkbox" id="rNew"${R.onlyNew ? ' checked' : ''}><span>● Непросмотренные ${fmtNum(unseen)}</span></label>`
+    + `<button type="button" class="seen-all" id="rSeenAllB" title="Отметить просмотренными все объявления на выбранной вкладке (день, выгрузка, заказ, фильтры)">✓ Прочитано всё</button>`
     + `<label class="tgl"><input type="checkbox" id="rMatch"${R.onlyMatch ? ' checked' : ''}><span>⇄ Есть в нескольких проверках ${fmtNum(matched)}</span></label>`;
   $('rDedup').checked = R.dedup; $('rDupN').textContent = R.dupCount ? '(' + fmtNum(R.dupCount) + ')' : '';
   $('rDays').querySelectorAll('button').forEach(x => (x.onclick = () => { R.day = x.dataset.day; R.up = 'all'; renderDays(); renderResults(true); }));
   $('rNew').onchange = e => { R.onlyNew = e.target.checked; renderResults(true); };
+  $('rSeenAllB').onclick = () => { const n = markAllSeen(); toast(n ? `Отмечено прочитанными: ${fmtNum(n)}` : 'На этой вкладке всё уже прочитано'); };
   $('rMatch').onchange = e => { R.onlyMatch = e.target.checked; renderResults(true); };
   // выгрузки выбранного дня: «Все выгрузки за день» + по кнопке на каждую выгрузку
   const isDay = /^\d{4}-/.test(R.day);
@@ -785,8 +787,9 @@ function closeMore() { if (moreOpen()) $('rMoreMenu').hidePopover(); }
 function markAllSeen() {
   const now = Date.now(); let n = 0;
   for (const x of R.list) { const k = markKey(x); if (!R.seen[k]) { R.seen[k] = now; n++; } }
-  if (!n) return;
+  if (!n) return 0;
   pvz.setCfg({ resSeen: R.seen }); renderDays(); renderResults(false);
+  return n;
 }
 function selectRow(id, fly) {
   R.sel = id; { const x = R.rows[id]; if (x && x.lat != null && (x.flats === undefined || (x.flats && (x.flats.err || (!x.flats.exact && !x.flats.mk))))) pvz.flats(x.lat, x.lon, ozQuery(x)).then(f => { x.flats = f || { n: null }; paintFlats(x); }).catch(() => {}); }
