@@ -224,10 +224,29 @@ async function run(files, ctx) {
     }
   }
 
+  // 2б. ПВЗ Ozon уже есть в том же доме (OpenStreetMap: пункт внутри контура дома) — такой адрес не подходит.
+  // Проверяются только адреса, которые иначе попали бы в итог; OpenStreetMap не ответил — адрес остаётся (не знаем)
+  const inHouse = new Map();
+  if (cfg.pvzHouseCheck !== false) {
+    const keep = [...new Set(data.flatMap(({ rows }) => rows.filter(d => { const r = fresh(d._key) ? cache[d._key] : null; return r && KEEP.includes(r[0]) && r[0] !== 'ошибка запроса'; }).map(d => d._key)))];
+    let flats = null; try { flats = require('./flats'); } catch {}
+    let fails = 0;
+    for (let i = 0; flats && i < keep.length && !isStopped(); i++) {
+      if (i % 5 === 0) status(`Проверяю, нет ли ПВЗ Ozon в том же доме (OpenStreetMap): ${i} из ${keep.length}`);
+      const [la, lo] = keep[i].split(',').map(Number);
+      const f = await flats.lookup(la, lo, null).catch(() => null);
+      // OpenStreetMap не отвечает — не задерживаем проверку зон: оставшиеся адреса без этой проверки
+      if (!f || f.err) { if (++fails >= 3) { (ctx.log || (() => {}))('ПВЗ в доме: OpenStreetMap не отвечает — проверка пропущена'); break; } continue; }
+      fails = 0;
+      const oz = f && (f.pvz || []).filter(p => p.brand === 'Ozon' && p.kind === 'pvz');
+      if (oz && oz.length) inHouse.set(keep[i], oz[0].name || 'Ozon');
+    }
+  }
+
   // 3. файлы результатов
   const j = readJson(journalPath(outDir), { описание: 'Журнал проверки выгрузок на карте Ozon программой PVZ', files: {} });
   const now = new Date();
-  const stats = { 'зелёный': 0, 'синий': 0, 'голубой': 0, 'гарантия < 3 млн': 0, 'ошибка запроса': 0, green_small: 0, no_support: 0, out_zone: 0, unchecked: 0 };
+  const stats = { 'зелёный': 0, 'синий': 0, 'голубой': 0, 'гарантия < 3 млн': 0, 'ошибка запроса': 0, green_small: 0, no_support: 0, pvz_in_house: 0, out_zone: 0, unchecked: 0 };
   const saved = [], manual = [], odd = [];
   const order = Object.fromEntries(KEEP.map((z, i) => [z, i]));
   for (const { f, rows } of data) {
@@ -238,6 +257,7 @@ async function run(files, ctx) {
       const [zone, note, , tiers, near] = r;
       if (!KEEP.includes(zone)) { stats.out_zone++; continue; }
       if (zone === 'зелёный' && Math.max(num(d['Мин. площадь']) || 0, num(d['Макс. площадь']) || 0) < (cfg.ozonGreenMin || GREEN_MIN_AREA_DEF)) { stats.green_small++; continue; }
+      if (inHouse.has(d._key)) { stats.pvz_in_house++; continue; }
       stats[zone]++;
       const sup = supportFor(tiers, Math.max(num(d['Мин. площадь']) || 0, num(d['Макс. площадь']) || 0));
       // площадь меньше ступеней Ozon (или ступень без выплат) — поддержки нет: в итоговый файл не берём

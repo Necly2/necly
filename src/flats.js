@@ -111,27 +111,55 @@ function flatsOf(c, entrances = 0) {
   const n = entrances ? Math.round(c.lv * entrances * 4) : byArea;
   return n ? { n, exact: false, unsure: yes } : null;
 }
-// elements — ответ Overpass (здания с геометрией и узлы-подъезды); → { n, exact, how, levels, entrances } или { n: null, why }
+// пункты выдачи в OpenStreetMap: shop=outpost / amenity=parcel_locker и т. п. с брендом Ozon, Wildberries, Яндекс Маркет
+const BRANDS = [['Ozon', /ozon|озон/i], ['Wildberries', /wildberries|вайлдберриз|\bwb\b/i], ['Яндекс Маркет', /яндекс\s*маркет|yandex\s*market/i]];
+function pvzOf(tags) {
+  const txt = ['brand', 'name', 'operator', 'brand:ru', 'name:ru'].map(k => tags[k] || '').join(' ');
+  const b = BRANDS.find(([, re]) => re.test(txt)); if (!b) return null;
+  const locker = tags.amenity === 'parcel_locker' || /постамат|locker|ozon\s*box/i.test(txt);
+  return { brand: b[0], kind: locker ? 'postamat' : 'pvz', name: tags.name || tags.brand || b[0] };
+}
+// ПВЗ ВНУТРИ контура дома объявления (house — найденное здание { e, rings })
+function pvzInHouse(elements, house) {
+  if (!house) return [];
+  const out = [], seen = new Set();
+  const own = pvzOf(house.t || {}); if (own) out.push(own);   // бренд на самом здании
+  for (const e of elements) {
+    if (e.type !== 'node' || !e.tags || e.lat == null) continue;
+    const p = pvzOf(e.tags); if (!p || seen.has(e.id)) continue;
+    if (house.rings.some(r => inRing(r, e.lat, e.lon))) { seen.add(e.id); out.push(p); }
+  }
+  return out;
+}
+// elements — ответ Overpass (здания с геометрией, узлы-подъезды, пункты выдачи); → { n, exact, how, levels, entrances, pvz } или { n: null, why, pvz }
 function estimate(elements, lat, lon) {
+  const r = estimateFlats(elements, lat, lon);
+  r.pvz = pvzInHouse(elements, r._house); delete r._house;
+  return r;
+}
+function estimateFlats(elements, lat, lon) {
   const entIds = new Set(elements.filter(e => e.type === 'node').map(e => e.id));
   const cand = elements.filter(e => e.type !== 'node' && e.tags && e.tags.building).map(e => {
     const rings = ringsOf(e); if (!rings.length) return null;
     const d = rings.some(r => inRing(r, lat, lon)) ? 0 : Math.min(...rings.map(r => distRing(r, lat, lon)));
-    return { e, t: e.tags, d, area: rings.reduce((a, r) => a + ringArea(r, lat), 0), lv: parseFloat(e.tags['building:levels']) || 0 };
+    return { e, t: e.tags, d, rings, area: rings.reduce((a, r) => a + ringArea(r, lat), 0), lv: parseFloat(e.tags['building:levels']) || 0 };
   }).filter(Boolean).sort((a, b) => a.d - b.d);
   if (!cand.length) return { n: null, why: 'Рядом с точкой объявления нет здания в OpenStreetMap' };
+  // дом объявления для «ПВЗ в доме» — здание, в котором стоит точка, иначе ближайшее (не дальше 25 м)
+  const house = cand[0].d <= 25 ? cand[0] : null;
+  const R = o => Object.assign(o, { _house: house });
   // дом объявления — ближайший; точка объявления часто стоит у фасада или на тротуаре, поэтому берём всё в 12 м от ближайшего
   const near = cand.filter(c => c.d <= cand[0].d + 12);
   const flats = near.find(c => +c.t['building:flats'] > 0);
-  if (flats) return { n: +flats.t['building:flats'], exact: true };
+  if (flats) return R({ n: +flats.t['building:flats'], exact: true });
   const pick = near.find(c => RES.test(c.t.building) && c.lv >= 2) || near.find(c => c.t.building === 'yes' && c.lv >= 5 && !c.t.amenity && !c.t.office && !c.t.shop && !c.t.tourism) || null;
-  if (!pick) return { n: null, why: near.some(c => NOT_RES.test(c.t.building)) ? 'Здание нежилое (по OpenStreetMap)' : 'В OpenStreetMap у дома не указаны тип и этажность' };
+  if (!pick) return R({ n: null, why: near.some(c => NOT_RES.test(c.t.building)) ? 'Здание нежилое (по OpenStreetMap)' : 'В OpenStreetMap у дома не указаны тип и этажность' });
   const entrances = pick.e.type === 'way' ? (pick.e.nodes || []).filter(id => entIds.has(id)).length : 0;
   // подъезды отмечены — этажи × подъезды × 4; иначе по площади дома: этажи × площадь / 62 м² на квартиру (с общими помещениями)
   const f = flatsOf(pick, entrances), n = f ? f.n : 0;
-  if (!n) return { n: null, why: 'Не удалось оценить: нет площади дома' };
-  return { n, exact: false, levels: pick.lv, entrances, unsure: pick.t.building === 'yes',
-    how: (entrances ? `${pick.lv} эт. × ${entrances} подъезд(а) × 4` : `${pick.lv} эт. × ${Math.round(pick.area)} м² / 62 м² на квартиру`) + (pick.t.building === 'yes' ? '; тип дома не указан — возможно, нежилой' : '') };
+  if (!n) return R({ n: null, why: 'Не удалось оценить: нет площади дома' });
+  return R({ n, exact: false, levels: pick.lv, entrances, unsure: pick.t.building === 'yes',
+    how: (entrances ? `${pick.lv} эт. × ${entrances} подъезд(а) × 4` : `${pick.lv} эт. × ${Math.round(pick.area)} м² / ${M2_PER_FLAT} м² на квартиру`) + (pick.t.building === 'yes' ? '; тип дома не указан — возможно, нежилой' : '') });
 }
 // ---------- квартир вокруг помещения (поток клиентов пункта) ----------
 const AROUND_R = 400;   // м — около 5 минут пешком
@@ -191,16 +219,16 @@ async function refineAround(lat, lon, onProgress) {
     return o;
   } finally { refining.delete(k); }
 }
-const V = 3;   // версия способа подсчёта: старые записи пересчитываются
+const V = 4;   // версия способа подсчёта: старые записи пересчитываются (4 — добавлены ПВЗ в доме)
 // address задан — при неточном числе пробуем МинЖКХ (медленно: открывается страница сайта); без адреса — только OpenStreetMap
 async function lookup(lat, lon, address) {
   const k = key(lat, lon), c = load();
-  const old = c[k], fresh = old && Date.now() - old.t < 90 * 864e5 && (old.exact || old.v === V);
+  const old = c[k], fresh = old && Date.now() - old.t < 90 * 864e5 && old.v === V;
   if (fresh && (old.exact || !address || (old.mk && Date.now() - old.mk < 864e5))) return old;
   const run = async () => {
     let res = fresh ? old : null, osmFail = false;
     if (!res) {
-      const j = await overpass(`[out:json][timeout:20];wr(around:40,${lat},${lon})["building"]->.b;.b out body geom;node(w.b)["entrance"];out ids;`);
+      const j = await overpass(`[out:json][timeout:20];wr(around:40,${lat},${lon})["building"]->.b;.b out body geom;node(w.b)["entrance"];out ids;nwr(around:80,${lat},${lon})[~"^(brand|name|operator)$"~"ozon|озон|wildberries|вайлдберриз|яндекс ?маркет|yandex ?market",i];out tags center;`);
       if (j) res = estimate(j.elements || [], lat, lon); else { osmFail = true; res = { n: null }; }
     }
     let mk = old && old.mk;
@@ -219,4 +247,4 @@ async function lookup(lat, lon, address) {
   };
   const p = queue.then(run, run); queue = p.then(() => new Promise(r => setTimeout(r, 1100)), () => {}); return p;
 }
-module.exports = { lookup, estimate, around, lookupAround, refineAround, verifyMingkh, mkState, mingkh, AROUND_R, aroundCached: (lat, lon) => load()['r' + AROUND_R + ':' + key(lat, lon)] || null, cached: (lat, lon) => { const x = load()[key(lat, lon)]; return x && (x.exact || x.v === V) ? x : null; } };
+module.exports = { lookup, estimate, around, lookupAround, refineAround, verifyMingkh, mkState, mingkh, AROUND_R, aroundCached: (lat, lon) => load()['r' + AROUND_R + ':' + key(lat, lon)] || null, cached: (lat, lon) => { const x = load()[key(lat, lon)]; return x && x.v === V ? x : null; }, pvzOf, pvzInHouse };

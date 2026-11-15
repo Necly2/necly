@@ -1111,3 +1111,6 @@ dialog.modal[open]::backdrop{@starting-style{background-color:rgba(0,0,0,0)}}
 .mk-verify{margin-left:6px;font:inherit;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;vertical-align:1px}
 .mk-verify:disabled{opacity:.6;cursor:default}
 .rd-facts small.muted{display:inline;font-size:10.5px}
+.st-pvz{border-color:#ef4444;color:var(--err-t);background:color-mix(in srgb,#ef4444 10%,transparent)}
+.pvz-b:empty{display:none}
+#rdPvz{flex:none}

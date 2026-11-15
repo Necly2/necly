@@ -148,7 +148,7 @@ function ozonText(r) {
   const z = r.stats;
   let t = `Ozon — ${r.reason}. Файлов: ${r.files}` + (r.rowsTotal != null ? `, объявлений: ${r.rowsTotal}` : '') + `, разных адресов: ${r.addresses}` + (r.fromCache ? ` (из них ${r.fromCache} уже проверялись за последние дни — взяты из памяти)` : '') + (r.noCoords ? `; без координат, не проверялись: ${r.noCoords}` : '') + `.\n` +
     `Подходящих: зелёных ≥ ${r.greenMin || 60} м² ${z['зелёный']}, синих ${z['синий']}, голубых ${z['голубой']}, < 3 млн ${z['гарантия < 3 млн']}, ошибка запроса ${z['ошибка запроса']}.\n` +
-    `Не подошли: вне зоны/недоступно ${z.out_zone}, зелёных < ${r.greenMin || 60} м² ${z.green_small}` + (z.no_support ? `, без поддержки под площадь ${z.no_support}` : '') + (z.unchecked ? `; не проверено ${z.unchecked}` : '') + '.';
+    `Не подошли: вне зоны/недоступно ${z.out_zone}, зелёных < ${r.greenMin || 60} м² ${z.green_small}` + (z.no_support ? `, без поддержки под площадь ${z.no_support}` : '') + (z.pvz_in_house ? `, в доме уже есть ПВЗ Ozon ${z.pvz_in_house}` : '') + (z.unchecked ? `; не проверено ${z.unchecked}` : '') + '.';
   if (r.odd && r.odd.length) t += `\nСтранные цены (${r.odd.length}): ` + r.odd.slice(0, 5).join('; ');
   return t;
 }
@@ -492,7 +492,7 @@ function renderResults(fit) {
   $('rRows').innerHTML = shown.map((x, i) => `<tr data-id="${x.id}" class="${x.mark ? 'marked' : ''}${x.id === R.sel ? ' sel' : ''}${R.seen[markKey(x)] ? '' : ' unseen'}${x.also && x.also.length ? ' multi' : ''}">
     <td class="num-c">${i + 1}</td><td>${esc(x.platform)}</td>
     <td>${zoneCell(x)}</td>
-    <td class="addr">${R.seen[markKey(x)] ? '' : '<b class="new-dot" title="Ещё не просмотрено">●</b>'}<span class="addr-t">${esc(x.address)}</span><button class="copy-a" title="Скопировать адрес"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>${x.also && x.also.length ? x.also.map(y => `<span class="also" title="Это помещение есть и в проверке ${esc(y.platform)}"><i style="background:${zoneColor(y)}"></i>${esc(y.platform)}: ${esc(y.zone)}</span>`).join('') : ''}${x.archived ? '<span class="also">из архива</span>' : ''}${watchBadges(x)}${x.metro ? `<small>${esc(x.metro)}</small>` : ''}${x.noteShow ? `<small class="note">${esc(x.noteShow)}</small>` : ''}</td>
+    <td class="addr">${R.seen[markKey(x)] ? '' : '<b class="new-dot" title="Ещё не просмотрено">●</b>'}<span class="addr-t">${esc(x.address)}</span><button class="copy-a" title="Скопировать адрес"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button>${x.also && x.also.length ? x.also.map(y => `<span class="also" title="Это помещение есть и в проверке ${esc(y.platform)}"><i style="background:${zoneColor(y)}"></i>${esc(y.platform)}: ${esc(y.zone)}</span>`).join('') : ''}${x.archived ? '<span class="also">из архива</span>' : ''}<span class="pvz-b" data-pvz="${x.id}">${pvzBadges(x)}</span>${watchBadges(x)}${x.metro ? `<small>${esc(x.metro)}</small>` : ''}${x.noteShow ? `<small class="note">${esc(x.noteShow)}</small>` : ''}</td>
     <td class="n">${area(x)}</td><td class="n flats" data-flats="${x.id}">${flatsCell(x)}</td><td class="n">${x.price != null ? fmtNum(x.price) + ' ₽' : ''}${x.money ? `<small class="pay">выплата ${fmtNum(x.money)} ₽</small>` : ''}</td>
     <td>${fmtTime(x.checked)}</td><td class="acts">${x.url ? '<a class="open" href="#" title="Открыть объявление в браузере">↗</a>' : ''}<button class="star${R.watch[markKey(x)] ? ' on' : ''}" title="${R.watch[markKey(x)] ? 'Убрать из отслеживаемых' : 'Отслеживать'}">${R.watch[markKey(x)] ? '★' : '☆'}</button></td><td class="mk"><label class="mbox"><input type="checkbox"${x.mark ? ' checked' : ''}><span></span></label></td></tr>`).join('');
   $('rMore').textContent = list.length > shown.length ? `Показаны первые ${fmtNum(shown.length)} — уточните фильтры.` : (list.length ? '' : 'Ничего не найдено — измените фильтры или день.');
@@ -845,6 +845,13 @@ function watchPatch(x, patch) {
   Object.assign(R.watch[k], patch, { upd: Date.now() });
   saveWatch();
 }
+// пункты выдачи в том же доме (OpenStreetMap, при подсчёте квартир): ПВЗ Ozon — помещение не подходит
+function pvzBadges(x) {
+  const p = (x.flats && x.flats.pvz) || []; if (!p.length) return '';
+  const oz = p.filter(q => q.brand === 'Ozon' && q.kind === 'pvz'), other = p.filter(q => !(q.brand === 'Ozon' && q.kind === 'pvz'));
+  return (oz.length ? '<span class="st-b st-pvz" title="В этом доме уже есть пункт выдачи Ozon (по OpenStreetMap) — помещение не подходит">ПВЗ Ozon в доме</span>' : '')
+    + (other.length ? `<span class="st-b" title="В доме (по OpenStreetMap): ${esc(other.map(q => q.brand + (q.kind === 'postamat' ? ' — постамат' : ' — ПВЗ')).join(', '))}">в доме: ${esc([...new Set(other.map(q => q.brand))].join(', '))}</span>` : '');
+}
 function watchBadges(x) {
   const w = R.watch[markKey(x)]; if (!w) return '';
   const pc = w.pc || {};
@@ -866,7 +873,7 @@ function renderDetail() {
   const price = pc.gone ? fact('Цена', x.price != null ? fmtNum(x.price) + ' ₽' : '—', '<em class="rd-gone">объявление снято</em>')
     : pc.was && pc.price && pc.was !== pc.price ? fact('Цена', fmtNum(pc.price) + ' ₽', `<em class="${pc.price < pc.was ? 'rd-down' : 'rd-up'}">была ${fmtNum(pc.was)} ₽</em>`)
     : fact('Цена', x.price != null ? fmtNum(x.price) + ' ₽' : '—', x.price != null ? 'в месяц' : '');
-  el.innerHTML = `<div class="rd-top"><span class="zb"><i style="background:${zoneColor(x)}"></i>${esc(x.platform)} · ${esc(x.zone)}</span><b class="rd-addr" title="${esc(x.address)}">${esc(x.address)}</b></div>
+  el.innerHTML = `<div class="rd-top"><span class="zb"><i style="background:${zoneColor(x)}"></i>${esc(x.platform)} · ${esc(x.zone)}</span><b class="rd-addr" title="${esc(x.address)}">${esc(x.address)}</b><span id="rdPvz">${pvzBadges(x)}</span></div>
     <div class="rd-meta">${[x.metro, x.source, x.date ? 'объявление от ' + x.date : '', (x.also || []).map(y => `${y.platform}: ${y.zone}`).join(', ')].filter(Boolean).map(esc).join(' · ')}</div>
     <div class="rd-facts">${fact('Площадь', area)}${price}${sup}${x.money ? fact('Выплата', fmtNum(x.money) + ' ₽') : ''}${x.lat != null ? `<div><small>Квартир в доме</small><b id="rdFlats">${flatsCell(x) || '—'}</b></div><div><small>Квартир в 400 м</small><b id="rdAround">${aroundCell(x)}</b></div>` : ''}${x.near != null ? fact('Ближайший ПВЗ Ozon', fmtNum(x.near) + ' м') : ''}
       <span class="rd-btns"><button class="ghost sm${R.watch[k] ? ' on' : ''}" id="rdStar">${R.watch[k] ? '★ Отслеживается' : '☆ Отслеживать'}</button>${x.url ? '<button class="ghost sm" id="rdOpen">Открыть ↗</button>' : ''}</span></div>
@@ -969,7 +976,8 @@ async function loadFlats() {
 }
 function paintFlats(only) {
   for (const x of only ? [only] : R.list.slice(0, 1000)) { const td = document.querySelector(`td[data-flats="${x.id}"]`); if (td) td.innerHTML = flatsCell(x); }
-  const e = $('rdFlats'); if (e && R.sel != null && R.rows[R.sel] && (!only || only === R.rows[R.sel])) e.innerHTML = flatsCell(R.rows[R.sel]) || '—';
+  const e = $('rdFlats'); if (e && R.sel != null && R.rows[R.sel] && (!only || only === R.rows[R.sel])) { e.innerHTML = flatsCell(R.rows[R.sel]) || '—'; const pv = $('rdPvz'); if (pv) pv.innerHTML = pvzBadges(R.rows[R.sel]); }
+  for (const x of only ? [only] : R.list.slice(0, 1000)) { const b = document.querySelector(`[data-pvz="${x.id}"]`); if (b) b.innerHTML = pvzBadges(x); }
 }
 // просмотренные: объявление считается просмотренным, когда вы его выбрали или открыли
 let seenT = null;

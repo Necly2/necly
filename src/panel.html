@@ -225,6 +225,7 @@
       <div class="set-row"><span class="muted" id="setPriceInfo"></span><button class="ghost sm" id="setPriceNow">Проверить сейчас</button></div>
     </div>
     <div class="box" data-tab="work"><div class="box-h">Проверка Ozon</div>
+      <label class="switch"><input type="checkbox" id="setPvzHouse"><span></span><span class="lbl">Не брать адреса, где в доме уже есть ПВЗ Ozon <small>по OpenStreetMap: пункт Ozon отмечен внутри контура того же дома. Отмечены не все пункты — часть таких адресов всё равно попадёт в итог</small></span></label>
       <div class="set-row"><span>Зелёная зона — площадь от, м²<small class="muted"> (Ozon сейчас пишет «от 60 м²»)</small></span><input type="text" class="num" id="setGreenMin" inputmode="numeric" style="width:90px"></div>
       <div class="set-row"><span>Помнить результаты проверки</span><select id="setCache"><option value="1">3 дня</option><option value="0">не помнить</option></select></div>
       <label class="switch"><input type="checkbox" id="setTestSup"><span></span><span class="lbl">В «Результатах» вместо цвета зоны — поддержка Ozon под площадь объявления <small>сумма в месяц для ступени площади (25–40, 40–60, 60+ м²), цвет зоны — кружок рядом; если площади нет или адрес проверялся старой версией — название зоны</small></span></label>

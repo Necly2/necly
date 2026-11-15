@@ -36,4 +36,13 @@ const els = [
 r = around(els, lat0, lon0, 400);
 assert.equal(r.exact, 200); assert.equal(r.houses, 1); assert.equal(r.unknown, 1); assert.equal(r.buildings, 3);
 assert.ok(r.est > 80 && r.est < 100, JSON.stringify(r)); assert.equal(r.n, r.exact + r.est + 1);
+// ---- ПВЗ в доме: только внутри контура дома объявления ----
+const pt = (id, la, lo, tags) => ({ type: 'node', id, lat: lat0 + la * mLat, lon: lon0 + lo * mLon, tags });
+const bld = way(21, { building: 'apartments', 'building:levels': '9' }, rect(-30, -6, 60, 12));
+r = estimate([bld, pt(31, 0, 20, { shop: 'outpost', brand: 'Ozon', name: 'Ozon' }), pt(32, 30, 0, { shop: 'outpost', brand: 'Wildberries' })], lat0, lon0);
+assert.deepEqual(r.pvz.map(x => x.brand), ['Ozon'], 'WB через дорогу не в доме: ' + JSON.stringify(r.pvz));
+r = estimate([bld, pt(33, 2, -10, { amenity: 'parcel_locker', brand: 'Ozon Box' }), pt(34, 1, 5, { shop: 'outpost', name: 'Яндекс Маркет' })], lat0, lon0);
+assert.deepEqual(r.pvz.map(x => x.brand + ':' + x.kind), ['Ozon:postamat', 'Яндекс Маркет:pvz']);
+r = estimate([bld, pt(35, 0, 0, { shop: 'clothes', name: 'Одежда' })], lat0, lon0); assert.equal(r.pvz.length, 0);
+r = estimate([way(22, { building: 'retail', shop: 'outpost', brand: 'Ozon' }, rect(-10, -5, 20, 10))], lat0, lon0); assert.equal(r.pvz[0].brand, 'Ozon');
 console.log('FLATS OK');

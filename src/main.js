@@ -587,7 +587,7 @@ async function pumpOzon() {
       if (results.length) journal.addHistory({ type: 'check', ok: true, dur: Date.now() - t0, done: results.reduce((a, r) => a + Math.max(0, (r.addresses || 0) - (r.fromCache || 0)), 0), title: results.map(r => r.label).join(', '),
         total: results.reduce((a, r) => a + (r.addresses || 0), 0), files: results.flatMap(r => r.saved || []),
         reason: results.map(r => `${r.label}: ${r.reason}`).join('; '),
-        details: results.map(r => ({ label: r.label, addresses: r.addresses, suitable: r.kind === 'ozon' ? Object.entries(r.stats || {}).filter(([k]) => !['green_small', 'no_support', 'out_zone', 'unchecked'].includes(k)).reduce((a, [, v]) => a + v, 0) : r.main, unchecked: r.unchecked || (r.stats && r.stats.unchecked) || 0 })) });
+        details: results.map(r => ({ label: r.label, addresses: r.addresses, suitable: r.kind === 'ozon' ? Object.entries(r.stats || {}).filter(([k]) => !['green_small', 'no_support', 'pvz_in_house', 'out_zone', 'unchecked'].includes(k)).reduce((a, [, v]) => a + v, 0) : r.main, unchecked: r.unchecked || (r.stats && r.stats.unchecked) || 0 })) });
       for (const r of results) for (const e of (r.errors || [])) journal.logError(r.label, e);
     }
   } catch (e) {
@@ -1146,6 +1146,7 @@ async function selfTest(dir) {
         const { BrowserWindow: BW } = require('electron'), vw = BW.getAllWindows().find(w => /МинЖКХ/.test(w.getTitle()) || /mingkh/.test(w.webContents.getURL()));
         if (vw) { fs.writeFileSync(path.join(dir, '35-mingkh-verify.png'), (await vw.webContents.capturePage()).toPNG()); console.log('MKWIN', vw.isVisible(), vw.webContents.getTitle()); vw.close(); }
         await v; }
+      console.log('PVZHOUSE', await J(`(() => { const x = R.rows[R.sel]; x.flats = Object.assign({}, x.flats, { n: 120, exact: false, pvz: [{ brand: 'Ozon', kind: 'pvz', name: 'Ozon' }, { brand: 'Wildberries', kind: 'pvz', name: 'WB' }] }); paintFlats(x); return JSON.stringify({ row: (document.querySelector('[data-pvz="' + x.id + '"]') || {}).textContent, card: ($('rdPvz') || {}).textContent }); })()`)); await shot('36-pvz-house');
       console.log('AROUND', await J(`(async () => { const x = R.rows[R.sel]; for (let i = 0; i < 20 && (x.around === undefined || x.aroundBusy); i++) await new Promise(r => setTimeout(r, 500)); const real = JSON.stringify(x.around); x.around = { n: 5230, exact: 3000, est: 2229, houses: 1, buildings: 24, unknown: 2, r: 400 }; renderDetail(); const c = $('rdAround').firstElementChild; return JSON.stringify({ real, cell: $('rdAround').textContent, tip: c && c.title }); })()`));
       await shot('34-around');
       console.log('DETAIL', await J(`JSON.stringify({ on: $('rDetail').classList.contains('on'), w: (w => ({ st: w.status, note: w.note }))(R.watch[markKey(R.rows[R.sel])] || {}), badge: !!document.querySelector('#rRows .st-b'), filt: $('rFilters').classList.contains('on'), tools: Math.round($('rMapCol').querySelector('.r-maptools').getBoundingClientRect().height) })`));
