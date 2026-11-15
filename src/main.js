@@ -988,7 +988,14 @@ ipcMain.handle('jokes', async (_e, best) => {
 });
 ipcMain.handle('vpnCheck', () => require('./vpn').check());
 ipcMain.handle('flats', (_e, lat, lon, addr) => require('./flats').lookup(lat, lon, addr));
-ipcMain.handle('flatsAround', (_e, lat, lon) => require('./flats').lookupAround(lat, lon));
+// квартир в 400 м: сразу — по OpenStreetMap, затем в фоне уточнение по МинЖКХ (ход — событием aroundProgress)
+ipcMain.handle('flatsAround', async (_e, lat, lon) => {
+  const f = require('./flats'), r = await f.lookupAround(lat, lon);
+  if (r && !r.err && r.cands && r.cands.length) f.refineAround(lat, lon, o => send('aroundProgress', { lat, lon, a: o })).catch(() => {});
+  return r;
+});
+// МинЖКХ попросил подтвердить «не робот» — окно сайта, проверку проходит человек
+ipcMain.handle('mingkhVerify', () => require('./flats').verifyMingkh(win));
 ipcMain.handle('flatsAroundCached', (_e, pts) => { const f = require('./flats'); return pts.map(([a, b]) => f.aroundCached(a, b)); });
 ipcMain.handle('flatsCached', (_e, pts) => { const f = require('./flats'); return pts.map(([a, b]) => f.cached(a, b)); });
 ipcMain.handle('setAutostart', (_e, on) => { const c = Object.assign(loadCfg(), { autostart: !!on }); saveCfg(c); scheduler.applyAutostart(on); return true; });
@@ -1127,6 +1134,12 @@ async function selfTest(dir) {
       // карточка объявления под картой, статус и заметка, кнопка «Фильтры»
       await J(`selectRow(R.list[1].id, false); 1`); await W8(700);
       await J(`$('rdStatus').value = 'call'; $('rdStatus').onchange(); $('rdNote').value = 'Тест: перезвонить в 15:00'; $('rdNote').onchange(); $('rFiltBtn').click(); 1`); await W8(900); await shot('31-results-detail');
+      { const f = require('./flats'), m = await f.mingkh('Москва, Тверская улица, 7').catch(e => ({ err: e.message }));
+        console.log('MK', JSON.stringify(m), JSON.stringify({ captcha: f.mkState.captcha, url: (f.mkState.url || '').slice(0, 60) }));
+        const v = f.verifyMingkh(win); await W8(5000);
+        const { BrowserWindow: BW } = require('electron'), vw = BW.getAllWindows().find(w => /МинЖКХ/.test(w.getTitle()) || /mingkh/.test(w.webContents.getURL()));
+        if (vw) { fs.writeFileSync(path.join(dir, '35-mingkh-verify.png'), (await vw.webContents.capturePage()).toPNG()); console.log('MKWIN', vw.isVisible(), vw.webContents.getTitle()); vw.close(); }
+        await v; }
       console.log('AROUND', await J(`(async () => { const x = R.rows[R.sel]; for (let i = 0; i < 20 && (x.around === undefined || x.aroundBusy); i++) await new Promise(r => setTimeout(r, 500)); const real = JSON.stringify(x.around); x.around = { n: 5230, exact: 3000, est: 2229, houses: 1, buildings: 24, unknown: 2, r: 400 }; renderDetail(); const c = $('rdAround').firstElementChild; return JSON.stringify({ real, cell: $('rdAround').textContent, tip: c && c.title }); })()`));
       await shot('34-around');
       console.log('DETAIL', await J(`JSON.stringify({ on: $('rDetail').classList.contains('on'), w: (w => ({ st: w.status, note: w.note }))(R.watch[markKey(R.rows[R.sel])] || {}), badge: !!document.querySelector('#rRows .st-b'), filt: $('rFilters').classList.contains('on'), tools: Math.round($('rMapCol').querySelector('.r-maptools').getBoundingClientRect().height) })`));

@@ -85,5 +85,7 @@ contextBridge.exposeInMainWorld('pvz', {
   flats: (a, b, c) => ipcRenderer.invoke('flats', a, b, c),
   flatsCached: pts => ipcRenderer.invoke('flatsCached', pts),
   flatsAround: (lat, lon) => ipcRenderer.invoke('flatsAround', lat, lon),
+  onAroundProgress: cb => ipcRenderer.on('aroundProgress', (_e, d) => cb(d)),
+  mingkhVerify: () => ipcRenderer.invoke('mingkhVerify'),
   flatsAroundCached: pts => ipcRenderer.invoke('flatsAroundCached', pts)
 });

@@ -908,9 +908,11 @@ function aroundCell(x) {
   const a = x.around;
   if (a === undefined || a === null) return '<span class="muted">…</span>';
   if (a.err) return `<span class="muted" title="${esc(a.err)}">—</span>`;
-  if (!a.buildings) return `<span class="muted" title="Рядом нет жилых домов с данными в OpenStreetMap${a.unknown ? ` (жилых без этажности: ${a.unknown})` : ''}">0</span>`;
-  const t = [`Жилых домов в ${a.r} м: ${a.buildings}${a.houses ? ` (частных: ${a.houses})` : ''}`, a.exact ? `точно известно: ${fmtNum(a.exact)} кв.` : '', a.est ? `оценка по этажам и площади: ${fmtNum(a.est)} кв.` : '', a.unknown ? `ещё ${a.unknown} жилых без этажности — не посчитаны` : ''].filter(Boolean).join('\n');
-  return `<span title="${esc(t)}">${a.est || a.unknown ? '≈' : ''}${fmtNum(a.n)}</span>`;
+  const busy = a.cands && a.cands.length && !a.captcha && (a.mkDone || 0) < Math.min(a.cands.length, 30) ? ` <small class="muted">ЖКХ ${a.mkDone || 0}/${Math.min(a.cands.length, 30)}</small>` : '';
+  const cap = a.captcha ? ' <button type="button" class="mk-verify" title="МинЖКХ просит подтвердить, что вы не робот — откроется окно сайта, решите пример">уточнить по ЖКХ</button>' : '';
+  if (!a.buildings) return `<span class="muted" title="Рядом нет жилых домов с данными${a.unknown ? ` (жилых без этажности: ${a.unknown})` : ''}">0</span>${busy}${cap}`;
+  const t = [`Жилых домов в ${a.r} м: ${a.buildings}${a.houses ? ` (частных: ${a.houses})` : ''}`, a.exact ? `точно известно: ${fmtNum(a.exact)} кв.${a.mkExact ? ` (из МинЖКХ — домов: ${a.mkExact})` : ''}` : '', a.est ? `оценка по этажам и площади: ${fmtNum(a.est)} кв.` : '', a.unknown ? `ещё ${a.unknown} жилых без данных — не посчитаны` : ''].filter(Boolean).join('\n');
+  return `<span title="${esc(t)}">${a.est || a.unknown ? '≈' : ''}${fmtNum(a.n)}</span>${busy}${cap}`;
 }
 async function loadAround(x) {
   if (x.aroundBusy) return; x.aroundBusy = true;
@@ -920,11 +922,29 @@ async function loadAround(x) {
   } finally { x.aroundBusy = false; }
   const e = $('rdAround'); if (e && R.rows[R.sel] === x) e.innerHTML = aroundCell(x);
 }
+// уточнение по МинЖКХ идёт в фоне — обновляем открытую карточку
+pvz.onAroundProgress(d => {
+  for (const x of R.rows) if (x.lat === d.lat && x.lon === d.lon) x.around = d.a;
+  const x = R.rows[R.sel], e = $('rdAround'); if (e && x && x.lat === d.lat && x.lon === d.lon) e.innerHTML = aroundCell(x);
+});
+// «уточнить по ЖКХ»: окно МинЖКХ, вы решаете пример — затем подсчёт продолжается
+document.addEventListener('click', async e => {
+  const b = e.target.closest('.mk-verify'); if (!b || !b.closest('#results')) return;
+  e.stopPropagation(); b.disabled = true; b.textContent = 'жду проверку…';
+  const ok = await pvz.mingkhVerify().catch(() => false);
+  const x = R.rows[R.sel];
+  if (ok && x && x.lat != null) {
+    if (x.flats && x.flats.captcha) { x.flats = await pvz.flats(x.lat, x.lon, ozQuery(x)).catch(() => x.flats); paintFlats(x); }
+    x.around = await pvz.flatsAround(x.lat, x.lon).catch(() => x.around); const el = $('rdAround'); if (el) el.innerHTML = aroundCell(x);
+  } else if (!ok) { b.disabled = false; b.textContent = 'уточнить по ЖКХ'; }
+}, true);
 // квартир в доме (OpenStreetMap): сначала из кэша, по выбору строки — запрос; видимые строки догружаются по одной
 function flatsCell(x) {
   const f = x.flats; if (x.lat == null) return '';
   if (f === undefined) return '<span class="muted">…</span>';
-  if (!f || f.n == null) return `<span class="muted" title="${f && f.err ? esc(f.err) : f && f.why ? esc(f.why) : 'Нет данных о доме в OpenStreetMap и МинЖКХ'}">—</span>`;
+  const cap = f && f.captcha && R.rows[R.sel] === x ? ' <button type="button" class="mk-verify" title="МинЖКХ просит подтвердить, что вы не робот — откроется окно сайта, решите пример">уточнить по ЖКХ</button>' : '';
+  if (!f || f.n == null) return `<span class="muted" title="${f && f.err ? esc(f.err) : f && f.why ? esc(f.why) : 'Нет данных о доме в OpenStreetMap и МинЖКХ'}">—</span>${cap}`;
+  if (cap) return `<span title="Оценка по OpenStreetMap">≈${fmtNum(f.n)}</span>${cap}`;
   return f.exact ? `<span title="Источник: ${esc(f.src || 'OpenStreetMap')}">${fmtNum(f.n)}</span>` : `<span title="Оценка по OpenStreetMap: ${esc(f.how || `${f.levels} эт. × ${f.entrances || 1} подъезд(а) × 4`)}. Выберите объявление — уточню по МинЖКХ">≈${fmtNum(f.n)}</span>`;
 }
 let flatsBusy = false;

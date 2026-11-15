@@ -1107,3 +1107,7 @@ dialog.modal[open]::backdrop{@starting-style{background-color:rgba(0,0,0,0)}}
 .net-tip:popover-open{opacity:1;@starting-style{opacity:0}}
 .r-table th:nth-child(3){width:112px}
 .r-table .zb.net{white-space:nowrap}
+
+.mk-verify{margin-left:6px;font:inherit;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;vertical-align:1px}
+.mk-verify:disabled{opacity:.6;cursor:default}
+.rd-facts small.muted{display:inline;font-size:10.5px}

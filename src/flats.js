@@ -26,28 +26,60 @@ async function overpass(q, ms = 15000) {
 const dist = (a, b, c, d) => Math.hypot((a - c) * 111320, (b - d) * 111320 * Math.cos(a * Math.PI / 180));
 // запасной источник — МинЖКХ (dom.mingkh.ru): поиск дома по адресу в скрытом окне браузера (сайт проверяет «не робот ли»)
 let mkWin = null;
+const ROBOT = /не робот/i;
+// МинЖКХ иногда просит подтвердить, что вы не робот (простой пример). Программа её НЕ решает сама:
+// ответ { captcha: true } — интерфейс показывает кнопку, и вы проходите проверку в окне сайта (verifyMingkh)
+const mkState = { captcha: false, at: 0 };
+const mkFull = address => {
+  const q = String(address || '').replace(/^\s*(г\.?\s*)?москва[, ]*/i, '').trim();
+  if (!q) return '';
+  return /област|обл\.|г\.о\.|гор\. ?округ/i.test(q) ? q : 'Москва, ' + q;   // адреса Подмосковья — без «Москва,»
+};
 async function mingkh(address) {
+  const full = mkFull(address); if (!full) return null;
+  // ответы МинЖКХ по адресу запоминаются на 180 дней (число квартир в доме не меняется)
+  const c = load(), ck = 'mk:' + full.toLowerCase();
+  if (c[ck] && Date.now() - c[ck].t < 180 * 864e5) return c[ck].n ? { n: c[ck].n, exact: true, src: 'МинЖКХ', url: c[ck].url } : null;
+  if (mkState.captcha) return { captcha: true };
   const { BrowserWindow } = require('electron');
   if (!mkWin || mkWin.isDestroyed()) mkWin = new BrowserWindow({ show: false, width: 1200, height: 900, webPreferences: { partition: 'persist:maps', backgroundThrottling: false } });
   const wc = mkWin.webContents, sleep = ms => new Promise(r => setTimeout(r, ms));
-  const q = String(address || '').replace(/^\s*(г\.?\s*)?москва[, ]*/i, '');
-  if (!q) return null;
-  const full = /област|обл\.|г\.о\.|гор\. ?округ/i.test(q) ? q : 'Москва, ' + q;   // адреса Подмосковья — без «Москва,»
+  const remember = (n, url) => { c[ck] = { t: Date.now(), n: n || 0, url: url || '' }; save(); };
   await wc.loadURL('https://dom.mingkh.ru/search?searchtype=house&address=' + encodeURIComponent(full)).catch(() => {});
   let link = null;
-  for (let i = 0; i < 12 && !link; i++) {
+  for (let i = 0; i < 12 && link === null; i++) {
     await sleep(1500);
-    link = await wc.executeJavaScript(`(() => { if (/не робот/i.test(document.title)) return null; const a = [...document.querySelectorAll('a[href]')].find(a => /\/[a-z-]+\/[a-z-]+\/\d+\/?$/.test(a.getAttribute('href')) && /\d/.test(a.textContent)); return a ? a.href : (document.body && /ничего не найдено|не найден/i.test(document.body.innerText) ? '' : null); })()`).catch(() => null);
+    if (ROBOT.test(wc.getTitle())) { mkState.captcha = true; mkState.at = Date.now(); mkState.url = wc.getURL(); return { captcha: true }; }
+    link = await wc.executeJavaScript(`(() => { const a = [...document.querySelectorAll('a[href]')].find(a => /\/[a-z-]+\/[a-z-]+\/\d+\/?$/.test(a.getAttribute('href')) && /\d/.test(a.textContent)); return a ? a.href : (document.body && /ничего не найдено|не найден/i.test(document.body.innerText) ? '' : null); })()`).catch(() => null);
   }
+  if (link === '') { remember(0); return null; }   // такого дома в МинЖКХ нет
   if (!link) return null;
   await wc.loadURL(link).catch(() => {});
   for (let i = 0; i < 10; i++) {
     await sleep(1200);
-    const n = await wc.executeJavaScript(`(() => { const t = document.body ? document.body.innerText : ''; if (/не робот/i.test(document.title)) return null;
+    if (ROBOT.test(wc.getTitle())) { mkState.captcha = true; mkState.at = Date.now(); mkState.url = wc.getURL(); return { captcha: true }; }
+    const n = await wc.executeJavaScript(`(() => { const t = document.body ? document.body.innerText : '';
       const m = t.match(/(Количество квартир|Жилых помещений|Количество жилых помещений)[^\d\n]{0,20}(\d[\d\s]*)/i); return m ? +m[2].replace(/\s/g, '') : 0; })()`).catch(() => null);
-    if (n !== null) return n > 0 ? { n, exact: true, src: 'МинЖКХ', url: link } : null;
+    if (n !== null) { remember(n, link); return n > 0 ? { n, exact: true, src: 'МинЖКХ', url: link } : null; }
   }
   return null;
+}
+// окно МинЖКХ для проверки «не робот» — проходит человек; закрывается само, когда сайт пропустил (или по крестику)
+let vWin = null;
+function verifyMingkh(parent) {
+  const { BrowserWindow } = require('electron');
+  if (vWin && !vWin.isDestroyed()) { vWin.focus(); return vWin.__done; }
+  vWin = new BrowserWindow({ width: 760, height: 560, parent: parent || undefined, title: 'МинЖКХ — подтвердите, что вы не робот', autoHideMenuBar: true, webPreferences: { partition: 'persist:maps' } });
+  vWin.loadURL(mkState.url || 'https://dom.mingkh.ru/search?searchtype=house&address=' + encodeURIComponent('Москва, Тверская улица, 7')).catch(() => {});
+  vWin.__done = new Promise(res => {
+    const t = setInterval(() => {
+      if (!vWin || vWin.isDestroyed()) { clearInterval(t); res(!mkState.captcha); return; }
+      const title = vWin.webContents.getTitle();
+      if (title && !ROBOT.test(title) && !/^about:|^$/.test(title) && !vWin.webContents.isLoading()) { mkState.captcha = false; clearInterval(t); setTimeout(() => { try { vWin.close(); } catch {} }, 600); res(true); }
+    }, 700);
+    vWin.on('closed', () => { vWin = null; });
+  });
+  return vWin.__done;
 }
 // ---------- выбор здания и оценка числа квартир (чистые функции — проверяются tools/flats_test.js) ----------
 const M = (lat, lon, lat0) => [(lon) * 111320 * Math.cos(lat0 * Math.PI / 180), lat * 111320];   // градусы → метры (локально)
@@ -106,17 +138,20 @@ const AROUND_R = 400;   // м — около 5 минут пешком
 // elements — здания с геометрией в радиусе; считаются дома, центр которых ближе r
 // → { n, exact (квартир в домах с точным числом), est, houses, buildings, unknown (жилые без этажности), r }
 function around(elements, lat, lon, r = AROUND_R) {
-  const o = { n: 0, exact: 0, est: 0, houses: 0, buildings: 0, unknown: 0, r };
+  const o = { n: 0, exact: 0, est: 0, houses: 0, buildings: 0, unknown: 0, r, cands: [] };
+  // адрес дома из OpenStreetMap — для запроса в МинЖКХ (без номера дома не спрашиваем)
+  const addrOf = t => { const st = t['addr:street'], hn = t['addr:housenumber']; if (!st || !hn) return ''; const city = t['addr:city'] || '';
+    return (city && !/москва/i.test(city) ? 'Московская обл., ' + city + ', ' : '') + st + ', ' + hn; };
   for (const e of elements) {
     if (e.type === 'node' || !e.tags || !e.tags.building) continue;
     const rings = ringsOf(e); if (!rings.length) continue;
     const pts = rings[0], cLat = pts.reduce((a, p) => a + p[0], 0) / pts.length, cLon = pts.reduce((a, p) => a + p[1], 0) / pts.length;
     if (dist(lat, lon, cLat, cLon) > r) continue;
     const c = { t: e.tags, lv: parseFloat(e.tags['building:levels']) || 0, area: rings.reduce((a, g) => a + ringArea(g, lat), 0) };
-    const f = flatsOf(c);
-    if (!f) { if (RES.test(e.tags.building)) o.unknown++; continue; }
+    const f = flatsOf(c), a = addrOf(e.tags);
+    if (!f) { if (RES.test(e.tags.building)) { o.unknown++; if (a) o.cands.push({ a, est: 0 }); } continue; }
     o.n += f.n; o.buildings++;
-    if (f.house) o.houses++; else if (f.exact) o.exact += f.n; else o.est += f.n;
+    if (f.house) o.houses++; else if (f.exact) o.exact += f.n; else { o.est += f.n; if (a) o.cands.push({ a, est: f.n }); }
   }
   return o;
 }
@@ -132,6 +167,30 @@ async function lookupAround(lat, lon) {
   const p = aqueue.then(run, run); aqueue = p.then(() => new Promise(r => setTimeout(r, 1500)), () => {}); return p;
 }
 let aqueue = Promise.resolve();
+// уточнение «вокруг» по МинЖКХ: дома с оценкой или без этажности — по адресу; самые крупные первыми, не больше 30 за раз.
+// onProgress(результат) — после каждого дома; капча — остановка (result.captcha), продолжится после проверки
+const refining = new Set();
+async function refineAround(lat, lon, onProgress) {
+  const k = 'r' + AROUND_R + ':' + key(lat, lon), c = load(), o = c[k];
+  if (!o || !o.cands || refining.has(k)) return o;
+  refining.add(k);
+  try {
+    o.mk = o.mk || {};   // адрес → квартир по МинЖКХ (0 — не нашлось)
+    const todo = o.cands.filter(x => !(x.a in o.mk)).sort((a, b) => (b.est || 1e9) - (a.est || 1e9)).slice(0, 30);
+    o.mkTotal = o.cands.length; delete o.captcha;
+    for (const x of todo) {
+      const m = await mingkh(x.a).catch(() => null);
+      if (m && m.captcha) { o.captcha = true; break; }
+      o.mk[x.a] = m && m.n ? m.n : 0;
+      if (m && m.n) { o.exact += m.n; o.mkExact = (o.mkExact || 0) + 1; if (x.est) o.est -= x.est; else { o.unknown--; o.buildings++; } o.n = o.exact + o.est + o.houses; }
+      o.mkDone = Object.keys(o.mk).length; save();
+      onProgress && onProgress(o);
+      await new Promise(r => setTimeout(r, 1500));
+    }
+    o.mkDone = Object.keys(o.mk).length; save(); onProgress && onProgress(o);
+    return o;
+  } finally { refining.delete(k); }
+}
 const V = 3;   // версия способа подсчёта: старые записи пересчитываются
 // address задан — при неточном числе пробуем МинЖКХ (медленно: открывается страница сайта); без адреса — только OpenStreetMap
 async function lookup(lat, lon, address) {
@@ -145,11 +204,19 @@ async function lookup(lat, lon, address) {
       if (j) res = estimate(j.elements || [], lat, lon); else { osmFail = true; res = { n: null }; }
     }
     let mk = old && old.mk;
-    if (!res.exact && address) { mk = Date.now(); try { const m = await mingkh(address); if (m) res = m; } catch {} }
+    if (!res.exact && address) {
+      try {
+        const m = await mingkh(address);
+        if (m && m.captcha) res = Object.assign({}, res, { captcha: true });   // нужна проверка «не робот» — повторим после неё
+        else { mk = Date.now(); if (m && m.n) res = m; }
+      } catch {}
+    }
     // OpenStreetMap не ответил и запасной источник ничего не дал — не запоминаем «нет данных», повторим позже
     if (osmFail && res.n == null) return { k, n: null, err: 'OpenStreetMap не ответил — повторю позже' };
-    c[k] = Object.assign({ t: fresh ? old.t : Date.now(), tried: true, v: V, src: res.src || (res.n != null ? 'OpenStreetMap' : '') }, res, mk ? { mk } : {}); save(); return c[k];
+    const { captcha, ...keep } = res;
+    c[k] = Object.assign({ t: fresh ? old.t : Date.now(), tried: true, v: V, src: keep.src || (keep.n != null ? 'OpenStreetMap' : '') }, keep, mk ? { mk } : {}); save();
+    return captcha ? Object.assign({}, c[k], { captcha: true }) : c[k];
   };
   const p = queue.then(run, run); queue = p.then(() => new Promise(r => setTimeout(r, 1100)), () => {}); return p;
 }
-module.exports = { lookup, estimate, around, lookupAround, AROUND_R, aroundCached: (lat, lon) => load()['r' + AROUND_R + ':' + key(lat, lon)] || null, cached: (lat, lon) => { const x = load()[key(lat, lon)]; return x && (x.exact || x.v === V) ? x : null; } };
+module.exports = { lookup, estimate, around, lookupAround, refineAround, verifyMingkh, mkState, mingkh, AROUND_R, aroundCached: (lat, lon) => load()['r' + AROUND_R + ':' + key(lat, lon)] || null, cached: (lat, lon) => { const x = load()[key(lat, lon)]; return x && (x.exact || x.v === V) ? x : null; } };

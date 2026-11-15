@@ -44,13 +44,20 @@ function card(r) {
   </div>`;
 }
 const textOf = r => { const pt = r.found || {}; return `${pt.text || r.addr}\nOzon: ${r.zone}${r.sup ? `, поддержка ${rub(r.sup.month)}/мес, всего ${rub(r.sup.total)} (${r.sup.note})` : ''}${r.near && r.near.dist != null ? `\nБлижайший ПВЗ Ozon: ${fmtNum(r.near.dist)} м` : ''}${r.yandex ? '\nЯндекс Маркет: ' + r.yandex.zone : ''}${r.wb ? '\nWildberries: ' + r.wb.zone : ''}${r.note ? '\n' + r.note : ''}`; };
+// «Квартир в 400 м»: сначала OpenStreetMap, затем уточнение по МинЖКХ (если сайт попросит проверку — кнопка)
+let aroundPt = null;
+function paintAround(a) {
+  const e = $('aAround'); if (!e) return;
+  if (!a || a.err) { e.innerHTML = `Квартир в 400 м: <span class="muted">${esc((a && a.err) || 'нет данных')}</span>`; return; }
+  const lim = Math.min((a.cands || []).length, 30), busy = lim && !a.captcha && (a.mkDone || 0) < lim ? ` · уточняю по ЖКХ ${a.mkDone || 0}/${lim}` : '';
+  e.innerHTML = `Квартир в 400 м: <b>${a.est || a.unknown ? '≈' : ''}${fmtNum(a.n)}</b> <span class="muted">(жилых домов ${a.buildings}${a.mkExact ? `, точно по ЖКХ — ${a.mkExact}` : ''}${a.unknown ? `, ещё ${a.unknown} без данных` : ''}${busy})</span>`
+    + (a.captcha ? ' <button type="button" class="mk-verify" id="aMkVerify">уточнить по ЖКХ</button>' : '');
+  if ($('aMkVerify')) $('aMkVerify').onclick = async () => { $('aMkVerify').disabled = true; $('aMkVerify').textContent = 'жду проверку…'; if (await pvz.mingkhVerify().catch(() => false) && aroundPt) pvz.flatsAround(aroundPt.lat, aroundPt.lon).then(paintAround); };
+}
+pvz.onAroundProgress(d => { if (aroundPt && d.lat === aroundPt.lat && d.lon === aroundPt.lon) paintAround(d.a); });
 function bindCard(r) {
   const pt = r.found || {};
-  if (pt.lat != null) pvz.flatsAround(pt.lat, pt.lon).then(a => {
-    const e = $('aAround'); if (!e) return;
-    e.innerHTML = !a || a.err ? `Квартир в 400 м: <span class="muted">${esc((a && a.err) || 'нет данных')}</span>`
-      : `Квартир в 400 м: <b>${a.est || a.unknown ? '≈' : ''}${fmtNum(a.n)}</b> <span class="muted">(жилых домов ${a.buildings}${a.unknown ? `, ещё ${a.unknown} без этажности` : ''})</span>`;
-  }).catch(() => {});
+  if (pt.lat != null) { aroundPt = pt; pvz.flatsAround(pt.lat, pt.lon).then(paintAround).catch(() => {}); }
   $('aYa').onclick = () => pvz.openExternal(pt.lat != null ? `https://yandex.ru/maps/?pt=${pt.lon},${pt.lat}&z=17&l=map` : 'https://yandex.ru/maps/?text=' + encodeURIComponent(r.addr));
   $('aOz').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(pt.text || r.addr).catch(() => {}); pvz.openExternal('https://pvz-map.ozon.ru/'); toast('Адрес скопирован — вставьте в поиск карты Ozon'); };
   $('aCopy').onclick = () => navigator.clipboard.writeText(textOf(r)).then(() => toast('Скопировано'));
