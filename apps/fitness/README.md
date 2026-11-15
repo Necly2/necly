@@ -22,9 +22,13 @@
 | CSV импорт/экспорт | ✅ `lib/features/import_export/` + тесты |
 | Клиент Open Food Facts (штрих-код) | ✅ `lib/features/nutrition/` |
 | Клиент wger (упражнения) | ✅ `lib/features/exercises/` |
-| UI-экраны | ⬜ заглушка `lib/main.dart` — следующий шаг |
-| Сканер камеры (mobile_scanner) | ⬜ подключить в UI |
-| Дамп упражнений из wger в assets | ⬜ выкачать и положить `assets/exercises.json` |
+| Дамп упражнений из wger в assets | ✅ `assets/exercises.json` (336 шт.) |
+| Сидер БД из ассетов (офлайн-first) | ✅ `lib/db/seed.dart` |
+| UI-экраны (история, нагрузка, питание) | ✅ `lib/features/*/`, навигация в `main.dart` |
+| Сканер камеры (mobile_scanner) | ✅ `lib/features/nutrition/barcode_scan_screen.dart` |
+| iOS-обвязка и сборка | ✅ инструкция `docs/IOS_SETUP.md` (нужен Mac) |
+| Запись продукта вручную (если не найден) | ⬜ TODO (сейчас snackbar-заглушка) |
+| Экспорт из БД в CSV (кнопка в UI) | ⬜ логика готова, кнопку в UI — добавить |
 
 > ⚠️ Код написан в облачном Linux-окружении, где **нет Flutter/Dart** — он не был
 > скомпилирован и тесты здесь не запускались. Логика написана аккуратно, но её
@@ -35,13 +39,17 @@
 Apple, обойти его в Linux-облаке нельзя. План:
 
 1. На Mac установить **Flutter SDK** и **Xcode**.
-2. В папке `apps/fitness/`:
+2. В папке `apps/fitness/` (полная инструкция — в `docs/IOS_SETUP.md`):
    ```bash
+   flutter create --platforms=ios,android --project-name necly_fitness .
    flutter pub get
-   dart run build_runner build   # генерирует database.g.dart для drift
-   dart test                     # прогнать юнит-тесты (нагрузка, CSV)
+   dart run build_runner build --delete-conflicting-outputs  # database.g.dart
+   dart test                     # юнит-тесты (нагрузка, CSV) — без симулятора
    flutter run                   # запуск в симуляторе iPhone
    ```
+   ⚠️ `flutter create` нужен, потому что папки `ios/`/`android/` не лежат в репо
+   (их генерирует Flutter). Он не трогает `lib/`, `pubspec.yaml`, `assets/`.
+   После него добавь разрешение камеры — см. `docs/IOS_SETUP.md` шаг 2.
 3. Для установки на свой физический iPhone нужен бесплатный Apple ID
    (приложение придётся переподписывать раз в 7 дней) или платный Apple Developer
    ($99/год) для постоянной установки.

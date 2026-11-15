@@ -9,14 +9,14 @@ void main() {
   // Упражнение 2 (присед): квадрицепс/ягодицы primary, кор secondary.
   final service = MuscleLoadService({
     1: const [
-      ExerciseMuscle(Muscle.pectoralisMajor, MuscleRole.primary),
-      ExerciseMuscle(Muscle.triceps, MuscleRole.secondary),
-      ExerciseMuscle(Muscle.anteriorDeltoid, MuscleRole.secondary),
+      MuscleInvolvement(Muscle.pectoralisMajor, MuscleRole.primary),
+      MuscleInvolvement(Muscle.triceps, MuscleRole.secondary),
+      MuscleInvolvement(Muscle.anteriorDeltoid, MuscleRole.secondary),
     ],
     2: const [
-      ExerciseMuscle(Muscle.quadriceps, MuscleRole.primary),
-      ExerciseMuscle(Muscle.gluteus, MuscleRole.primary),
-      ExerciseMuscle(Muscle.rectusAbdominis, MuscleRole.secondary),
+      MuscleInvolvement(Muscle.quadriceps, MuscleRole.primary),
+      MuscleInvolvement(Muscle.gluteus, MuscleRole.primary),
+      MuscleInvolvement(Muscle.rectusAbdominis, MuscleRole.secondary),
     ],
   });
 

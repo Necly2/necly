@@ -35,5 +35,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  # assets:
-  #   - assets/exercises.json   # дамп упражнений из wger (офлайн-first)
+  assets:
+    - assets/exercises.json   # дамп упражнений из wger (офлайн-first, 336 шт.)

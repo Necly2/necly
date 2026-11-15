@@ -1,12 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'db/seed.dart';
+import 'providers/app_providers.dart';
+import 'features/workouts/history_screen.dart';
+import 'features/muscle_load/muscle_load_screen.dart';
+import 'features/nutrition/nutrition_screen.dart';
 
-// Минимальная точка входа. Экраны (список тренировок, тренировка, нагрузка по
-// мышцам, питание) добавляются в lib/features/*/screens/.
-// Этот файл — заглушка каркаса, чтобы проект собирался. UI ещё не реализован.
 void main() {
   runApp(const ProviderScope(child: NeclyFitnessApp()));
 }
+
+/// Разовая инициализация: заполнить базу упражнений при первом запуске.
+final _seedProvider = FutureProvider<void>((ref) async {
+  final db = ref.watch(databaseProvider);
+  await ExerciseSeeder(db).seedIfEmpty();
+});
 
 class NeclyFitnessApp extends StatelessWidget {
   const NeclyFitnessApp({super.key});
@@ -16,31 +24,56 @@ class NeclyFitnessApp extends StatelessWidget {
     return MaterialApp(
       title: 'Necly Fitness',
       theme: ThemeData(colorSchemeSeed: Colors.teal, useMaterial3: true),
-      home: const _Placeholder(),
+      home: const _Root(),
     );
   }
 }
 
-class _Placeholder extends StatelessWidget {
-  const _Placeholder();
+class _Root extends ConsumerWidget {
+  const _Root();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final seed = ref.watch(_seedProvider);
+    return seed.when(
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (e, _) =>
+          Scaffold(body: Center(child: Text('Ошибка инициализации: $e'))),
+      data: (_) => const HomeShell(),
+    );
+  }
+}
+
+/// Нижняя навигация между тремя разделами.
+class HomeShell extends StatefulWidget {
+  const HomeShell({super.key});
+  @override
+  State<HomeShell> createState() => _HomeShellState();
+}
+
+class _HomeShellState extends State<HomeShell> {
+  int _index = 0;
+  static const _screens = [
+    HistoryScreen(),
+    MuscleLoadScreen(),
+    NutritionScreen(),
+  ];
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Necly Fitness')),
-      body: const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text(
-            'Каркас проекта готов.\n\n'
-            'Ядро реализовано и протестировано:\n'
-            '• расчёт нагрузки по группам мышц\n'
-            '• импорт/экспорт CSV\n'
-            '• клиент Open Food Facts (штрих-код)\n'
-            '• схема БД (drift/SQLite)\n\n'
-            'UI-экраны — следующий шаг.',
-            textAlign: TextAlign.center,
-          ),
-        ),
+      body: _screens[_index],
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _index,
+        onDestinationSelected: (i) => setState(() => _index = i),
+        destinations: const [
+          NavigationDestination(
+              icon: Icon(Icons.history), label: 'Тренировки'),
+          NavigationDestination(
+              icon: Icon(Icons.pie_chart_outline), label: 'Нагрузка'),
+          NavigationDestination(
+              icon: Icon(Icons.restaurant), label: 'Питание'),
+        ],
       ),
     );
   }

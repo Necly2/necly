@@ -1,0 +1,3618 @@
+[
+ {
+  "wgerId": 9,
+  "name": "2 Handed Kettlebell Swing",
+  "category": "Abs",
+  "primary": [
+   "gluteus",
+   "hamstrings"
+  ],
+  "secondary": [
+   "quadriceps",
+   "rectusAbdominis"
+  ]
+ },
+ {
+  "wgerId": 56,
+  "name": "Abdominal Stabilization",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "obliques"
+  ]
+ },
+ {
+  "wgerId": 1102,
+  "name": "Alternate back lunges",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "quadriceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1192,
+  "name": "Alternating Biceps Curls With Dumbbell",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1012,
+  "name": "Alternating bicep curls",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1141,
+  "name": "Arabesque",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "hamstrings"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 20,
+  "name": "Arnold Shoulder Press",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": [
+   "trapezius",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 1219,
+  "name": "Australian pull-ups",
+  "category": "Arms",
+  "primary": [
+   "anteriorDeltoid",
+   "biceps",
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 1263,
+  "name": "Back bridge",
+  "category": "Back",
+  "primary": [],
+  "secondary": [
+   "anteriorDeltoid",
+   "calves",
+   "hamstrings",
+   "latissimusDorsi",
+   "trapezius",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 1092,
+  "name": "Bag training",
+  "category": "Cardio",
+  "primary": [
+   "anteriorDeltoid",
+   "pectoralisMajor",
+   "trapezius"
+  ],
+  "secondary": [
+   "biceps",
+   "calves",
+   "hamstrings",
+   "latissimusDorsi",
+   "obliques",
+   "rectusAbdominis"
+  ]
+ },
+ {
+  "wgerId": 165,
+  "name": "Ball crunches",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "obliques"
+  ]
+ },
+ {
+  "wgerId": 41,
+  "name": "Barbell Ab Rollout",
+  "category": "Abs",
+  "primary": [
+   "obliques"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 43,
+  "name": "Barbell Hack Squats",
+  "category": "Legs",
+  "primary": [
+   "quadriceps"
+  ],
+  "secondary": [
+   "gluteus",
+   "hamstrings"
+  ]
+ },
+ {
+  "wgerId": 46,
+  "name": "Barbell Lunges Standing",
+  "category": "Legs",
+  "primary": [
+   "quadriceps"
+  ],
+  "secondary": [
+   "gluteus"
+  ]
+ },
+ {
+  "wgerId": 802,
+  "name": "Barbell Lunges Walking",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "quadriceps"
+  ],
+  "secondary": [
+   "calves",
+   "hamstrings"
+  ]
+ },
+ {
+  "wgerId": 50,
+  "name": "Barbell Triceps Extension",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "pectoralisMajor"
+  ]
+ },
+ {
+  "wgerId": 51,
+  "name": "Barbell Wrist Curl",
+  "category": "Arms",
+  "primary": [],
+  "secondary": [
+   "biceps"
+  ]
+ },
+ {
+  "wgerId": 57,
+  "name": "Bear Walk 2",
+  "category": "Chest",
+  "primary": [
+   "anteriorDeltoid",
+   "calves",
+   "pectoralisMajor",
+   "rectusAbdominis",
+   "triceps"
+  ],
+  "secondary": [
+   "gluteus",
+   "latissimusDorsi",
+   "obliques",
+   "quadriceps",
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 73,
+  "name": "Bench Press",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 76,
+  "name": "Bench Press Narrow Grip",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "pectoralisMajor"
+  ]
+ },
+ {
+  "wgerId": 75,
+  "name": "Benchpress Dumbbells",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 79,
+  "name": "Bent High Pulls",
+  "category": "Shoulders",
+  "primary": [
+   "trapezius"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 81,
+  "name": "Bent Over Dumbbell Rows (Single Arm)",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 83,
+  "name": "Bent Over Rowing",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "biceps"
+  ]
+ },
+ {
+  "wgerId": 84,
+  "name": "Bent Over Rowing Reverse",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "biceps"
+  ]
+ },
+ {
+  "wgerId": 95,
+  "name": "Biceps Curl With Cable",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 91,
+  "name": "Biceps Curls With Barbell",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 92,
+  "name": "Biceps Curls With Dumbbell",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 94,
+  "name": "Biceps Curls With SZ-bar",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 958,
+  "name": "Biceps with TRX",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 112,
+  "name": "Body-Ups",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "rectusAbdominis"
+  ]
+ },
+ {
+  "wgerId": 977,
+  "name": "Box squat",
+  "category": "Legs",
+  "primary": [
+   "calves",
+   "gluteus",
+   "quadriceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 124,
+  "name": "Braced Squat",
+  "category": "Legs",
+  "primary": [
+   "quadriceps"
+  ],
+  "secondary": [
+   "gluteus"
+  ]
+ },
+ {
+  "wgerId": 988,
+  "name": "Bulgarian split squats left",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "quadriceps"
+  ],
+  "secondary": [
+   "hamstrings"
+  ]
+ },
+ {
+  "wgerId": 989,
+  "name": "Bulgarian split squats right",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "quadriceps"
+  ],
+  "secondary": [
+   "hamstrings"
+  ]
+ },
+ {
+  "wgerId": 915,
+  "name": "Bus Drivers",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 135,
+  "name": "Butterfly",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "anteriorDeltoid"
+  ]
+ },
+ {
+  "wgerId": 137,
+  "name": "Butterfly Narrow Grip",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 139,
+  "name": "Butterfly Reverse",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1109,
+  "name": "Cable Concentration Curl",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 323,
+  "name": "Cable Cross-over",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "anteriorDeltoid"
+  ]
+ },
+ {
+  "wgerId": 142,
+  "name": "Cable External Rotation",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 822,
+  "name": "Cable Rear Delt Fly",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid",
+   "trapezius"
+  ],
+  "secondary": [
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 145,
+  "name": "Cable Woodchoppers",
+  "category": "Abs",
+  "primary": [
+   "obliques"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1131,
+  "name": "Cable glute extension",
+  "category": "Legs",
+  "primary": [
+   "gluteus"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 146,
+  "name": "Calf Press Using Leg Press Machine",
+  "category": "Calves",
+  "primary": [
+   "calves"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 148,
+  "name": "Calf Raises on Hackenschmitt Machine",
+  "category": "Calves",
+  "primary": [
+   "calves"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1203,
+  "name": "Calf raises, left leg",
+  "category": "Calves",
+  "primary": [
+   "calves"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 702,
+  "name": "Calf raises, one legged",
+  "category": "Calves",
+  "primary": [
+   "calves"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1021,
+  "name": "Calf raises, right leg",
+  "category": "Calves",
+  "primary": [
+   "calves"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 129,
+  "name": "Chest Press",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 152,
+  "name": "Chin Up",
+  "category": "Back",
+  "primary": [
+   "biceps",
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 1223,
+  "name": "Claps over the head",
+  "category": "Arms",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 158,
+  "name": "Close-grip Lat Pull Down",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1086,
+  "name": "Close-grip Press-ups",
+  "category": "Chest",
+  "primary": [
+   "biceps",
+   "latissimusDorsi",
+   "pectoralisMajor",
+   "trapezius"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 1127,
+  "name": "Close-grip supinated lat pulldown",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 161,
+  "name": "Cross-Bench Dumbbell Pullovers",
+  "category": "Chest",
+  "primary": [
+   "latissimusDorsi",
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 167,
+  "name": "Crunches",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "pectoralisMajor"
+  ]
+ },
+ {
+  "wgerId": 173,
+  "name": "Crunches With Cable",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 174,
+  "name": "Crunches With Legs Up",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "obliques"
+  ]
+ },
+ {
+  "wgerId": 172,
+  "name": "Crunches on Machine",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 974,
+  "name": "Curl with kettlebell two hands",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 177,
+  "name": "Cycling",
+  "category": "Cardio",
+  "primary": [
+   "obliques",
+   "trapezius"
+  ],
+  "secondary": [
+   "biceps",
+   "gluteus",
+   "hamstrings",
+   "latissimusDorsi",
+   "quadriceps"
+  ]
+ },
+ {
+  "wgerId": 178,
+  "name": "Deadbug",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "obliques"
+  ]
+ },
+ {
+  "wgerId": 184,
+  "name": "Deadlifts",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "gluteus"
+  ]
+ },
+ {
+  "wgerId": 185,
+  "name": "Decline Bench Press Barbell",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 186,
+  "name": "Decline Bench Press Dumbbell",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 189,
+  "name": "Deficit Deadlift",
+  "category": "Back",
+  "primary": [],
+  "secondary": [
+   "calves",
+   "gluteus",
+   "hamstrings",
+   "latissimusDorsi",
+   "rectusAbdominis"
+  ]
+ },
+ {
+  "wgerId": 386,
+  "name": "Diamond push ups",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 194,
+  "name": "Dips",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor",
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 197,
+  "name": "Dips Between Two Benches",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1243,
+  "name": "Double Leg Calf Raise",
+  "category": "Legs",
+  "primary": [
+   "calves"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1201,
+  "name": "Dragon squat",
+  "category": "Legs",
+  "primary": [
+   "quadriceps"
+  ],
+  "secondary": [
+   "calves",
+   "gluteus",
+   "hamstrings"
+  ]
+ },
+ {
+  "wgerId": 202,
+  "name": "Dumbbell Concentration Curl",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1084,
+  "name": "Dumbbell Floor Press",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "biceps",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 203,
+  "name": "Dumbbell Goblet Squat",
+  "category": "Legs",
+  "primary": [
+   "quadriceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1087,
+  "name": "Dumbbell Hang Power Cleans",
+  "category": "Back",
+  "primary": [
+   "gluteus",
+   "hamstrings"
+  ],
+  "secondary": [
+   "calves",
+   "quadriceps",
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 204,
+  "name": "Dumbbell Incline Curl",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 205,
+  "name": "Dumbbell Lunges Standing",
+  "category": "Legs",
+  "primary": [
+   "quadriceps"
+  ],
+  "secondary": [
+   "gluteus"
+  ]
+ },
+ {
+  "wgerId": 206,
+  "name": "Dumbbell Lunges Walking",
+  "category": "Legs",
+  "primary": [
+   "quadriceps"
+  ],
+  "secondary": [
+   "gluteus"
+  ]
+ },
+ {
+  "wgerId": 801,
+  "name": "Dumbbell Push-Up",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 1234,
+  "name": "Dumbbell Single-leg Hip Thrust",
+  "category": "Legs",
+  "primary": [
+   "gluteus"
+  ],
+  "secondary": [
+   "hamstrings",
+   "quadriceps"
+  ]
+ },
+ {
+  "wgerId": 211,
+  "name": "Dumbbell Triceps Extension",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "pectoralisMajor"
+  ]
+ },
+ {
+  "wgerId": 1226,
+  "name": "Dumbbell bicep curl to press",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1228,
+  "name": "Dumbbell close grip bench press",
+  "category": "Arms",
+  "primary": [
+   "pectoralisMajor",
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1224,
+  "name": "Dumbbell drag curls",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1227,
+  "name": "Dumbbell rear delt row",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid",
+   "biceps",
+   "trapezius"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1088,
+  "name": "Dumbbell sumo deadlift",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "hamstrings"
+  ],
+  "secondary": [
+   "quadriceps",
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 1225,
+  "name": "Dumbbell wide bicep curls",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 208,
+  "name": "Dumbbells on Scott Machine",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1099,
+  "name": "Dynamic side hold",
+  "category": "Abs",
+  "primary": [
+   "obliques"
+  ],
+  "secondary": [
+   "rectusAbdominis"
+  ]
+ },
+ {
+  "wgerId": 1027,
+  "name": "Elevated prayer stretch",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 962,
+  "name": "Elliptical",
+  "category": "Cardio",
+  "primary": [
+   "gluteus",
+   "quadriceps",
+   "trapezius"
+  ],
+  "secondary": [
+   "biceps",
+   "rectusAbdominis",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 1241,
+  "name": "Exercise Band Dorsiflexion",
+  "category": "Legs",
+  "primary": [
+   "calves"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1242,
+  "name": "Exercise Band Plantarflexion",
+  "category": "Legs",
+  "primary": [
+   "calves"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 222,
+  "name": "Facepull",
+  "category": "Shoulders",
+  "primary": [
+   "trapezius"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1217,
+  "name": "Finger Pushup",
+  "category": "Arms",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "rectusAbdominis",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 1000,
+  "name": "Floor dips",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "pectoralisMajor"
+  ]
+ },
+ {
+  "wgerId": 235,
+  "name": "Flutter Kicks",
+  "category": "Abs",
+  "primary": [
+   "obliques",
+   "rectusAbdominis"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 237,
+  "name": "Fly With Cable",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 238,
+  "name": "Fly With Dumbbells",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 239,
+  "name": "Fly With Dumbbells, Decline Bench",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1238,
+  "name": "Frog stand",
+  "category": "Abs",
+  "primary": [
+   "anteriorDeltoid",
+   "biceps",
+   "rectusAbdominis"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1245,
+  "name": "Front Lever",
+  "category": "Abs",
+  "primary": [
+   "latissimusDorsi",
+   "rectusAbdominis"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 259,
+  "name": "Front Pull narrow",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "biceps"
+  ]
+ },
+ {
+  "wgerId": 256,
+  "name": "Front Raises",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 254,
+  "name": "Front Raises with Plates",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid",
+   "trapezius"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 257,
+  "name": "Front Squats",
+  "category": "Legs",
+  "primary": [
+   "gluteus"
+  ],
+  "secondary": [
+   "rectusAbdominis"
+  ]
+ },
+ {
+  "wgerId": 1252,
+  "name": "Front lever pull-up",
+  "category": "Abs",
+  "primary": [
+   "biceps",
+   "latissimusDorsi",
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "anteriorDeltoid"
+  ]
+ },
+ {
+  "wgerId": 1214,
+  "name": "Front lever tuck",
+  "category": "Back",
+  "primary": [
+   "anteriorDeltoid",
+   "biceps",
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 258,
+  "name": "Front pull wide",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "biceps"
+  ]
+ },
+ {
+  "wgerId": 260,
+  "name": "Full Sit Outs",
+  "category": "Abs",
+  "primary": [
+   "gluteus",
+   "obliques",
+   "rectusAbdominis"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 265,
+  "name": "Glute Bridge",
+  "category": "Legs",
+  "primary": [
+   "gluteus"
+  ],
+  "secondary": [
+   "hamstrings"
+  ]
+ },
+ {
+  "wgerId": 272,
+  "name": "Hammer Curls",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 275,
+  "name": "Hammercurls on Cable",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 282,
+  "name": "Handstand Pushup",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid",
+   "triceps"
+  ],
+  "secondary": [
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 283,
+  "name": "Hanging Leg Raises",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 284,
+  "name": "Hercules Pillars",
+  "category": "Arms",
+  "primary": [
+   "biceps",
+   "triceps"
+  ],
+  "secondary": [
+   "anteriorDeltoid"
+  ]
+ },
+ {
+  "wgerId": 285,
+  "name": "High Knee Jumps",
+  "category": "Cardio",
+  "primary": [
+   "calves",
+   "hamstrings",
+   "quadriceps"
+  ],
+  "secondary": [
+   "obliques",
+   "pectoralisMajor",
+   "rectusAbdominis"
+  ]
+ },
+ {
+  "wgerId": 289,
+  "name": "High Pull",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": [
+   "gluteus"
+  ]
+ },
+ {
+  "wgerId": 1001,
+  "name": "High plank",
+  "category": "Chest",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "obliques",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 1137,
+  "name": "High-pulley pullover",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi",
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1080,
+  "name": "Hindu Pushups",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid",
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 291,
+  "name": "Hindu Squats",
+  "category": "Legs",
+  "primary": [
+   "quadriceps"
+  ],
+  "secondary": [
+   "gluteus"
+  ]
+ },
+ {
+  "wgerId": 292,
+  "name": "Hip Raise, Lying",
+  "category": "Back",
+  "primary": [
+   "gluteus"
+  ],
+  "secondary": [
+   "hamstrings"
+  ]
+ },
+ {
+  "wgerId": 294,
+  "name": "Hip Thrust",
+  "category": "Legs",
+  "primary": [
+   "gluteus"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 297,
+  "name": "Hollow Hold",
+  "category": "Abs",
+  "primary": [
+   "obliques",
+   "rectusAbdominis"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1101,
+  "name": "Horizontal traction isometry",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi",
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "biceps"
+  ]
+ },
+ {
+  "wgerId": 301,
+  "name": "Hyperextensions",
+  "category": "Back",
+  "primary": [
+   "trapezius"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1248,
+  "name": "Ice cream maker",
+  "category": "Abs",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "rectusAbdominis"
+  ]
+ },
+ {
+  "wgerId": 538,
+  "name": "Incline Bench Press - Barbell",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 537,
+  "name": "Incline Bench Press - Dumbbell",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 539,
+  "name": "Incline Bench Press - MP",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 828,
+  "name": "Incline Bench Reverse Fly",
+  "category": "Back",
+  "primary": [
+   "anteriorDeltoid",
+   "trapezius"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 171,
+  "name": "Incline Crunches",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 308,
+  "name": "Incline Dumbbell Fly",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 310,
+  "name": "Incline Dumbbell Row",
+  "category": "Back",
+  "primary": [],
+  "secondary": [
+   "latissimusDorsi"
+  ]
+ },
+ {
+  "wgerId": 312,
+  "name": "Incline Plank With Alternate Floor Touch",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "obliques"
+  ]
+ },
+ {
+  "wgerId": 911,
+  "name": "Incline Skull Crush",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1138,
+  "name": "Incline bench pulldown",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1198,
+  "name": "Inverted Rows",
+  "category": "Chest",
+  "primary": [
+   "biceps",
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "pectoralisMajor",
+   "rectusAbdominis",
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 314,
+  "name": "Isometric Wipers",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "rectusAbdominis"
+  ]
+ },
+ {
+  "wgerId": 320,
+  "name": "Jumping Jacks",
+  "category": "Legs",
+  "primary": [
+   "quadriceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 960,
+  "name": "Kettlebell Swing",
+  "category": "Legs",
+  "primary": [
+   "anteriorDeltoid",
+   "gluteus"
+  ],
+  "secondary": [
+   "quadriceps",
+   "rectusAbdominis",
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 331,
+  "name": "Kettlebell Swings",
+  "category": "Legs",
+  "primary": [
+   "gluteus"
+  ],
+  "secondary": [
+   "hamstrings"
+  ]
+ },
+ {
+  "wgerId": 1003,
+  "name": "Kettlebell deadlifts",
+  "category": "Back",
+  "primary": [
+   "gluteus",
+   "hamstrings"
+  ],
+  "secondary": [
+   "quadriceps",
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 978,
+  "name": "Knee Raises",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "obliques"
+  ]
+ },
+ {
+  "wgerId": 990,
+  "name": "Kneeling kickbacks",
+  "category": "Legs",
+  "primary": [
+   "gluteus"
+  ],
+  "secondary": [
+   "hamstrings"
+  ]
+ },
+ {
+  "wgerId": 346,
+  "name": "Landmine press",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": [
+   "pectoralisMajor",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 354,
+  "name": "Lat Pull Down (Leaning Back)",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 355,
+  "name": "Lat Pull Down (Straight Back)",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 348,
+  "name": "Lateral Raises",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 349,
+  "name": "Lateral Rows on Cable, One Armed",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 351,
+  "name": "Lateral-to-Front Raises",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid",
+   "trapezius"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 364,
+  "name": "Leg Curl",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "hamstrings"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 365,
+  "name": "Leg Curls (laying)",
+  "category": "Legs",
+  "primary": [
+   "hamstrings"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 366,
+  "name": "Leg Curls (sitting)",
+  "category": "Legs",
+  "primary": [
+   "hamstrings"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 367,
+  "name": "Leg Curls (standing)",
+  "category": "Legs",
+  "primary": [
+   "hamstrings"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 369,
+  "name": "Leg Extension",
+  "category": "Legs",
+  "primary": [
+   "quadriceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 371,
+  "name": "Leg Press",
+  "category": "Legs",
+  "primary": [
+   "calves",
+   "gluteus",
+   "hamstrings",
+   "quadriceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 375,
+  "name": "Leg Press on Hackenschmidt Machine",
+  "category": "Legs",
+  "primary": [
+   "quadriceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 373,
+  "name": "Leg Presses (narrow)",
+  "category": "Legs",
+  "primary": [
+   "quadriceps"
+  ],
+  "secondary": [
+   "gluteus"
+  ]
+ },
+ {
+  "wgerId": 374,
+  "name": "Leg Presses (wide)",
+  "category": "Legs",
+  "primary": [
+   "quadriceps"
+  ],
+  "secondary": [
+   "gluteus"
+  ]
+ },
+ {
+  "wgerId": 376,
+  "name": "Leg Raise",
+  "category": "Legs",
+  "primary": [
+   "obliques",
+   "rectusAbdominis"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 377,
+  "name": "Leg Raises, Lying",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "pectoralisMajor"
+  ]
+ },
+ {
+  "wgerId": 378,
+  "name": "Leg Raises, Standing",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "pectoralisMajor"
+  ]
+ },
+ {
+  "wgerId": 979,
+  "name": "Leg raises pull up bar",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "obliques",
+   "quadriceps"
+  ]
+ },
+ {
+  "wgerId": 379,
+  "name": "Leverage Machine Chest Press",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 380,
+  "name": "Leverage Machine Iso Row",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 394,
+  "name": "Long-Pulley (low Row)",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "biceps"
+  ]
+ },
+ {
+  "wgerId": 395,
+  "name": "Long-Pulley, Narrow",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "biceps"
+  ]
+ },
+ {
+  "wgerId": 397,
+  "name": "Low Box Squat - Wide Stance",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "quadriceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 984,
+  "name": "Lunges",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "quadriceps"
+  ],
+  "secondary": [
+   "hamstrings"
+  ]
+ },
+ {
+  "wgerId": 923,
+  "name": "Lying Dumbbell Row SS Seated Shrug",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi",
+   "trapezius"
+  ],
+  "secondary": [
+   "biceps"
+  ]
+ },
+ {
+  "wgerId": 926,
+  "name": "Machine chest fly",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1132,
+  "name": "Machine glute extension",
+  "category": "Legs",
+  "primary": [
+   "gluteus"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 976,
+  "name": "Medicine ball booklet crunch",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1089,
+  "name": "Medicine ball twist",
+  "category": "Abs",
+  "primary": [
+   "obliques",
+   "rectusAbdominis"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 418,
+  "name": "Military Press mit SZ-Bar",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": [
+   "trapezius",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 423,
+  "name": "Muscle up",
+  "category": "Back",
+  "primary": [
+   "biceps",
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 427,
+  "name": "Negative Crunches",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1136,
+  "name": "Neutral-grip chest pulldown",
+  "category": "Back",
+  "primary": [
+   "biceps",
+   "latissimusDorsi",
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 910,
+  "name": "Nordic Curl",
+  "category": "Legs",
+  "primary": [
+   "hamstrings"
+  ],
+  "secondary": [
+   "gluteus"
+  ]
+ },
+ {
+  "wgerId": 1186,
+  "name": "One Arm Bent Row",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "biceps",
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 803,
+  "name": "One Arm Triceps Extensions on Cable",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 439,
+  "name": "Overhand Cable Curl",
+  "category": "Abs",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 687,
+  "name": "Overhead Press",
+  "category": "Chest",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 441,
+  "name": "Overhead Squat",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "quadriceps"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "hamstrings",
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 1194,
+  "name": "Pallof Press",
+  "category": "Abs",
+  "primary": [
+   "anteriorDeltoid",
+   "gluteus",
+   "obliques",
+   "pectoralisMajor",
+   "rectusAbdominis",
+   "trapezius"
+  ],
+  "secondary": [
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 445,
+  "name": "Pause Bench",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 448,
+  "name": "Pendelay Rows",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi",
+   "trapezius"
+  ],
+  "secondary": [
+   "biceps",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 454,
+  "name": "Pike Push Ups",
+  "category": "Arms",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 456,
+  "name": "Pistol Squat",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "hamstrings"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "biceps"
+  ]
+ },
+ {
+  "wgerId": 1020,
+  "name": "Pistol squats right",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "quadriceps"
+  ],
+  "secondary": [
+   "calves",
+   "hamstrings",
+   "rectusAbdominis"
+  ]
+ },
+ {
+  "wgerId": 458,
+  "name": "Plank",
+  "category": "Abs",
+  "primary": [
+   "obliques",
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "biceps",
+   "quadriceps",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 1091,
+  "name": "Plank Shoulder Taps",
+  "category": "Abs",
+  "primary": [
+   "anteriorDeltoid",
+   "gluteus",
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "latissimusDorsi"
+  ]
+ },
+ {
+  "wgerId": 683,
+  "name": "Power Clean",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 465,
+  "name": "Preacher Curls",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1208,
+  "name": "Prisoner Squat",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "quadriceps"
+  ],
+  "secondary": [
+   "hamstrings"
+  ]
+ },
+ {
+  "wgerId": 468,
+  "name": "Prone Scapular Retraction - Arms at Side",
+  "category": "Back",
+  "primary": [
+   "trapezius"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 477,
+  "name": "Pull Ups on Machine",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "biceps",
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 475,
+  "name": "Pull-ups",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "biceps",
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 821,
+  "name": "Pullup on fingerboard",
+  "category": "Arms",
+  "primary": [
+   "biceps",
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 478,
+  "name": "Push Press",
+  "category": "Shoulders",
+  "primary": [
+   "trapezius"
+  ],
+  "secondary": [
+   "gluteus"
+  ]
+ },
+ {
+  "wgerId": 1112,
+  "name": "Push-Ups | Decline",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 1111,
+  "name": "Push-Ups | Incline",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 1113,
+  "name": "Push-Ups | Parallettes",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 985,
+  "name": "Push-up rotations",
+  "category": "Arms",
+  "primary": [
+   "pectoralisMajor",
+   "triceps"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "obliques"
+  ]
+ },
+ {
+  "wgerId": 957,
+  "name": "Quadriped Arm and Leg Raise",
+  "category": "Back",
+  "primary": [
+   "anteriorDeltoid",
+   "gluteus",
+   "pectoralisMajor",
+   "trapezius"
+  ],
+  "secondary": [
+   "latissimusDorsi"
+  ]
+ },
+ {
+  "wgerId": 484,
+  "name": "Rack Deadlift",
+  "category": "Back",
+  "primary": [
+   "gluteus"
+  ],
+  "secondary": [
+   "biceps"
+  ]
+ },
+ {
+  "wgerId": 1119,
+  "name": "Remo maquina agarre estrecho",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "biceps",
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 1120,
+  "name": "Remo maquina agarre estrecho supino",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "biceps",
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 490,
+  "name": "Renegade Row",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi",
+   "trapezius"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 493,
+  "name": "Reverse Bar Curl",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 495,
+  "name": "Reverse Curl",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 914,
+  "name": "Reverse EZ Bar Cable Curls",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 498,
+  "name": "Reverse Grip Bench Press",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor",
+   "triceps"
+  ],
+  "secondary": [
+   "anteriorDeltoid"
+  ]
+ },
+ {
+  "wgerId": 909,
+  "name": "Reverse Nordic Curl",
+  "category": "Legs",
+  "primary": [
+   "quadriceps"
+  ],
+  "secondary": [
+   "gluteus",
+   "rectusAbdominis"
+  ]
+ },
+ {
+  "wgerId": 913,
+  "name": "Reverse Preacher Curl (Close Grip)",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1215,
+  "name": "Reverse Snow Angel",
+  "category": "Back",
+  "primary": [
+   "trapezius"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "gluteus",
+   "hamstrings",
+   "obliques",
+   "rectusAbdominis"
+  ]
+ },
+ {
+  "wgerId": 999,
+  "name": "Reverse lunges",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "quadriceps"
+  ],
+  "secondary": [
+   "hamstrings"
+  ]
+ },
+ {
+  "wgerId": 501,
+  "name": "Ring Dips",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 505,
+  "name": "Roman Chair Crunch",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "obliques"
+  ]
+ },
+ {
+  "wgerId": 507,
+  "name": "Romanian Deadlift",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "hamstrings"
+  ],
+  "secondary": [
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 508,
+  "name": "Row",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi",
+   "trapezius"
+  ],
+  "secondary": [
+   "quadriceps"
+  ]
+ },
+ {
+  "wgerId": 1093,
+  "name": "Rowing Machine",
+  "category": "Cardio",
+  "primary": [
+   "anteriorDeltoid",
+   "biceps",
+   "calves",
+   "gluteus",
+   "hamstrings",
+   "latissimusDorsi",
+   "obliques",
+   "pectoralisMajor",
+   "quadriceps",
+   "rectusAbdominis",
+   "trapezius"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 512,
+  "name": "Rowing seated, narrow grip",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 674,
+  "name": "Rowing with TRX band",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "biceps",
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 510,
+  "name": "Rowing, Lying on Bench",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 513,
+  "name": "Rowing, T-bar",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "biceps"
+  ]
+ },
+ {
+  "wgerId": 1193,
+  "name": "Russian Twist",
+  "category": "Abs",
+  "primary": [
+   "latissimusDorsi",
+   "obliques",
+   "rectusAbdominis"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 545,
+  "name": "Scissors",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1143,
+  "name": "Seated Back Extension Machine",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi",
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1094,
+  "name": "Seated Bench Press",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 922,
+  "name": "Seated Cable Mid Trap Shrug",
+  "category": "Back",
+  "primary": [
+   "trapezius"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1117,
+  "name": "Seated Cable Row",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "biceps",
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 918,
+  "name": "Seated Dumbbell Side Lateral",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 12,
+  "name": "Seated Hip Adduction",
+  "category": "Legs",
+  "primary": [
+   "gluteus"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1105,
+  "name": "Seated Knee Tuck",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "obliques"
+  ]
+ },
+ {
+  "wgerId": 549,
+  "name": "Seated Triceps Press",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1098,
+  "name": "Seated rear delt rise",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 562,
+  "name": "Shotgun Row",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 566,
+  "name": "Shoulder Press, Barbell",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 567,
+  "name": "Shoulder Press, Dumbbells",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 543,
+  "name": "Shoulder Press, on Machine",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": [
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 569,
+  "name": "Shoulder Press, on Multi Press",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 570,
+  "name": "Shoulder Shrug",
+  "category": "Shoulders",
+  "primary": [
+   "trapezius"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1209,
+  "name": "Shoulder width three-point push-up",
+  "category": "Arms",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "rectusAbdominis",
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 575,
+  "name": "Shrugs on Multipress",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": [
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 571,
+  "name": "Shrugs, Barbells",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 572,
+  "name": "Shrugs, Dumbbells",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 556,
+  "name": "Side Bends on Machine",
+  "category": "Abs",
+  "primary": [
+   "obliques"
+  ],
+  "secondary": [
+   "rectusAbdominis"
+  ]
+ },
+ {
+  "wgerId": 576,
+  "name": "Side Crunch",
+  "category": "Abs",
+  "primary": [
+   "obliques"
+  ],
+  "secondary": [
+   "rectusAbdominis"
+  ]
+ },
+ {
+  "wgerId": 577,
+  "name": "Side Dumbbell Trunk Flexion",
+  "category": "Abs",
+  "primary": [
+   "obliques"
+  ],
+  "secondary": [
+   "rectusAbdominis"
+  ]
+ },
+ {
+  "wgerId": 580,
+  "name": "Side Plank",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "obliques"
+  ]
+ },
+ {
+  "wgerId": 1195,
+  "name": "Side Slides + Squats",
+  "category": "Legs",
+  "primary": [
+   "quadriceps"
+  ],
+  "secondary": [
+   "calves",
+   "gluteus"
+  ]
+ },
+ {
+  "wgerId": 1188,
+  "name": "Side bend",
+  "category": "Abs",
+  "primary": [
+   "obliques"
+  ],
+  "secondary": [
+   "rectusAbdominis"
+  ]
+ },
+ {
+  "wgerId": 1019,
+  "name": "Side plank right",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "obliques"
+  ]
+ },
+ {
+  "wgerId": 583,
+  "name": "Side to Side Push Ups",
+  "category": "Chest",
+  "primary": [
+   "anteriorDeltoid",
+   "obliques",
+   "pectoralisMajor",
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1022,
+  "name": "Single Arm Plank to Row",
+  "category": "Back",
+  "primary": [
+   "anteriorDeltoid",
+   "biceps",
+   "latissimusDorsi",
+   "obliques",
+   "pectoralisMajor",
+   "rectusAbdominis"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 71,
+  "name": "Single Leg Extension",
+  "category": "Legs",
+  "primary": [
+   "quadriceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 584,
+  "name": "Single-arm Preacher Curl",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 591,
+  "name": "Sit-ups",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 590,
+  "name": "Sitting Calf Raises",
+  "category": "Calves",
+  "primary": [
+   "calves"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 595,
+  "name": "Skipping - Standard",
+  "category": "Cardio",
+  "primary": [
+   "calves"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 245,
+  "name": "Skullcrusher Dumbbells",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 246,
+  "name": "Skullcrusher SZ-bar",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 598,
+  "name": "Smith Machine Close-grip Bench Press",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": [
+   "pectoralisMajor"
+  ]
+ },
+ {
+  "wgerId": 925,
+  "name": "Smith Machine Slight Incline Press",
+  "category": "Chest",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 916,
+  "name": "Smith Press",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 599,
+  "name": "Snatch",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 604,
+  "name": "Speed Deadlift",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "hamstrings"
+  ],
+  "secondary": [
+   "quadriceps",
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 607,
+  "name": "Splinter Sit-ups",
+  "category": "Abs",
+  "primary": [
+   "obliques"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 991,
+  "name": "Split squats left",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "quadriceps"
+  ],
+  "secondary": [
+   "hamstrings"
+  ]
+ },
+ {
+  "wgerId": 992,
+  "name": "Split squats right",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "quadriceps"
+  ],
+  "secondary": [
+   "hamstrings"
+  ]
+ },
+ {
+  "wgerId": 614,
+  "name": "Squat Jumps",
+  "category": "Legs",
+  "primary": [
+   "quadriceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 616,
+  "name": "Squat Thrust",
+  "category": "Legs",
+  "primary": [
+   "calves",
+   "gluteus",
+   "quadriceps",
+   "rectusAbdominis"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 615,
+  "name": "Squats",
+  "category": "Legs",
+  "primary": [
+   "quadriceps"
+  ],
+  "secondary": [
+   "gluteus"
+  ]
+ },
+ {
+  "wgerId": 341,
+  "name": "Squats on Multipress",
+  "category": "Legs",
+  "primary": [
+   "quadriceps"
+  ],
+  "secondary": [
+   "gluteus"
+  ]
+ },
+ {
+  "wgerId": 621,
+  "name": "Standing Bicep Curl",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 622,
+  "name": "Standing Calf Raises",
+  "category": "Calves",
+  "primary": [
+   "calves"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1239,
+  "name": "Standing Calf Stretch",
+  "category": "Legs",
+  "primary": [
+   "calves"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1240,
+  "name": "Standing Soleus Stretch",
+  "category": "Legs",
+  "primary": [
+   "calves"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1232,
+  "name": "Standing biceps stretch left",
+  "category": "Arms",
+  "primary": [
+   "anteriorDeltoid",
+   "biceps",
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1233,
+  "name": "Standing biceps stretch right",
+  "category": "Arms",
+  "primary": [
+   "anteriorDeltoid",
+   "biceps",
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 981,
+  "name": "Step-ups",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "quadriceps"
+  ],
+  "secondary": [
+   "calves",
+   "hamstrings"
+  ]
+ },
+ {
+  "wgerId": 627,
+  "name": "Stiff-legged Deadlifts",
+  "category": "Legs",
+  "primary": [
+   "hamstrings"
+  ],
+  "secondary": [
+   "gluteus"
+  ]
+ },
+ {
+  "wgerId": 912,
+  "name": "Straight Bar Cable Curls",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 917,
+  "name": "Straight Bar Cable Front Raise",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 628,
+  "name": "Straight-arm Pull Down (bar Attachment)",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 629,
+  "name": "Straight-arm Pull Down (rope Attachment)",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 630,
+  "name": "Sumo Deadlift",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "hamstrings",
+   "quadriceps"
+  ],
+  "secondary": [
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 632,
+  "name": "Sumo Squats",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "quadriceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 636,
+  "name": "Superman",
+  "category": "Back",
+  "primary": [
+   "gluteus",
+   "latissimusDorsi"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 927,
+  "name": "Suspended crossess",
+  "category": "Cardio",
+  "primary": [
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 919,
+  "name": "T-Bar row",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi",
+   "trapezius"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1259,
+  "name": "TRX Obliques",
+  "category": "Abs",
+  "primary": [
+   "obliques",
+   "pectoralisMajor",
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "anteriorDeltoid"
+  ]
+ },
+ {
+  "wgerId": 959,
+  "name": "TRX Rows",
+  "category": "Back",
+  "primary": [
+   "anteriorDeltoid",
+   "biceps",
+   "latissimusDorsi"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1266,
+  "name": "TRX Tricep Extension",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1269,
+  "name": "TRX dips",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": [
+   "pectoralisMajor"
+  ]
+ },
+ {
+  "wgerId": 1261,
+  "name": "TRX gorilla biceps curl",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1260,
+  "name": "TRX hammer curl",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1246,
+  "name": "TRX roll out",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "obliques",
+   "pectoralisMajor"
+  ]
+ },
+ {
+  "wgerId": 650,
+  "name": "Thruster",
+  "category": "Legs",
+  "primary": [
+   "anteriorDeltoid"
+  ],
+  "secondary": [
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 655,
+  "name": "Tricep Dumbbell Kickback",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 805,
+  "name": "Tricep Pushdown on Cable",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 659,
+  "name": "Triceps Extensions on Cable",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 660,
+  "name": "Triceps Extensions on Cable With Bar",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1185,
+  "name": "Triceps Pushdown",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 661,
+  "name": "Triceps on Machine",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1230,
+  "name": "Triceps stretch left",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1231,
+  "name": "Triceps stretch right",
+  "category": "Arms",
+  "primary": [
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 672,
+  "name": "Trunk Rotation With Cable",
+  "category": "Abs",
+  "primary": [
+   "obliques"
+  ],
+  "secondary": [
+   "latissimusDorsi"
+  ]
+ },
+ {
+  "wgerId": 1262,
+  "name": "Trx Single Arm Bicep Curl",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 675,
+  "name": "Turkish Get-Up",
+  "category": "Abs",
+  "primary": [
+   "anteriorDeltoid",
+   "gluteus",
+   "obliques",
+   "pectoralisMajor"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 684,
+  "name": "Underhand Lat Pull Down",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "biceps"
+  ]
+ },
+ {
+  "wgerId": 688,
+  "name": "Upper External Oblique",
+  "category": "Chest",
+  "primary": [
+   "obliques"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 694,
+  "name": "Upright Row w/ Dumbbells",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid",
+   "trapezius"
+  ],
+  "secondary": [
+   "biceps"
+  ]
+ },
+ {
+  "wgerId": 693,
+  "name": "Upright Row, SZ-bar",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid",
+   "trapezius"
+  ],
+  "secondary": [
+   "biceps"
+  ]
+ },
+ {
+  "wgerId": 691,
+  "name": "Upright Row, on Multi Press",
+  "category": "Shoulders",
+  "primary": [
+   "anteriorDeltoid",
+   "trapezius"
+  ],
+  "secondary": [
+   "biceps"
+  ]
+ },
+ {
+  "wgerId": 695,
+  "name": "V-Bar Pulldown",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "biceps",
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 1090,
+  "name": "Vpushup",
+  "category": "Abs",
+  "primary": [
+   "pectoralisMajor",
+   "quadriceps",
+   "rectusAbdominis",
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1104,
+  "name": "Walking",
+  "category": "Cardio",
+  "primary": [
+   "calves",
+   "gluteus",
+   "hamstrings",
+   "latissimusDorsi",
+   "obliques",
+   "quadriceps",
+   "rectusAbdominis"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1196,
+  "name": "Wall Drills",
+  "category": "Legs",
+  "primary": [
+   "quadriceps"
+  ],
+  "secondary": [
+   "calves"
+  ]
+ },
+ {
+  "wgerId": 713,
+  "name": "Wall Pushup",
+  "category": "Arms",
+  "primary": [
+   "anteriorDeltoid",
+   "pectoralisMajor",
+   "triceps"
+  ],
+  "secondary": [
+   "gluteus",
+   "rectusAbdominis",
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 716,
+  "name": "Wall Slides",
+  "category": "Back",
+  "primary": [
+   "biceps",
+   "hamstrings",
+   "pectoralisMajor",
+   "trapezius",
+   "triceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 718,
+  "name": "Wall Squat",
+  "category": "Legs",
+  "primary": [
+   "hamstrings",
+   "quadriceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1100,
+  "name": "Wall balls",
+  "category": "Legs",
+  "primary": [
+   "anteriorDeltoid",
+   "gluteus",
+   "quadriceps"
+  ],
+  "secondary": [
+   "biceps",
+   "pectoralisMajor",
+   "rectusAbdominis",
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 722,
+  "name": "Weighted Step-ups",
+  "category": "Legs",
+  "primary": [
+   "gluteus",
+   "quadriceps"
+  ],
+  "secondary": [
+   "calves",
+   "hamstrings"
+  ]
+ },
+ {
+  "wgerId": 723,
+  "name": "Wide-grip Pulldown",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "biceps",
+   "pectoralisMajor",
+   "trapezius"
+  ]
+ },
+ {
+  "wgerId": 1125,
+  "name": "Wide-grip supinated lat pulldown",
+  "category": "Back",
+  "primary": [
+   "latissimusDorsi"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1244,
+  "name": "Yoga exercise: Cow-cat",
+  "category": "Back",
+  "primary": [
+   "anteriorDeltoid",
+   "latissimusDorsi",
+   "trapezius"
+  ],
+  "secondary": [
+   "obliques",
+   "rectusAbdominis"
+  ]
+ },
+ {
+  "wgerId": 980,
+  "name": "commando pull-ups",
+  "category": "Back",
+  "primary": [
+   "anteriorDeltoid",
+   "biceps",
+   "latissimusDorsi",
+   "trapezius"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1218,
+  "name": "knee push-ups",
+  "category": "Arms",
+  "primary": [
+   "anteriorDeltoid",
+   "pectoralisMajor"
+  ],
+  "secondary": [
+   "triceps"
+  ]
+ },
+ {
+  "wgerId": 975,
+  "name": "one-handed kettlebell curls",
+  "category": "Arms",
+  "primary": [
+   "biceps"
+  ],
+  "secondary": []
+ },
+ {
+  "wgerId": 1103,
+  "name": "walking bridge",
+  "category": "Abs",
+  "primary": [
+   "rectusAbdominis"
+  ],
+  "secondary": [
+   "anteriorDeltoid",
+   "biceps",
+   "gluteus",
+   "latissimusDorsi"
+  ]
+ }
+]

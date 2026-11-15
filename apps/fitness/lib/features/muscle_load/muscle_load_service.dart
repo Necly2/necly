@@ -3,10 +3,10 @@ import '../../enums/muscle_group.dart';
 import '../../enums/muscle_role.dart';
 
 /// Связь упражнения с мышцей и ролью (из exercise_muscles).
-class ExerciseMuscle {
+class MuscleInvolvement {
   final Muscle muscle;
   final MuscleRole role;
-  const ExerciseMuscle(this.muscle, this.role);
+  const MuscleInvolvement(this.muscle, this.role);
 }
 
 /// Выполненный подход (из set_records). Объём = reps или длительность.
@@ -44,7 +44,7 @@ class CompletedSet {
 /// вес роли (основная/вспомогательная) и суммируем по группам мышц.
 class MuscleLoadService {
   /// Карта: exerciseId -> список его мышц. Берётся из БД (exercise_muscles).
-  final Map<int, List<ExerciseMuscle>> exerciseMuscles;
+  final Map<int, List<MuscleInvolvement>> exerciseMuscles;
 
   const MuscleLoadService(this.exerciseMuscles);
 
