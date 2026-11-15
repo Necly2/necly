@@ -858,6 +858,7 @@ function renderDetail() {
   const was = el.classList.contains('on');
   if (!x) { el.classList.remove('on'); el.innerHTML = ''; if (was) setTimeout(syncRects, 30); return; }
   const k = markKey(x), w = R.watch[k] || {}, pc = w.pc || {};
+  if (x.lat != null && (x.around === undefined || (x.around && x.around.err))) loadAround(x);
   if (R.watch[k] && pc.changedAt && !pc.seen) { R.watch[k].pc.seen = true; saveWatch(); }
   const area = x.areaMin == null ? '—' : (x.areaMax && x.areaMax !== x.areaMin ? `${fmtNum(x.areaMin)}–${fmtNum(x.areaMax)}` : fmtNum(x.areaMin)) + ' м²';
   const fact = (t, v, sub) => `<div><small>${t}</small><b>${v}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
@@ -867,7 +868,7 @@ function renderDetail() {
     : fact('Цена', x.price != null ? fmtNum(x.price) + ' ₽' : '—', x.price != null ? 'в месяц' : '');
   el.innerHTML = `<div class="rd-top"><span class="zb"><i style="background:${zoneColor(x)}"></i>${esc(x.platform)} · ${esc(x.zone)}</span><b class="rd-addr" title="${esc(x.address)}">${esc(x.address)}</b></div>
     <div class="rd-meta">${[x.metro, x.source, x.date ? 'объявление от ' + x.date : '', (x.also || []).map(y => `${y.platform}: ${y.zone}`).join(', ')].filter(Boolean).map(esc).join(' · ')}</div>
-    <div class="rd-facts">${fact('Площадь', area)}${price}${sup}${x.money ? fact('Выплата', fmtNum(x.money) + ' ₽') : ''}${x.lat != null ? `<div><small>Квартир в доме</small><b id="rdFlats">${flatsCell(x) || '—'}</b></div>` : ''}${x.near != null ? fact('Ближайший ПВЗ Ozon', fmtNum(x.near) + ' м') : ''}
+    <div class="rd-facts">${fact('Площадь', area)}${price}${sup}${x.money ? fact('Выплата', fmtNum(x.money) + ' ₽') : ''}${x.lat != null ? `<div><small>Квартир в доме</small><b id="rdFlats">${flatsCell(x) || '—'}</b></div><div><small>Квартир в 400 м</small><b id="rdAround">${aroundCell(x)}</b></div>` : ''}${x.near != null ? fact('Ближайший ПВЗ Ozon', fmtNum(x.near) + ' м') : ''}
       <span class="rd-btns"><button class="ghost sm${R.watch[k] ? ' on' : ''}" id="rdStar">${R.watch[k] ? '★ Отслеживается' : '☆ Отслеживать'}</button>${x.url ? '<button class="ghost sm" id="rdOpen">Открыть ↗</button>' : ''}</span></div>
     ${x.noteShow || x.byCoords ? `<div class="rd-note" title="${esc(x.note || '')}">${esc([x.byCoords ? `адрес определён по координатам объявления${x.addrSrc ? ' (в объявлении: ' + x.addrSrc + ')' : ''}` : '', x.noteShow].filter(Boolean).join(' · '))}</div>` : ''}
     <div class="rd-act"><select id="rdStatus" title="Статус — виден на всех компьютерах"><option value="">Без статуса</option>${Object.entries(STATUSES).map(([v, t]) => `<option value="${v}"${w.status === v ? ' selected' : ''}>${t}</option>`).join('')}</select>
@@ -901,6 +902,23 @@ function zoneCell(x) {
     return `<span class="zb" title="${esc(t)}"><i style="background:${zoneColor(x)}"></i>${x.supMonth ? fmtNum(x.supMonth) + ' ₽/мес' : 'нет поддержки'}</span>${x.supMonth ? '' : `<small>${esc(x.supTier)}</small>`}`;
   }
   return `<span class="zb"><i style="background:${zoneColor(x)}"></i>${esc(x.zone)}</span>`;
+}
+// квартир вокруг помещения (400 м, OpenStreetMap) — поток клиентов пункта; считается при выборе объявления
+function aroundCell(x) {
+  const a = x.around;
+  if (a === undefined || a === null) return '<span class="muted">…</span>';
+  if (a.err) return `<span class="muted" title="${esc(a.err)}">—</span>`;
+  if (!a.buildings) return `<span class="muted" title="Рядом нет жилых домов с данными в OpenStreetMap${a.unknown ? ` (жилых без этажности: ${a.unknown})` : ''}">0</span>`;
+  const t = [`Жилых домов в ${a.r} м: ${a.buildings}${a.houses ? ` (частных: ${a.houses})` : ''}`, a.exact ? `точно известно: ${fmtNum(a.exact)} кв.` : '', a.est ? `оценка по этажам и площади: ${fmtNum(a.est)} кв.` : '', a.unknown ? `ещё ${a.unknown} жилых без этажности — не посчитаны` : ''].filter(Boolean).join('\n');
+  return `<span title="${esc(t)}">${a.est || a.unknown ? '≈' : ''}${fmtNum(a.n)}</span>`;
+}
+async function loadAround(x) {
+  if (x.aroundBusy) return; x.aroundBusy = true;
+  try {
+    const c = await pvz.flatsAroundCached([[x.lat, x.lon]]).catch(() => [null]);
+    x.around = c[0] || await pvz.flatsAround(x.lat, x.lon).catch(e => ({ err: String(e && e.message || e) })) || { err: 'нет ответа' };
+  } finally { x.aroundBusy = false; }
+  const e = $('rdAround'); if (e && R.rows[R.sel] === x) e.innerHTML = aroundCell(x);
 }
 // квартир в доме (OpenStreetMap): сначала из кэша, по выбору строки — запрос; видимые строки догружаются по одной
 function flatsCell(x) {

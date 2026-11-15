@@ -72,6 +72,9 @@ async function report(j) {
   const ST = typeof STATUSES !== 'undefined' ? STATUSES : {};
   const rows = [...m.values()].sort((a, b) => (b.exported || b.checked) - (a.exported || a.checked)).map(x => { const w = J.watch[markKey(x)] || {}; return Object.assign({}, x, { status: ST[w.status] || '', userNote: w.note || '' }); });
   if (!rows.length) { showModal({ kind: 'info', title: 'Пока пусто', text: 'За этот период у заказа нет подходящих помещений.' }); return; }
+  // квартир в 400 м — из уже посчитанных (при просмотре объявлений)
+  const ar = await pvz.flatsAroundCached(rows.map(x => [x.lat, x.lon])).catch(() => []);
+  rows.forEach((x, i) => { if (x.lat != null && ar[i]) x.around = ar[i]; });
   const f = await pvz.exportRows(rows, { title: 'Отчёт ' + j.name, dir: j.resDir });
   if (f) toast(`Отчёт сохранён: ${fmtNum(rows.length)} помещений`);
 }

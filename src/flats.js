@@ -13,9 +13,9 @@ let queue = Promise.resolve();   // по одному запросу (Overpass �
 // у каждого зеркала — срок ответа (раньше зависший сервер останавливал всю очередь, и «Квартир» оставалось пустым);
 // ответившее зеркало пробуется первым
 let good = 0;
-async function overpass(q) {
+async function overpass(q, ms = 15000) {
   for (let i = 0; i < MIRRORS.length; i++) {
-    const k = (good + i) % MIRRORS.length, ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 15000);
+    const k = (good + i) % MIRRORS.length, ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
     try {
       const r = await net.fetch(MIRRORS[k], { method: 'POST', body: 'data=' + encodeURIComponent(q), signal: ctl.signal, headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'PVZMaster/1.0 (+https://github.com/Necly2/necly)' } });
       if (r.ok) { const j = await r.json(); good = k; return j; }
@@ -65,6 +65,20 @@ function distRing(r, lat, lon) {
   return best;
 }
 const RES = /^(apartments|residential|dormitory)$/, NOT_RES = /^(commercial|retail|office|industrial|warehouse|school|kindergarten|hospital|university|college|church|garage|garages|service|kiosk|shed|roof|hotel|supermarket|public|civic|government|train_station|transportation|parking|construction|sports_centre|stadium)$/;
+const M2_PER_FLAT = 62;   // площадь этажа на одну квартиру (с лестницами и общими помещениями)
+const HOUSE = /^(house|detached|semidetached_house|terrace|bungalow)$/;
+// квартир в одном здании: точно (building:flats) или оценка (этажи × площадь / 62 м²); не жилое или без данных — null
+// c = { t (теги), lv (этажи), area (м²) }; entrances — отмеченные подъезды (если известны)
+function flatsOf(c, entrances = 0) {
+  const t = c.t;
+  if (+t['building:flats'] > 0) return { n: +t['building:flats'], exact: true };
+  if (HOUSE.test(t.building)) return { n: 1, exact: false, house: true };
+  const res = RES.test(t.building) && c.lv >= 2, yes = t.building === 'yes' && c.lv >= 5 && !t.amenity && !t.office && !t.shop && !t.tourism;
+  if (!res && !yes) return null;
+  const byArea = c.area > 60 && c.area < 30000 ? Math.round(c.lv * c.area / M2_PER_FLAT) : 0;
+  const n = entrances ? Math.round(c.lv * entrances * 4) : byArea;
+  return n ? { n, exact: false, unsure: yes } : null;
+}
 // elements — ответ Overpass (здания с геометрией и узлы-подъезды); → { n, exact, how, levels, entrances } или { n: null, why }
 function estimate(elements, lat, lon) {
   const entIds = new Set(elements.filter(e => e.type === 'node').map(e => e.id));
@@ -82,12 +96,42 @@ function estimate(elements, lat, lon) {
   if (!pick) return { n: null, why: near.some(c => NOT_RES.test(c.t.building)) ? 'Здание нежилое (по OpenStreetMap)' : 'В OpenStreetMap у дома не указаны тип и этажность' };
   const entrances = pick.e.type === 'way' ? (pick.e.nodes || []).filter(id => entIds.has(id)).length : 0;
   // подъезды отмечены — этажи × подъезды × 4; иначе по площади дома: этажи × площадь / 62 м² на квартиру (с общими помещениями)
-  const byArea = pick.area > 60 && pick.area < 30000 ? Math.round(pick.lv * pick.area / 62) : 0;
-  const n = entrances ? Math.round(pick.lv * entrances * 4) : byArea;
+  const f = flatsOf(pick, entrances), n = f ? f.n : 0;
   if (!n) return { n: null, why: 'Не удалось оценить: нет площади дома' };
   return { n, exact: false, levels: pick.lv, entrances, unsure: pick.t.building === 'yes',
     how: (entrances ? `${pick.lv} эт. × ${entrances} подъезд(а) × 4` : `${pick.lv} эт. × ${Math.round(pick.area)} м² / 62 м² на квартиру`) + (pick.t.building === 'yes' ? '; тип дома не указан — возможно, нежилой' : '') };
 }
+// ---------- квартир вокруг помещения (поток клиентов пункта) ----------
+const AROUND_R = 400;   // м — около 5 минут пешком
+// elements — здания с геометрией в радиусе; считаются дома, центр которых ближе r
+// → { n, exact (квартир в домах с точным числом), est, houses, buildings, unknown (жилые без этажности), r }
+function around(elements, lat, lon, r = AROUND_R) {
+  const o = { n: 0, exact: 0, est: 0, houses: 0, buildings: 0, unknown: 0, r };
+  for (const e of elements) {
+    if (e.type === 'node' || !e.tags || !e.tags.building) continue;
+    const rings = ringsOf(e); if (!rings.length) continue;
+    const pts = rings[0], cLat = pts.reduce((a, p) => a + p[0], 0) / pts.length, cLon = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+    if (dist(lat, lon, cLat, cLon) > r) continue;
+    const c = { t: e.tags, lv: parseFloat(e.tags['building:levels']) || 0, area: rings.reduce((a, g) => a + ringArea(g, lat), 0) };
+    const f = flatsOf(c);
+    if (!f) { if (RES.test(e.tags.building)) o.unknown++; continue; }
+    o.n += f.n; o.buildings++;
+    if (f.house) o.houses++; else if (f.exact) o.exact += f.n; else o.est += f.n;
+  }
+  return o;
+}
+async function lookupAround(lat, lon) {
+  const k = 'r' + AROUND_R + ':' + key(lat, lon), c = load();
+  if (c[k] && Date.now() - c[k].t < 90 * 864e5) return c[k];
+  const run = async () => {
+    const j = await overpass(`[out:json][timeout:40];wr(around:${AROUND_R + 60},${lat},${lon})["building"];out tags geom;`, 45000);
+    if (!j) return { n: null, err: 'OpenStreetMap не ответил — повторю позже' };
+    c[k] = Object.assign({ t: Date.now() }, around(j.elements || [], lat, lon)); save(); return c[k];
+  };
+  // своя очередь: выбранное объявление не ждёт фоновый подсчёт квартир по всему списку (Overpass допускает 2 запроса одновременно)
+  const p = aqueue.then(run, run); aqueue = p.then(() => new Promise(r => setTimeout(r, 1500)), () => {}); return p;
+}
+let aqueue = Promise.resolve();
 const V = 3;   // версия способа подсчёта: старые записи пересчитываются
 // address задан — при неточном числе пробуем МинЖКХ (медленно: открывается страница сайта); без адреса — только OpenStreetMap
 async function lookup(lat, lon, address) {
@@ -108,4 +152,4 @@ async function lookup(lat, lon, address) {
   };
   const p = queue.then(run, run); queue = p.then(() => new Promise(r => setTimeout(r, 1100)), () => {}); return p;
 }
-module.exports = { lookup, estimate, cached: (lat, lon) => { const x = load()[key(lat, lon)]; return x && (x.exact || x.v === V) ? x : null; } };
+module.exports = { lookup, estimate, around, lookupAround, AROUND_R, aroundCached: (lat, lon) => load()['r' + AROUND_R + ':' + key(lat, lon)] || null, cached: (lat, lon) => { const x = load()[key(lat, lon)]; return x && (x.exact || x.v === V) ? x : null; } };

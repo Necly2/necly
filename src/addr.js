@@ -27,6 +27,7 @@ function card(r) {
     <div class="a-top"><span class="a-zone"><i></i>${esc(z)}</span><span class="a-ztxt">${esc(ZONE_TXT[z] || '')}</span><span class="grow"></span><span class="muted">${new Date(r.at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span></div>
     <div class="a-addr"><b>${esc(pt.text || r.addr)}</b>${pt.text && pt.text !== r.addr ? `<span class="muted"> — вы искали: ${esc(r.addr)}</span>` : ''}</div>
     ${r.greenSmall ? `<div class="a-warn">Площадь ${fmtNum(r.area)} м² меньше ${fmtNum(r.greenMin)} м² — для зелёной зоны Ozon помещение не подходит.</div>` : ''}
+    ${pt.lat != null ? `<div class="a-near" id="aAround">Квартир в 400 м: <span class="muted">считаю…</span></div>` : ''}
     ${r.near && r.near.dist != null ? `<div class="a-near">Ближайший ПВЗ Ozon — <b>${fmtNum(r.near.dist)} м</b>${r.near.name ? ` <span class="muted">(${esc(r.near.name)})</span>` : ''}</div>` : ''}
     ${r.note ? `<div class="a-note">${esc(r.note)}</div>` : ''}
     ${(r.tiers || []).length ? `<div class="a-sup">${sup ? `<div class="a-big">${r.area ? `Для ${fmtNum(r.area)} м² (${esc(sup.note)})` : ''}: <b>${rub(sup.month)}</b> в месяц · <b>${rub(sup.total)}</b> всего</div>` : r.area ? '' : '<div class="hint">Укажите площадь — покажу поддержку для неё.</div>'}
@@ -45,6 +46,11 @@ function card(r) {
 const textOf = r => { const pt = r.found || {}; return `${pt.text || r.addr}\nOzon: ${r.zone}${r.sup ? `, поддержка ${rub(r.sup.month)}/мес, всего ${rub(r.sup.total)} (${r.sup.note})` : ''}${r.near && r.near.dist != null ? `\nБлижайший ПВЗ Ozon: ${fmtNum(r.near.dist)} м` : ''}${r.yandex ? '\nЯндекс Маркет: ' + r.yandex.zone : ''}${r.wb ? '\nWildberries: ' + r.wb.zone : ''}${r.note ? '\n' + r.note : ''}`; };
 function bindCard(r) {
   const pt = r.found || {};
+  if (pt.lat != null) pvz.flatsAround(pt.lat, pt.lon).then(a => {
+    const e = $('aAround'); if (!e) return;
+    e.innerHTML = !a || a.err ? `Квартир в 400 м: <span class="muted">${esc((a && a.err) || 'нет данных')}</span>`
+      : `Квартир в 400 м: <b>${a.est || a.unknown ? '≈' : ''}${fmtNum(a.n)}</b> <span class="muted">(жилых домов ${a.buildings}${a.unknown ? `, ещё ${a.unknown} без этажности` : ''})</span>`;
+  }).catch(() => {});
   $('aYa').onclick = () => pvz.openExternal(pt.lat != null ? `https://yandex.ru/maps/?pt=${pt.lon},${pt.lat}&z=17&l=map` : 'https://yandex.ru/maps/?text=' + encodeURIComponent(r.addr));
   $('aOz').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(pt.text || r.addr).catch(() => {}); pvz.openExternal('https://pvz-map.ozon.ru/'); toast('Адрес скопирован — вставьте в поиск карты Ozon'); };
   $('aCopy').onclick = () => navigator.clipboard.writeText(textOf(r)).then(() => toast('Скопировано'));

@@ -83,5 +83,7 @@ contextBridge.exposeInMainWorld('pvz', {
   onZonesChanged: cb => ipcRenderer.on('zonesChanged', (_e, s) => cb(s)),
   zonesSeen: () => ipcRenderer.invoke('zonesSeen'),
   flats: (a, b, c) => ipcRenderer.invoke('flats', a, b, c),
-  flatsCached: pts => ipcRenderer.invoke('flatsCached', pts)
+  flatsCached: pts => ipcRenderer.invoke('flatsCached', pts),
+  flatsAround: (lat, lon) => ipcRenderer.invoke('flatsAround', lat, lon),
+  flatsAroundCached: pts => ipcRenderer.invoke('flatsAroundCached', pts)
 });

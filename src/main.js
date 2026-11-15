@@ -886,17 +886,17 @@ ipcMain.handle('exportRows', async (_e, rows, opt) => {
   ws.columns = [{ header: '№', width: 5 }, { header: 'Площадка', width: 10 }, { header: 'Зона', width: 18 }, { header: 'Адрес', width: 48 }, { header: 'Метро', width: 22 },
     { header: 'Мин. площадь', width: 12 }, { header: 'Макс. площадь', width: 12 }, { header: 'Цена, ₽', width: 12 }, { header: 'Выплата, ₽', width: 12 }, { header: 'Источник', width: 10 },
     { header: 'Дата', width: 11 }, { header: 'Сверка адреса', width: 40 }, { header: 'Ссылка', width: 22 }, { header: 'Координаты', width: 20 },
-    { header: 'Поддержка Ozon, ₽/мес', width: 14 }, { header: 'Поддержка всего, ₽', width: 14 }, { header: 'Ближайший ПВЗ Ozon, м', width: 13 }, { header: 'Выгружено', width: 12 }, { header: 'Статус', width: 18 }, { header: 'Заметка', width: 40 }];
+    { header: 'Поддержка Ozon, ₽/мес', width: 14 }, { header: 'Поддержка всего, ₽', width: 14 }, { header: 'Ближайший ПВЗ Ozon, м', width: 13 }, { header: 'Квартир в 400 м', width: 12 }, { header: 'Выгружено', width: 12 }, { header: 'Статус', width: 18 }, { header: 'Заметка', width: 40 }];
   const dm = t => { if (!t) return ''; const x = new Date(t); return `${String(x.getDate()).padStart(2, '0')}.${String(x.getMonth() + 1).padStart(2, '0')}.${x.getFullYear()}`; };
   rows.forEach((x, i) => {
     const row = ws.addRow([i + 1, x.platform, x.zone, x.address, x.metro, x.areaMin, x.areaMax, x.price, x.money, x.source, x.date, x.note, x.url ? { text: 'Открыть объявление', hyperlink: x.url } : '', x.lat != null ? `${x.lat},${x.lon}` : '',
-      x.supMonth ?? null, x.supTotal ?? null, x.near ?? null, dm(x.exported || x.checked), x.status || '', x.userNote || '']);
-    [15, 16, 17].forEach(k => (row.getCell(k).numFmt = '#,##0'));
+      x.supMonth ?? null, x.supTotal ?? null, x.near ?? null, x.around && x.around.n != null ? x.around.n : null, dm(x.exported || x.checked), x.status || '', x.userNote || '']);
+    [15, 16, 17, 18].forEach(k => (row.getCell(k).numFmt = '#,##0'));
     const f = x.platform === 'Ozon' && FILL[x.zone]; if (f) row.eachCell(cl => (cl.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + f } }));
     if (x.url) row.getCell(13).font = { color: { argb: 'FF0563C1' }, underline: true };
     [8, 9].forEach(k => (row.getCell(k).numFmt = '#,##0'));
   });
-  ws.getRow(1).font = { bold: true }; ws.getRow(1).alignment = { wrapText: true, vertical: 'middle' }; ws.views = [{ state: 'frozen', ySplit: 1 }]; ws.autoFilter = { from: 'A1', to: 'T1' };
+  ws.getRow(1).font = { bold: true }; ws.getRow(1).alignment = { wrapText: true, vertical: 'middle' }; ws.views = [{ state: 'frozen', ySplit: 1 }]; ws.autoFilter = { from: 'A1', to: 'U1' };
   await wb.xlsx.writeFile(r.filePath); shell.showItemInFolder(r.filePath); return r.filePath;
 });
 ipcMain.handle('openLogs', () => { fs.mkdirSync(trace.dir(), { recursive: true }); return shell.openPath(trace.dir()); });
@@ -988,6 +988,8 @@ ipcMain.handle('jokes', async (_e, best) => {
 });
 ipcMain.handle('vpnCheck', () => require('./vpn').check());
 ipcMain.handle('flats', (_e, lat, lon, addr) => require('./flats').lookup(lat, lon, addr));
+ipcMain.handle('flatsAround', (_e, lat, lon) => require('./flats').lookupAround(lat, lon));
+ipcMain.handle('flatsAroundCached', (_e, pts) => { const f = require('./flats'); return pts.map(([a, b]) => f.aroundCached(a, b)); });
 ipcMain.handle('flatsCached', (_e, pts) => { const f = require('./flats'); return pts.map(([a, b]) => f.cached(a, b)); });
 ipcMain.handle('setAutostart', (_e, on) => { const c = Object.assign(loadCfg(), { autostart: !!on }); saveCfg(c); scheduler.applyAutostart(on); return true; });
 ipcMain.handle('isVisible', () => win.isVisible());
@@ -1125,6 +1127,8 @@ async function selfTest(dir) {
       // карточка объявления под картой, статус и заметка, кнопка «Фильтры»
       await J(`selectRow(R.list[1].id, false); 1`); await W8(700);
       await J(`$('rdStatus').value = 'call'; $('rdStatus').onchange(); $('rdNote').value = 'Тест: перезвонить в 15:00'; $('rdNote').onchange(); $('rFiltBtn').click(); 1`); await W8(900); await shot('31-results-detail');
+      console.log('AROUND', await J(`(async () => { const x = R.rows[R.sel]; for (let i = 0; i < 20 && (x.around === undefined || x.aroundBusy); i++) await new Promise(r => setTimeout(r, 500)); const real = JSON.stringify(x.around); x.around = { n: 5230, exact: 3000, est: 2229, houses: 1, buildings: 24, unknown: 2, r: 400 }; renderDetail(); const c = $('rdAround').firstElementChild; return JSON.stringify({ real, cell: $('rdAround').textContent, tip: c && c.title }); })()`));
+      await shot('34-around');
       console.log('DETAIL', await J(`JSON.stringify({ on: $('rDetail').classList.contains('on'), w: (w => ({ st: w.status, note: w.note }))(R.watch[markKey(R.rows[R.sel])] || {}), badge: !!document.querySelector('#rRows .st-b'), filt: $('rFilters').classList.contains('on'), tools: Math.round($('rMapCol').querySelector('.r-maptools').getBoundingClientRect().height) })`));
       await J(`$('rFiltBtn').click(); 1`); await W8(300);
       // «Карта | Ozon | Объявление» — на одном месте
