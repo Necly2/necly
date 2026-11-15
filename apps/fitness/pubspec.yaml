@@ -1,0 +1,39 @@
+name: necly_fitness
+description: Личное учебное фитнес + питание приложение (офлайн-first, без подписок).
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # БД
+  drift: ^2.18.0
+  drift_flutter: ^0.2.0
+  # Сеть
+  http: ^1.2.0
+  # CSV импорт/экспорт
+  csv: ^6.0.0
+  # Сканер штрих-кодов
+  mobile_scanner: ^5.0.0
+  # Состояние
+  flutter_riverpod: ^2.5.0
+  # Файлы (экспорт CSV)
+  path_provider: ^2.1.0
+  share_plus: ^9.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  test: ^1.25.0
+  drift_dev: ^2.18.0
+  build_runner: ^2.4.0
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  # assets:
+  #   - assets/exercises.json   # дамп упражнений из wger (офлайн-first)

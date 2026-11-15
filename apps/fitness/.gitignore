@@ -1,0 +1,17 @@
+# Flutter / Dart build artifacts
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock
+
+# generated drift code (regenerate with build_runner)
+*.g.dart
+
+# iOS / Android local
+ios/Pods/
+ios/.symlinks/
+android/.gradle/
+*.iml
+.idea/
