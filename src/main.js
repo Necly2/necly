@@ -1083,6 +1083,12 @@ async function selfTest(dir) {
   for (let i = 0; i < 40; i++) { await W8(1500); if (await J(`!$('aGo').disabled`)) break; }
   await shot('30-addr-result'); await J(`$('aMulti').click(); 1`); await W8(400); await shot('30b-addr-multi'); await J(`$('aMulti').click(); 1`);
   console.log('ADDR', await J(`($('aRes').innerText || '').replace(/\s+/g, ' ').slice(0, 300)`));
+  // разработка: выполнить скрипт из файла PVZ_OZEVAL во вкладке Ozon (после поиска по адресу — скрипт проверки уже загружен) и сохранить результат
+  if (process.env.PVZ_OZEVAL) {
+    const r = await ozonView.webContents.executeJavaScript(fs.readFileSync(process.env.PVZ_OZEVAL, 'utf8'), true).catch(e => ({ err: e.message }));
+    fs.writeFileSync(path.join(dir, 'ozeval.json'), JSON.stringify(r, null, 1)); console.log('OZEVAL', JSON.stringify(r).slice(0, 200));
+  }
+
   console.log('SYNC', await J(`$('syncDirT').textContent.split('/').slice(-2).join('/') + ' | ' + $('syncInfo').textContent`), JSON.stringify(fs.existsSync(loadCfg().syncDir || '-') ? fs.readdirSync(loadCfg().syncDir) : []));
   await J(`openPage('schedule'); 1`); await W8(1200); await J(`$('sAdd').click(); 1`); await W8(800); await shot('23-schedule-job');
   console.log('SCHED', await J(`[...document.querySelectorAll('#sList select.what')].map(s => s.selectedOptions[0] && s.selectedOptions[0].textContent).join('|')`));

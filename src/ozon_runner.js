@@ -215,13 +215,16 @@ const slim = r => r && ({allowed: r.allowed, problem: r.problem, tariffs: r.tari
   isHouse: r.geocode.isHouse, street: r.geocode.street, house: r.geocode.house, fullText: r.geocode.fullText, point: r.geocode.point}});
 
 
-// ближайший работающий ПВЗ Ozon: запрос идёт с withNearestPoints=true — в ответе ищем списки «nearest…» с координатами
-// (названия полей Ozon может менять, поэтому поиск общий); → {dist (м), name} или null
+// ближайший работающий ПВЗ Ozon: запрос идёт с withNearestPoints=true — в ответе ищем списки «nearest…» с координатами;
+// проверено 15.11.2026: nearestPoints содержит объявления Авито (AvitoCard), а не ПВЗ — такие точки отбрасываются; → {dist (м), name} или null
 function nearestPvz(r, lat, lon) {
   let best = null;
   const num = v => (typeof v === "number" || (typeof v === "string" && v.trim() !== "")) && isFinite(+v) ? +v : null;
   const take = it => {
     if (!it || typeof it !== "object") return;
+    // в nearestPoints Ozon отдаёт и объявления Авито (pointType "AvitoCard") — это не пункты выдачи; берём только явные ПВЗ
+    const kind = String(it.pointType || (it.options && it.options._type) || "");
+    if (!/pvz|pickpoint|pick_point|postamat/i.test(kind) || /avito|card|rent/i.test(kind)) return;
     for (const p of [it.location, it.point, it.coordinates, it.geo, it.position, it]) {
       if (!p || typeof p !== "object") continue;
       const la = num(p.lat ?? p.latitude), lo = num(p.lon ?? p.lng ?? p.longitude);
