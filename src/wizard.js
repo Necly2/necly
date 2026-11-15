@@ -406,6 +406,7 @@ function renderCenter() {
       ${R.phase === 'exported' && !checking ? '<button class="ghost" id="ccExportAgain">⬇ Выгрузить ещё раз</button>' : ''}
       ${R.check.st === 'err' && !checking ? '<button class="ghost" id="ccContinue">▶ Продолжить проверку</button>' : ''}
       ${(R.check.st === 'ok' || R.check.st === 'err') && !checking && checks.length ? '<button class="ghost" id="ccCheckAgain">↻ Проверить снова</button>' : ''}
+      ${W.job && W.job.exp && checks.length && !exporting && !checking ? '<button class="ghost" id="ccRecheckJob" title="Проверить зоны заново (без памяти результатов) для уже выгруженных объявлений этого заказа — когда площадка поменяла карту зон">↻ Перепроверить зоны заказа</button>' : ''}
       ${exporting ? `<button class="ghost" id="ccLive">${W.siteOpen ? '▣ Свернуть сайт' : '👁 Показать сайт'}</button>` : ''}
       <button class="ghost${W.dirty ? ' dirty' : ''}" id="ccSave" title="${W.job ? 'Сохранить источники, проверки, параметры, фильтры Авито и заказы Winner в этот заказ' : 'Сохранить эти настройки как заказ — со своими папками для выгрузок и результатов'}">${W.job ? '💾 Сохранить в заказ' : '☆ Сохранить как заказ'}</button>
       ${R.files.length ? '<button class="ghost" id="ccFolder">Открыть папку</button>' : ''}
@@ -450,6 +451,7 @@ function renderCenter() {
     if (exporting || checking) ['ccOnlyNew', 'ccSeenDays'].forEach(id => ($(id).disabled = true));
   });
   on('ccContinue', () => runCheck(false));
+  on('ccRecheckJob', recheckJob);
   on('ccNow', () => { pvz.ozonNow(); W.run.check.wait = false; W.run.check.text = 'Пробую подключиться к Ozon…'; rerender(); });
   if ($('ozSet')) pvz.getCfg().then(c => {
     const sum = () => { $('ozSum').textContent = `пауза ${c.ozonPause || 2} с · потоков ${c.ozonThreads || 2} · ожидание ${c.ozonWait || 25} мин × ${c.ozonTries || 3}`; };
@@ -604,6 +606,18 @@ async function runExportAll(onlyFailed) {
     await showModal({ kind: 'ok', title: 'Выгрузка завершена', text: `Сохранено файлов: ${n}.` + (Object.values(W.checks).some(Boolean) ? '\nТеперь можно нажать «Начать проверку».' : ''),
       buttons: [{ label: 'Хорошо', cls: 'primary', value: true }] });
   }
+}
+// перепроверка зон заказа: все его выгрузки за период — заново, без памяти результатов (площадки часто меняют карту зон)
+async function recheckJob() {
+  const v = await showModal({ kind: 'info', title: 'Перепроверить зоны заказа', text: `Зоны будут проверены заново для уже выгруженных объявлений заказа «${W.job.name}» — на площадках, выбранных в заказе. Файлы результатов обновятся, отметки «просмотрено» и отслеживаемые сохранятся.\n\nЗа какой период выгрузки?`,
+    buttons: [{ label: 'Отмена', value: null }, { label: '3 дня', value: 3 }, { label: '7 дней', cls: 'primary', value: 7 }, { label: '30 дней', value: 30 }, { label: 'Все', value: 0 }] });
+  if (v === null || v === undefined) return;
+  const files = await pvz.jobSources(W.job.id, v);
+  if (!files.length) { showModal({ kind: 'info', title: 'Нечего перепроверять', text: 'За этот период в папке выгрузок заказа нет файлов.' }); return; }
+  if (!W.run) newRun();
+  W.run.files = files;
+  await runCheck(true);
+  toast(`Перепроверяю выгрузок: ${files.length}`);
 }
 async function runCheck(fresh) {
   const R = W.run;

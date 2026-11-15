@@ -183,6 +183,17 @@ ipcMain.handle('jobPickFolder', async (_e, id, which) => {
   saveCfg(c); return j;
 });
 ipcMain.handle('jobOwnFolders', (_e, id) => { const c = loadCfg(), j = findJob(c, id); if (!j) return null; Object.assign(j, defJobDirs(c, j.name)); for (const d of [j.exp, j.res]) fs.mkdirSync(d, { recursive: true }); saveCfg(c); return j; });
+// выгрузки заказа за последние days дней (0 — все) — для «Перепроверить зоны заказа»: по журналам проверок и по папке выгрузок
+ipcMain.handle('jobSources', (_e, id, days) => {
+  const c = loadCfg(), j = findJob(c, id); if (!j || !j.exp) return [];
+  const since = days ? Date.now() - days * 864e5 : 0, out = new Set();
+  const walk = (d, depth) => { let l = []; try { l = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of l) { const p = path.join(d, e.name); if (e.isDirectory()) { if (depth < 4) walk(p, depth + 1); continue; }
+      if (!/^(export_excel|avito)/i.test(e.name) || !/\.xlsx$/i.test(e.name) || e.name.startsWith('~$')) continue;
+      try { if (fs.statSync(p).mtimeMs >= since) out.add(p); } catch {} } };
+  walk(j.exp, 0);
+  return [...out].sort((a, b) => a.localeCompare(b, 'ru', { numeric: true }));
+});
 ipcMain.handle('jobSeen', (_e, id, forget) => {
   const p = jobSeenPath(id); if (forget) { try { fs.unlinkSync(p); } catch {} return { cian: 0, avito: 0 }; }
   let s = {}; try { s = JSON.parse(fs.readFileSync(p, 'utf8')); } catch {}
@@ -1049,6 +1060,7 @@ async function selfTest(dir) {
   console.log('JOBSCHED', await J(`JSON.stringify({ rows: document.querySelectorAll('.jc-sch').length, days: [...document.querySelectorAll('.jc-sch .s-days button.on')].map(b => b.textContent).join(), badge: (document.querySelector('.jc-top .j-badge') || {}).textContent || '' })`));
   await J(`document.querySelector('.j-card').scrollTop = 0; 1`);
   await J(`$('jcRun').click(); 1`); await W8(1800); await shot('22-job-run');
+  console.log('RECHECK', await J(`JSON.stringify({ btn: !!$('ccRecheckJob'), files: (await pvz.jobSources(document.querySelector ? (await pvz.jobs()).find(j => j.exp && !j.archived).id : '', 0)).length })`.replace('JSON.stringify(', '(async () => JSON.stringify(').replace(/\)$/, '))()')));
   console.log('JOBRUN', await J(`JSON.stringify({ step: document.querySelector('#wzStep h2').textContent, job: $('wzJob').textContent, save: ($('ccSave') || {}).textContent, dirs: ($('ccSaveSum') || {}).textContent })`));
   await J(`$('wzHome').click(); 1`); await W8(1200);
   console.log('JOBBACK', await J(`document.body.dataset.mode + '|' + document.getElementById('jobs').className`));

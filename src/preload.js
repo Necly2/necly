@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('pvz', {
   jobPickFolder: (id, w) => ipcRenderer.invoke('jobPickFolder', id, w),
   jobOwnFolders: id => ipcRenderer.invoke('jobOwnFolders', id),
   jobSeen: (id, forget) => ipcRenderer.invoke('jobSeen', id, forget),
+  jobSources: (id, days) => ipcRenderer.invoke('jobSources', id, days),
   jobSched: (id, list) => ipcRenderer.invoke('jobSched', id, list),
   pcInfo: () => ipcRenderer.invoke('pcInfo'),
   syncState: () => ipcRenderer.invoke('syncState'),
