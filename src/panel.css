@@ -1093,3 +1093,17 @@ dialog.modal[open]::backdrop{@starting-style{background-color:rgba(0,0,0,0)}}
 @container mapcol (max-width:420px){
   .r-maptools .fs-btn,#rSplit{display:none}
 }
+
+/* «Зона»: выплата Ozon минус аренда; подсказка с расчётом — под числом */
+.r-table .zb.net{font:inherit;font-weight:650;border:0;background:none;padding:0;color:inherit;cursor:help;display:inline-flex;align-items:center;gap:6px;text-decoration:underline dotted color-mix(in srgb,currentColor 40%,transparent);text-underline-offset:3px}
+.r-table .zb.net i{width:9px;height:9px;border-radius:50%;flex:none}
+.r-table .zb.net.pos{color:var(--ok-t)}
+.r-table .zb.net.neg{color:var(--err-t)}
+.net-tip{inset:auto;margin:0;margin-top:6px;position-area:block-end span-inline-end;position-try-fallbacks:flip-block;
+  padding:8px 11px;border-radius:10px;border:1px solid var(--line2);background:var(--card);color:var(--text);box-shadow:var(--shadow);font-size:12.5px;min-width:170px}
+.net-tip div{display:flex;justify-content:space-between;gap:16px;line-height:1.7}
+.net-tip span{color:var(--muted)}
+.net-tip{opacity:0;transition-property:opacity,display,overlay;transition-duration:.12s;transition-behavior:allow-discrete}
+.net-tip:popover-open{opacity:1;@starting-style{opacity:0}}
+.r-table th:nth-child(3){width:112px}
+.r-table .zb.net{white-space:nowrap}

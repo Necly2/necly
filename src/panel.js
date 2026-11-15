@@ -408,12 +408,15 @@ function fixAddr(x) {
   if (m && /\d/.test(m[1])) { x.addrSrc = x.address; x.address = m[1].trim().replace(/^город\s+/i, ''); x.noteShow = x.noteShow.replace(/(проверить вручную: в таблице нет номера дома|адрес по координатам объявления) \(Ozon: [^)]+\);?\s*/, '').trim(); x.byCoords = true; }
   return x;
 }
+// выгода в месяц: выплата Ozon под площадь объявления минус аренда (если обе суммы известны)
+const netOf = x => x.platform === 'Ozon' && x.supMonth != null && x.price != null ? x.supMonth - x.price : null;
 function prepRows(rows) {
   R.sel = null;   // после перезагрузки списка старый номер строки указывал бы на другое объявление
   R.rows = rows.map((x, i) => Object.assign(x.addrSrc === undefined ? fixAddr(x) : x, { id: i, mark: R.marks[markKey(x)] ? 1 : 0 }));
   // отслеживаемые, которых уже нет в файлах результатов, — из сохранённой копии
   const have = new Set(R.rows.map(markKey));
   for (const [k, w] of Object.entries(R.watch)) if (!have.has(k) && w.row) { const r0 = Object.assign({}, w.row); R.rows.push(Object.assign(r0.addrSrc === undefined ? fixAddr(r0) : r0, { id: R.rows.length, mark: R.marks[k] ? 1 : 0, archived: true })); }
+  R.rows.forEach(x => (x.net = netOf(x)));
   // одинаковые помещения в один день: первое оставляем, остальные скрываем (переключатель «Скрыть одинаковые»)
   const firstOf = new Map(); R.dupCount = 0;
   [...R.rows].sort((a, b) => (a.exported || a.checked) - (b.exported || b.checked)).forEach(x => { const k = dupKey(x); if (firstOf.has(k)) { x.dupHidden = true; R.dupCount++; } else firstOf.set(k, x); });
@@ -475,7 +478,10 @@ function filteredResults() {
 function renderResults(fit) {
   const list = filteredResults();
   const { k, dir } = R.sort;
-  list.sort((a, b) => { const x = a[k], y = b[k]; if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1; return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y), 'ru')) * dir; });
+  if (k === 'zone') {
+    const v = x => x.net ?? (x.platform === 'Ozon' && x.supMonth != null ? x.supMonth : null);
+    list.sort((a, b) => { const x = v(a), y = v(b); if (x == null && y == null) return String(a.zone).localeCompare(String(b.zone), 'ru'); if (x == null) return 1; if (y == null) return -1; return (y - x) * -dir; });
+  } else list.sort((a, b) => { const x = a[k], y = b[k]; if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1; return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y), 'ru')) * dir; });
   R.list = list;
   document.querySelectorAll('.r-table th').forEach(th => th.classList.toggle('sorted', th.dataset.k === k));
   const shown = list.slice(0, 1000);
@@ -817,7 +823,7 @@ $('rRows').addEventListener('click', e => {
   selectRow(x.id, true);
 });
 $('rMap').addEventListener('click', e => { const a = e.target.closest('a[data-url]'); if (a) { e.preventDefault(); pvz.openExternal(a.dataset.url); } });
-document.querySelectorAll('.r-table th[data-k]').forEach(th => (th.onclick = () => { R.sort = { k: th.dataset.k, dir: R.sort.k === th.dataset.k ? -R.sort.dir : (['price', 'areaMin', 'zone', 'address', 'platform'].includes(th.dataset.k) ? 1 : -1) }; renderResults(false); }));
+document.querySelectorAll('.r-table th[data-k]').forEach(th => (th.onclick = () => { R.sort = { k: th.dataset.k, dir: R.sort.k === th.dataset.k ? -R.sort.dir : (['price', 'areaMin', 'address', 'platform'].includes(th.dataset.k) ? 1 : -1) }; renderResults(false); }));
 ['rZone'].forEach(id => ($(id).onchange = () => renderResults(true)));
 $('rJob').onchange = () => { R.jobF = $('rJob').value; R.up = 'all'; renderDays(); renderResults(true); };
 ['rArea', 'rPrice', 'rSearch'].forEach(id => $(id).addEventListener('input', () => renderResults(false)));
@@ -886,6 +892,10 @@ $('rFiltReset').onclick = () => { $('rPlat').querySelectorAll('input').forEach(i
 pvz.getCfg().then(c => { if (c.resFiltOpen) { $('rFilters').classList.add('on'); $('rFiltBtn').classList.add('open'); } });
 // зона или (тестовая функция) поддержка Ozon под площадь объявления
 function zoneCell(x) {
+  if (R.testSup && x.platform === 'Ozon' && x.supMonth != null && x.net != null && x.supMonth) {
+    // выплата минус аренда; при наведении — из чего посчитано (одна общая подсказка #netTip)
+    return `<button type="button" class="zb net ${x.net >= 0 ? 'pos' : 'neg'}" interestfor="netTip" aria-describedby="netTip" data-sup="${x.supMonth}" data-price="${x.price}"><i style="background:${zoneColor(x)}"></i>${x.net > 0 ? '+' : x.net < 0 ? '−' : ''}${fmtNum(Math.abs(x.net))} ₽</button>`;
+  }
   if (R.testSup && x.platform === 'Ozon' && x.supMonth != null) {
     const t = `Зона: ${x.zone}. Ступень ${x.supTier}${x.supTotal ? ', всего ' + fmtNum(x.supTotal) + ' ₽' : ''}`;
     return `<span class="zb" title="${esc(t)}"><i style="background:${zoneColor(x)}"></i>${x.supMonth ? fmtNum(x.supMonth) + ' ₽/мес' : 'нет поддержки'}</span>${x.supMonth ? '' : `<small>${esc(x.supTier)}</small>`}`;
@@ -1183,3 +1193,10 @@ $('homeSum').onclick = () => { R.day = dayKey(Date.now()); R.up = 'all'; R.jobF 
 new MutationObserver(() => { if (document.body.dataset.mode === 'welcome') homeSummary(); }).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
 pvz.onOzonDone(() => { if (document.body.dataset.mode === 'welcome') setTimeout(homeSummary, 500); });
 homeSummary();
+
+// подсказка к «выплата − аренда»: содержимое — из той ячейки, на которую навели
+$('netTip').addEventListener('beforetoggle', e => {
+  if (e.newState !== 'open') return;
+  const b = e.source || document.querySelector('#rRows .zb.net:hover, #rRows .zb.net:focus-visible'); if (!b) return;
+  $('netTip').innerHTML = `<div><span>Выплата</span><b>${fmtNum(+b.dataset.sup)} ₽</b></div><div><span>Аренда</span><b>${fmtNum(+b.dataset.price)} ₽</b></div>`;
+});
