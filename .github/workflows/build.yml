@@ -31,7 +31,7 @@ jobs:
         run: |
           npx @electron/packager . "PVZ Master" --platform=win32 --arch=x64 --asar --overwrite --out=dist \
             --app-version=1.0.${{ github.run_number }} --icon=build/icon.ico \
-            --ignore="^/\.github" --ignore="^/dist" --ignore="^/build" --ignore="\.md$" --ignore="\.zip$"
+            --ignore="^/\.github" --ignore="^/\.agents" --ignore="^/\.claude" --ignore="skills-lock\.json$" --ignore="^/tools" --ignore="^/dist" --ignore="^/build" --ignore="\.md$" --ignore="\.zip$"
           cd dist && mv "PVZ Master-win32-x64" "PVZ Master" && 7z a ../PVZ-Master-Windows.zip "PVZ Master" && cd ..
           cp "dist/PVZ Master/resources/app.asar" app.asar
           echo "${{ github.run_number }}" > version.txt
@@ -100,7 +100,7 @@ jobs:
           for ARCH in arm64 x64; do
             npx @electron/packager . "PVZ Master" --platform=darwin --arch=$ARCH --asar --overwrite --out=dist \
               --app-version=1.0.${{ github.run_number }} --app-bundle-id=ru.necly.pvzavito --icon=build/icon.icns \
-              --ignore="^/\.github" --ignore="^/dist" --ignore="^/build" --ignore="\.md$" --ignore="\.zip$"
+              --ignore="^/\.github" --ignore="^/\.agents" --ignore="^/\.claude" --ignore="skills-lock\.json$" --ignore="^/tools" --ignore="^/dist" --ignore="^/build" --ignore="\.md$" --ignore="\.zip$"
             APP="dist/PVZ Master-darwin-$ARCH/PVZ Master.app"
             codesign --force --deep -s - "$APP"
             codesign --verify --deep "$APP"
