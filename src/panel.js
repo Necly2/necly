@@ -408,8 +408,9 @@ function fixAddr(x) {
   if (m && /\d/.test(m[1])) { x.addrSrc = x.address; x.address = m[1].trim().replace(/^город\s+/i, ''); x.noteShow = x.noteShow.replace(/(проверить вручную: в таблице нет номера дома|адрес по координатам объявления) \(Ozon: [^)]+\);?\s*/, '').trim(); x.byCoords = true; }
   return x;
 }
-// выгода в месяц: выплата Ozon под площадь объявления минус аренда (если обе суммы известны)
-const netOf = x => x.platform === 'Ozon' && x.supMonth != null && x.price != null ? x.supMonth - x.price : null;
+// выгода в месяц: выплата Ozon под площадь объявления − аренда − сотрудники (R.staff, «Настройки», по умолчанию 120 000 ₽)
+R.staff = 120000;
+const netOf = x => x.platform === 'Ozon' && x.supMonth != null && x.price != null ? x.supMonth - x.price - R.staff : null;
 function prepRows(rows) {
   R.sel = null;   // после перезагрузки списка старый номер строки указывал бы на другое объявление
   R.rows = rows.map((x, i) => Object.assign(x.addrSrc === undefined ? fixAddr(x) : x, { id: i, mark: R.marks[markKey(x)] ? 1 : 0 }));
@@ -439,7 +440,8 @@ async function loadResults() {
   const cfg = await pvz.getCfg();
   if (R.showLst === undefined) { R.showLst = cfg.resShowLst != null ? (cfg.resShowLst && lstAuto()) || (cfg.resShowLst && window.innerWidth >= 1400) : lstAuto(); R.base = cfg.resBase || '2gis'; $('rBase').value = R.base; R.mapMode = cfg.resMap || 'yandex'; }
   setMapLists(cfg.resMapsGen, cfg.resMapsAgg);
-  R.split = !!cfg.resSplit;   // «Разделить» — постоянная функция (была тестовой)
+  R.split = !!cfg.resSplit;
+  R.staff = cfg.staffCost != null ? +cfg.staffCost || 0 : 120000;   // «Разделить» — постоянная функция (была тестовой)
   R.testSup = cfg.testSupport !== false;
   R.marks = cfg.resMarks || {}; R.seen = cfg.resSeen || {}; R.watch = cfg.resWatch || {}; R.watchDel = cfg.resWatchDel || {}; if (cfg.resDedup === false) R.dedup = false;
   prepRows(r.rows);
@@ -902,7 +904,7 @@ pvz.getCfg().then(c => { if (c.resFiltOpen) { $('rFilters').classList.add('on');
 function zoneCell(x) {
   if (R.testSup && x.platform === 'Ozon' && x.supMonth != null && x.net != null && x.supMonth) {
     // выплата минус аренда; при наведении — из чего посчитано (одна общая подсказка #netTip)
-    return `<button type="button" class="zb net ${x.net >= 0 ? 'pos' : 'neg'}" interestfor="netTip" aria-describedby="netTip" data-sup="${x.supMonth}" data-price="${x.price}"><i style="background:${zoneColor(x)}"></i>${x.net > 0 ? '+' : x.net < 0 ? '−' : ''}${fmtNum(Math.abs(x.net))} ₽</button>`;
+    return `<button type="button" class="zb net ${x.net >= 0 ? 'pos' : 'neg'}" interestfor="netTip" aria-describedby="netTip" data-sup="${x.supMonth}" data-price="${x.price}" data-staff="${R.staff}"><i style="background:${zoneColor(x)}"></i>${x.net > 0 ? '+' : x.net < 0 ? '−' : ''}${fmtNum(Math.abs(x.net))} ₽</button>`;
   }
   if (R.testSup && x.platform === 'Ozon' && x.supMonth != null) {
     const t = `Зона: ${x.zone}. Ступень ${x.supTier}${x.supTotal ? ', всего ' + fmtNum(x.supTotal) + ' ₽' : ''}`;
@@ -1244,5 +1246,5 @@ homeSummary();
 $('netTip').addEventListener('beforetoggle', e => {
   if (e.newState !== 'open') return;
   const b = e.source || document.querySelector('#rRows .zb.net:hover, #rRows .zb.net:focus-visible'); if (!b) return;
-  $('netTip').innerHTML = `<div><span>Выплата</span><b>${fmtNum(+b.dataset.sup)} ₽</b></div><div><span>Аренда</span><b>${fmtNum(+b.dataset.price)} ₽</b></div>`;
+  $('netTip').innerHTML = `<div><span>Выплата</span><b>${fmtNum(+b.dataset.sup)} ₽</b></div><div><span>Аренда</span><b>− ${fmtNum(+b.dataset.price)} ₽</b></div>${+b.dataset.staff ? `<div><span>Сотрудники</span><b>− ${fmtNum(+b.dataset.staff)} ₽</b></div>` : ''}`;
 });

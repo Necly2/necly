@@ -93,7 +93,7 @@
   <div class="r-days r-ups" id="rUps"></div>
   <div class="r-body">
     <div class="r-table-wrap"><table class="r-table"><thead><tr>
-      <th class="num-c">№</th><th data-k="platform">Площадка</th><th data-k="zone" title="Ozon: выплата в месяц минус аренда (наведите на число — расчёт). Щелчок — сверху самые выгодные">Зона</th><th data-k="address">Адрес</th><th data-k="areaMin" class="n">Площадь</th><th class="n" title="Квартир в доме — по данным OpenStreetMap; ≈ — оценка по этажам и подъездам">Квартир</th><th data-k="price" class="n">Цена</th><th data-k="checked">Проверено</th><th class="acts-h"></th><th class="mk" data-k="mark" title="Отмеченные — щёлкните, чтобы отсортировать">✓<button type="button" class="cols-btn" id="rColsBtn" title="Столбцы" aria-label="Столбцы" commandfor="rColsMenu" command="toggle-popover">⋮</button><div class="cols-menu" id="rColsMenu" popover="auto" aria-label="Показывать столбцы"></div></th>
+      <th class="num-c">№</th><th data-k="platform">Площадка</th><th data-k="zone" title="Ozon: выплата в месяц − аренда − сотрудники (наведите на число — расчёт). Щелчок — сверху самые выгодные">Зона</th><th data-k="address">Адрес</th><th data-k="areaMin" class="n">Площадь</th><th class="n" title="Квартир в доме — по данным OpenStreetMap; ≈ — оценка по этажам и подъездам">Квартир</th><th data-k="price" class="n">Цена</th><th data-k="checked">Проверено</th><th class="acts-h"></th><th class="mk" data-k="mark" title="Отмеченные — щёлкните, чтобы отсортировать">✓<button type="button" class="cols-btn" id="rColsBtn" title="Столбцы" aria-label="Столбцы" commandfor="rColsMenu" command="toggle-popover">⋮</button><div class="cols-menu" id="rColsMenu" popover="auto" aria-label="Показывать столбцы"></div></th>
     </tr></thead><tbody id="rRows"></tbody></table><div class="hint" id="rMore"></div></div>
     <div class="r-lst" id="rLstCol">
       <div class="r-maptools"><b>Объявление</b><span class="hint grow" id="rLstQ"></span>
@@ -225,6 +225,7 @@
       <div class="set-row"><span class="muted" id="setPriceInfo"></span><button class="ghost sm" id="setPriceNow">Проверить сейчас</button></div>
     </div>
     <div class="box" data-tab="work"><div class="box-h">Проверка Ozon</div>
+      <div class="set-row"><span>Расход на сотрудников в месяц, ₽<small class="muted">вычитается в «Результатах»: выплата − аренда − сотрудники</small></span><input type="text" class="num" id="setStaff" inputmode="numeric" style="width:120px"></div>
       <label class="switch"><input type="checkbox" id="setPvzHouse"><span></span><span class="lbl">Не брать адреса, где в доме уже есть ПВЗ Ozon <small>по OpenStreetMap: пункт Ozon отмечен внутри контура того же дома. Отмечены не все пункты — часть таких адресов всё равно попадёт в итог</small></span></label>
       <div class="set-row"><span>Зелёная зона — площадь от, м²<small class="muted"> (Ozon сейчас пишет «от 60 м²»)</small></span><input type="text" class="num" id="setGreenMin" inputmode="numeric" style="width:90px"></div>
       <div class="set-row"><span>Помнить результаты проверки</span><select id="setCache"><option value="1">3 дня</option><option value="0">не помнить</option></select></div>

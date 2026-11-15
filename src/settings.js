@@ -41,6 +41,7 @@ async function loadSettings() {
   scaleInfo();
   $('setPriceWatch').checked = c.priceWatch !== false;
   $('setPvzHouse').checked = c.pvzHouseCheck !== false;
+  setNum($('setStaff'), c.staffCost != null ? c.staffCost : 120000);
   { const w = Object.values(c.resWatch || {}), n = w.filter(x => x.row && x.row.url).length, last = Math.max(0, ...w.map(x => (x.pc && x.pc.at) || 0));
     $('setPriceInfo').textContent = n ? `Объявлений со ссылкой: ${fmtNum(n)}` + (last ? ` · последняя проверка ${new Date(last).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : '') : 'Отслеживаемых объявлений пока нет'; }
   syncInfo();
@@ -100,6 +101,7 @@ $('syncHow').onclick = async () => {
   const v = await showModal({ kind: 'info', title: 'Как подключить другие компьютеры', html: true, text: `<pre class="how">${esc(SYNC_HOW(st))}</pre>`, buttons: [{ label: 'Скопировать, чтобы отправить коллеге', value: 'copy' }, { label: 'Понятно', cls: 'primary', value: true }] });
   if (v === 'copy') { navigator.clipboard.writeText(SYNC_HOW(st)).then(() => toast('Инструкция скопирована')).catch(() => toast('Не удалось скопировать')); }
 };
+$('setStaff').onchange = () => { const v = Math.max(0, numOf($('setStaff')) || 0); setNum($('setStaff'), v); pvz.setCfg({ staffCost: v }); };
 $('setPvzHouse').onchange = () => pvz.setCfg({ pvzHouseCheck: $('setPvzHouse').checked });
 $('setPriceWatch').onchange = () => pvz.setCfg({ priceWatch: $('setPriceWatch').checked });
 $('setPriceNow').onclick = async () => {
