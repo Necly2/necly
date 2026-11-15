@@ -24,6 +24,9 @@ function readFile(file, spec, mtime, exported) {
   const out = [];
   for (let r = range.s.r + 1; r <= range.e.r; r++) {
     const addr = g(r, 'Адрес'); if (!addr) continue;
+    // Ozon без поддержки под площадь объявления (площадь меньше ступеней) — в итог не входит (в старых файлах такие строки есть;
+    // отслеживаемые всё равно видны — из сохранённой копии)
+    if (spec.platform === 'Ozon' && head['Поддержка под площадь, ₽/мес'] != null && num(g(r, 'Поддержка под площадь, ₽/мес')) === 0 && !num(g(r, 'Поддержка всего, ₽')) && String(g(r, spec.zoneCol) || '') !== 'ошибка запроса') continue;
     const lc = head['Ссылка на первоисточник'] != null ? cell(r, head['Ссылка на первоисточник']) : null;
     const url = (lc && lc.l && lc.l.Target) || (lc && /^https?:/.test(String(lc.v)) ? String(lc.v) : '');
     const coords = String(g(r, 'Координаты') || '').replace(/\s/g, '').replace(';', ',');

@@ -148,7 +148,7 @@ function ozonText(r) {
   const z = r.stats;
   let t = `Ozon — ${r.reason}. Файлов: ${r.files}` + (r.rowsTotal != null ? `, объявлений: ${r.rowsTotal}` : '') + `, разных адресов: ${r.addresses}` + (r.fromCache ? ` (из них ${r.fromCache} уже проверялись за последние дни — взяты из памяти)` : '') + (r.noCoords ? `; без координат, не проверялись: ${r.noCoords}` : '') + `.\n` +
     `Подходящих: зелёных ≥ ${r.greenMin || 60} м² ${z['зелёный']}, синих ${z['синий']}, голубых ${z['голубой']}, < 3 млн ${z['гарантия < 3 млн']}, ошибка запроса ${z['ошибка запроса']}.\n` +
-    `Не подошли: вне зоны/недоступно ${z.out_zone}, зелёных < ${r.greenMin || 60} м² ${z.green_small}` + (z.unchecked ? `; не проверено ${z.unchecked}` : '') + '.';
+    `Не подошли: вне зоны/недоступно ${z.out_zone}, зелёных < ${r.greenMin || 60} м² ${z.green_small}` + (z.no_support ? `, без поддержки под площадь ${z.no_support}` : '') + (z.unchecked ? `; не проверено ${z.unchecked}` : '') + '.';
   if (r.odd && r.odd.length) t += `\nСтранные цены (${r.odd.length}): ` + r.odd.slice(0, 5).join('; ');
   return t;
 }

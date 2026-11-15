@@ -227,7 +227,7 @@ async function run(files, ctx) {
   // 3. файлы результатов
   const j = readJson(journalPath(outDir), { описание: 'Журнал проверки выгрузок на карте Ozon программой PVZ', files: {} });
   const now = new Date();
-  const stats = { 'зелёный': 0, 'синий': 0, 'голубой': 0, 'гарантия < 3 млн': 0, 'ошибка запроса': 0, green_small: 0, out_zone: 0, unchecked: 0 };
+  const stats = { 'зелёный': 0, 'синий': 0, 'голубой': 0, 'гарантия < 3 млн': 0, 'ошибка запроса': 0, green_small: 0, no_support: 0, out_zone: 0, unchecked: 0 };
   const saved = [], manual = [], odd = [];
   const order = Object.fromEntries(KEEP.map((z, i) => [z, i]));
   for (const { f, rows } of data) {
@@ -239,7 +239,10 @@ async function run(files, ctx) {
       if (!KEEP.includes(zone)) { stats.out_zone++; continue; }
       if (zone === 'зелёный' && Math.max(num(d['Мин. площадь']) || 0, num(d['Макс. площадь']) || 0) < (cfg.ozonGreenMin || GREEN_MIN_AREA_DEF)) { stats.green_small++; continue; }
       stats[zone]++;
-      items.push({ d, zone, note, near, sup: supportFor(tiers, Math.max(num(d['Мин. площадь']) || 0, num(d['Макс. площадь']) || 0)) });
+      const sup = supportFor(tiers, Math.max(num(d['Мин. площадь']) || 0, num(d['Макс. площадь']) || 0));
+      // площадь меньше ступеней Ozon (или ступень без выплат) — поддержки нет: в итоговый файл не берём
+      if (sup && !sup.month && !sup.total && zone !== 'ошибка запроса') { stats.no_support++; stats[zone]--; continue; }
+      items.push({ d, zone, note, near, sup });
       if (note && /проверить вручную/.test(note)) manual.push(`${d['Адрес']} — ${note}`);
       const price = num(d['Цена, ₽']);
       if (price !== null && (price < 10000 || /год/.test(String(d['Пер. оплаты'] || '')))) odd.push(`${d['Адрес']} — ${d['Цена, ₽']} ${d['Пер. оплаты'] || ''}`);

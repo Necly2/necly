@@ -587,7 +587,7 @@ async function pumpOzon() {
       if (results.length) journal.addHistory({ type: 'check', ok: true, dur: Date.now() - t0, done: results.reduce((a, r) => a + Math.max(0, (r.addresses || 0) - (r.fromCache || 0)), 0), title: results.map(r => r.label).join(', '),
         total: results.reduce((a, r) => a + (r.addresses || 0), 0), files: results.flatMap(r => r.saved || []),
         reason: results.map(r => `${r.label}: ${r.reason}`).join('; '),
-        details: results.map(r => ({ label: r.label, addresses: r.addresses, suitable: r.kind === 'ozon' ? Object.entries(r.stats || {}).filter(([k]) => !['green_small', 'out_zone', 'unchecked'].includes(k)).reduce((a, [, v]) => a + v, 0) : r.main, unchecked: r.unchecked || (r.stats && r.stats.unchecked) || 0 })) });
+        details: results.map(r => ({ label: r.label, addresses: r.addresses, suitable: r.kind === 'ozon' ? Object.entries(r.stats || {}).filter(([k]) => !['green_small', 'no_support', 'out_zone', 'unchecked'].includes(k)).reduce((a, [, v]) => a + v, 0) : r.main, unchecked: r.unchecked || (r.stats && r.stats.unchecked) || 0 })) });
       for (const r of results) for (const e of (r.errors || [])) journal.logError(r.label, e);
     }
   } catch (e) {
