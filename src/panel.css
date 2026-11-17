@@ -708,6 +708,24 @@ body.r-full .fs-exit{display:block}
 .r-table.hide-c8 th:nth-child(8),.r-table.hide-c8 td:nth-child(8){display:none}
 .r-table.hide-cnote small.note{display:none}
 
+
+.gta-countdown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 13px;
+}
+.gta-release { display: grid; gap: 2px; text-align: left }
+.gta-release time { color: var(--sub); font-size: 11px }
+#gtaRemaining { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap }
+
 /* анекдот в левом нижнем углу главного экрана */
 .joke-wrap{position:absolute;left:28px;bottom:28px;width:min(340px,30vw);display:flex;flex-direction:column;gap:8px}
 .joke-sw{font-size:12px;color:var(--muted);align-self:flex-start}

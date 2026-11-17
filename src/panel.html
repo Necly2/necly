@@ -31,6 +31,13 @@
     <button class="home-sum" id="homeSum" style="display:none" title="Открыть результаты за сегодня"></button>
     <div class="zone-note" id="zoneNote" style="display:none"><b>Ozon обновил карту зон</b><span id="zoneNoteT"></span>
       <div class="zn-act"><button class="ghost sm" id="zoneNoteRes">Открыть результаты</button><button class="ghost sm" id="zoneNoteHide">Понятно</button></div></div>
+    <div class="gta-countdown">
+      <div class="gta-release">
+        <b>Релиз GTA VI</b>
+        <time id="gtaRelease" datetime="2026-11-19T00:00:00+03:00">19 ноября 2026 · 00:00 МСК</time>
+      </div>
+      <span id="gtaRemaining" role="timer" aria-label="До выхода GTA VI"></span>
+    </div>
   </div>
   <div class="joke-wrap" id="jokeWrap" style="display:none"><label class="switch joke-sw" title="Только лучшие анекдоты дня по оценкам читателей anekdot.ru"><input type="checkbox" id="jokeBest"><span></span>Только смешные</label><div class="joke" id="joke" title="Щёлкните — следующий"><div class="joke-t" id="jokeT"></div><a href="#" id="jokeSrc">anekdot.ru</a></div></div>
 </section>
@@ -385,6 +392,7 @@
 
 <script src="theme.js"></script>
 <script src="../node_modules/leaflet/dist/leaflet.js"></script>
+<script src="gta-countdown.js"></script>
 <script src="panel.js"></script>
 <script src="wizard.js"></script>
 <script src="settings.js"></script>
