@@ -287,6 +287,7 @@ async function runOrder(p, presetName, opt = {}) {
       setSite('cian'); setStatus(`Открываю Циан (${reg === '1' ? 'Москва' : 'Московская область'})…`);
       await pvz.navUrl('cian', cianUrl(p, reg));
       const { r, text } = await runExport(Object.assign({ title: (presetName || 'Циан') + (reg === '1' ? ' · Москва' : ' · МО') }, extra));
+      if (opt.onExport) opt.onExport(r);
       report.push(`Циан ${reg === '1' ? '(Москва)' : '(МО)'}: ` + (r.ok ? `${r.total} объявл., файлов ${r.saved.length}` : 'ошибка — ' + r.error));
       setStatus(text, r.ok ? 'done' : 'err');
       if (!r.ok || /остановлено вручную/.test(r.reason || '')) break;
@@ -308,6 +309,7 @@ async function runOrder(p, presetName, opt = {}) {
     }
     if (go) {
       const { r, text } = await runExport(Object.assign({ title: (presetName || 'Авито') }, extra));
+      if (opt.onExport) opt.onExport(r);
       report.push('Авито: ' + (r.ok ? `${r.total} объявл., файлов ${r.saved.length}` : 'ошибка — ' + r.error));
       setStatus(text, r.ok ? 'done' : 'err');
     } else if (!opt.unattended) report.push('Авито: пропущено');
@@ -320,6 +322,7 @@ async function runOrder(p, presetName, opt = {}) {
       await pvz.navUrl('winner', `https://w7.baza-winner.ru/search/${guid}/params`);
       await wait(6000); bwGuid = null; await refreshBw();
       const { r, text } = await runExport(Object.assign({ title: o.name, forceCheck: !!opt.forceCheck, bw: { tag: o.tag || '', hide: o.hide !== false, name: o.name || '' } }, opt.job ? { job: opt.job } : {}));
+      if (opt.onExport) opt.onExport(r);
       report.push(`Winner «${o.name || guid.slice(0, 8)}»: ` + (r.ok ? `${r.total} объявл., файлов ${r.saved.length}` : 'ошибка — ' + r.error));
       setStatus(text, r.ok ? 'done' : 'err');
     }
@@ -1108,8 +1111,31 @@ $('sAdd').onclick = () => {
 
 // запуск задания по расписанию
 const wait = ms => new Promise(r => setTimeout(r, ms));
+let siteJobActive = false, scheduledActive = false;
+window.siteReady = () => !siteJobActive && !scheduledActive && !running && !window.wizBusy?.() && document.body.dataset.mode !== 'setup';
+window.runSiteJob = async id => {
+  if (!window.siteReady()) throw new Error('На Raspberry Pi уже выполняется задание.');
+  siteJobActive = true;
+  try {
+    const j = (await pvz.jobs()).find(x => x.id === id && !x.archived);
+    if (!j || j.busy) throw new Error('Заказ недоступен или занят другим компьютером.');
+    if (!Object.values(j.checks || {}).some(Boolean)) throw new Error('Выберите площадки проверки в заказе на Raspberry Pi.');
+    if (!(await pvz.folderState()).ok) throw new Error('Сначала настройте папки PVZ Master на Raspberry Pi.');
+    const p = Object.assign({}, j.params, j.sources, { avitoUrl: j.avitoUrl, orders: j.orders });
+    if (p.avito && !p.avitoUrl && avitoManual(p).length) throw new Error('Сохраните фильтры Авито в заказе на Raspberry Pi.');
+    const saved = [];
+    await runOrder(p, j.name, { job: j.id, unattended: true, onExport(r) {
+      if (!r.ok || /ошибк|робота|капч|остановлено|ответил [45]|не удалось|доступ ограничен/i.test(r.reason || ''))
+        throw new Error((r.site || 'Выгрузка') + ': ' + (r.error || r.reason || 'ошибка'));
+      saved.push(...(r.saved || []));
+    } });
+    return saved;
+  } finally { siteJobActive = false; }
+};
 pvz.onRunSchedule(async s => {
+  if (siteJobActive || scheduledActive) return;
   if (running || (window.wizBusy && wizBusy())) { pvz.notify('PVZ Master', `Задание «${s.name || ''}» (${s.time}) пропущено: идёт другая выгрузка.`); return; }
+  scheduledActive = true;
   let report = [];
   try {
     if (s.kind === 'winner') {
@@ -1138,6 +1164,7 @@ pvz.onRunSchedule(async s => {
       else report = await runOrder(Object.assign({ cian: true, avito: true }, p), s.preset, { unattended: true, forceCheck: !!s.check });
     }
   } catch (e) { report.push('ошибка: ' + (e.message || e)); pvz.logError('расписание', e.stack || String(e)); }
+  scheduledActive = false;
   pvz.notify(`PVZ Master — ${s.name || 'задание'} (${s.time})`, prettyNums(report.join(' · ') || 'готово'));
 });
 
@@ -1251,3 +1278,4 @@ $('netTip').addEventListener('beforetoggle', e => {
   const b = e.source || document.querySelector('#rRows .zb.net:hover, #rRows .zb.net:focus-visible'); if (!b) return;
   $('netTip').innerHTML = `<div><span>Выплата</span><b>${fmtNum(+b.dataset.sup)} ₽</b></div><div><span>Аренда</span><b>− ${fmtNum(+b.dataset.price)} ₽</b></div>${+b.dataset.staff ? `<div><span>Сотрудники</span><b>− ${fmtNum(+b.dataset.staff)} ₽</b></div>` : ''}`;
 });
+

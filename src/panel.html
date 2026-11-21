@@ -221,6 +221,8 @@
   </nav>
   <div class="set-wrap">
     <div class="box" data-tab="folders"><div class="box-h">Папки</div><div id="setFolders"></div></div>
+    <div class="box" data-tab="sync" id="siteBox" hidden><div class="box-h">Сайт PVZ Master</div>
+      <div class="set-row"><span id="siteStatus"></span><button class="ghost sm" id="siteImport">Подключить сайт…</button></div></div>
     <div class="box" data-tab="work"><div class="box-h">Выгрузка</div>
       <label class="switch"><input type="checkbox" id="setOnlyNew"><span></span><span class="lbl">Не повторять уже выгруженные объявления <small>объявления Циана и Авито, которые уже были в прошлых выгрузках, пропускаются</small></span></label>
       <div class="set-row"><span>За какой период помнить выгруженные</span><select id="setSeenDays"><option value="3">3 дня</option><option value="7">7 дней</option><option value="14">14 дней</option><option value="30">30 дней</option><option value="0">всё время</option></select></div>
@@ -399,3 +401,4 @@
 <script src="jobs.js"></script>
 <script src="addr.js"></script>
 </body></html>
+

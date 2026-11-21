@@ -40,6 +40,7 @@ const DEF_OZON = path.join(PVZ_BASE, 'ПРОВЕРКА OZON');
 let win, view, ozonView, wbView, running = false, stopFlag = false;
 let currentSite = null, ozonRunning = false, ozonStop = false, ozonSkip = false;
 const ozonQueue = [];
+let siteBridge, siteExportJob = null;
 const cfgPath = () => path.join(app.getPath('userData'), 'config.json');
 function loadCfg() {
   const d = { root: '', cianRoot: '', ozonOut: '', onlyNew: true, seenDays: 0, autoCheck: false, ozonGreenMin: 60, zoom: {}, showExpert: false, ozonDays: 3, ozonThreads: 2, ozonPause: 2, ozonWait: 25, ozonTries: 3, ozonAuto: false, ozonCache: true, chkOzon: true, chkYandex: false, chkWb: false,
@@ -465,7 +466,7 @@ ipcMain.handle('start', async (_e, c) => {
       const m = url.match(/\/search\/([0-9a-f-]{36})/i);
       if (m && c.bw) { const b = loadCfg(); b.bwOrders = Object.assign({}, b.bwOrders, { [m[1]]: { tag: c.bw.tag, hide: c.bw.hide, name: c.bw.name || (b.bwOrders && b.bwOrders[m[1]] && b.bwOrders[m[1]].name) || '' } }); saveCfg(b); cfg.bwOrders = b.bwOrders; }
       const r = await winner.run(view.webContents, cfg, c.bw || {}, st => send('status', st), () => stopFlag);
-      const q = autoOzon(cfg, r.saved, c.forceCheck);
+      const q = siteExportJob && jobId === siteExportJob ? 0 : autoOzon(cfg, r.saved, c.forceCheck);
       if (!r.ok) journal.logError('Winner', r.error);
       else if (/ошибк/i.test(r.reason || '')) journal.logError('Winner', r.reason);
       journal.addHistory({ type: 'export', site, job: jobId || '', dur: Date.now() - t0, title: c.title || (r.extra || '').replace(/^Заказ: /, '').split(';')[0], ok: !!r.ok, total: r.total || 0, files: r.saved || [], reason: r.reason || r.error });
@@ -499,7 +500,7 @@ ipcMain.handle('start', async (_e, c) => {
       out = saveRows(res.rows, cfg, site);
       if (res.ids) addSeen(cfg, res.ids, site);
     }
-    const q = autoOzon(cfg, out.saved, c.forceCheck);
+    const q = siteExportJob && jobId === siteExportJob ? 0 : autoOzon(cfg, out.saved, c.forceCheck);
     journal.addHistory({ type: 'export', site, job: jobId || '', dur: Date.now() - t0, title: c.title || '', ok: true, total: res.rows.length, files: out.saved, reason: res.reason });
     if (job) touchJob(job.id);
     return { ok: true, site, reason: res.reason, extra: res.extra || '', total: res.rows.length, withCoords: res.withCoords, ozonQueued: q, ...out };
@@ -545,6 +546,27 @@ const wbFetch = async url => {
   return { status: r.s, ok: r.s >= 200 && r.s < 300, json: async () => JSON.parse(r.t) };
 };
 
+async function checkFiles(gcfg, gpaths, outDir, results) {
+  for (const p of enabledPlatforms(gcfg)) {
+    if (ozonStop) break;
+    const files = needs(gcfg, p, gpaths);
+    if (!files.length) continue;
+    const status = (text, extra) => send('ozonStatus', Object.assign({ text, running: true }, extra || {}));
+    if (p.key === 'ozon') {
+      results.push(Object.assign({ kind: 'ozon', label: 'Ozon' }, await ozon.run(files, {
+        wc: ozonView.webContents, cfg: gcfg, log: m => trace.log('Ozon', m), cachePath: path.join(app.getPath('userData'), 'ozon_cache.json'), status, isStopped: () => ozonStop, takeSkip: () => { const v = ozonSkip; ozonSkip = false; return v; } })));
+    } else {
+      let fetchFn = trace.wrapFetch(u => net.fetch(u), p.key === 'wb' ? 'WB' : 'Яндекс');
+      if (p.key === 'wb') {
+        status('Wildberries: открываю карту map.wb.ru…');
+        if (!(await ensureWb())) { results.push({ kind: 'wb', label: 'Wildberries', reason: 'карта WB не ответила — откройте вкладку позже и повторите', saved: [], errors: [], stats: {}, main: 0, excluded: 0, unchecked: 0, manual: [], files: files.length, addresses: 0 }); continue; }
+        fetchFn = wbFetch;
+      }
+      results.push(await platforms.run(p.key, files, { fetch: fetchFn, status, isStopped: () => ozonStop, outDir }));
+    }
+  }
+}
+
 async function pumpOzon() {
   if (ozonRunning) { send('ozonStatus', { text: `В очереди ещё файлов: ${ozonQueue.length}`, running: true, queued: ozonQueue.length }); return; }
   ozonRunning = true; ozonStop = false; ozonSkip = false;
@@ -563,24 +585,7 @@ async function pumpOzon() {
       if (ozonStop) break;
       try { fs.mkdirSync(outDir, { recursive: true }); } catch {}
       const gcfg = Object.assign({}, cfg, { ozonOut: outDir });
-      for (const p of enabledPlatforms(cfg)) {
-        if (ozonStop) break;
-        const files = needs(gcfg, p, gpaths);
-        if (!files.length) continue;
-        const status = (text, extra) => send('ozonStatus', Object.assign({ text, running: true }, extra || {}));
-        if (p.key === 'ozon') {
-          results.push(Object.assign({ kind: 'ozon', label: 'Ozon' }, await ozon.run(files, {
-            wc: ozonView.webContents, cfg: gcfg, log: m => trace.log('Ozon', m), cachePath: path.join(app.getPath('userData'), 'ozon_cache.json'), status, isStopped: () => ozonStop, takeSkip: () => { const v = ozonSkip; ozonSkip = false; return v; } })));
-        } else {
-          let fetchFn = trace.wrapFetch(u => net.fetch(u), p.key === 'wb' ? 'WB' : 'Яндекс');
-          if (p.key === 'wb') {
-            status('Wildberries: открываю карту map.wb.ru…');
-            if (!(await ensureWb())) { results.push({ kind: 'wb', label: 'Wildberries', reason: 'карта WB не ответила — откройте вкладку позже и повторите', saved: [], errors: [], stats: {}, main: 0, excluded: 0, unchecked: 0, manual: [], files: files.length, addresses: 0 }); continue; }
-            fetchFn = wbFetch;
-          }
-          results.push(await platforms.run(p.key, files, { fetch: fetchFn, status, isStopped: () => ozonStop, outDir }));
-        }
-      }
+        await checkFiles(gcfg, gpaths, outDir, results);
       }
       send('ozonDone', { ok: true, results });
       if (results.length && (!win.isVisible() || !win.isFocused())) scheduler.notify('PVZ Master — проверка зон завершена', results.map(r => `${r.label}: ${r.kind === 'ozon' ? 'файлов ' + r.saved.length : 'в «Результат» ' + r.main}`).join(' · '));
@@ -881,6 +886,10 @@ ipcMain.handle('exportRows', async (_e, rows, opt) => {
   const c = loadCfg(), dir = [opt.dir, c.ozonOut].find(p => p && fs.existsSync(p)) || app.getPath('desktop');
   const r = await dialog.showSaveDialog(win, { title: opt.title ? 'Сохранить отчёт' : 'Сохранить отмеченные', defaultPath: path.join(dir, name), filters: [{ name: 'Excel', extensions: ['xlsx'] }] });
   if (r.canceled || !r.filePath) return null;
+  const wb = reportWorkbook(rows, title);
+  await wb.xlsx.writeFile(r.filePath); shell.showItemInFolder(r.filePath); return r.filePath;
+});
+function reportWorkbook(rows, title) {
   const ExcelJS = require('exceljs'), wb = new ExcelJS.Workbook(), ws = wb.addWorksheet(title.slice(0, 28).replace(/[\[\]]/g, ''));
   const FILL = { 'синий': '8DB4E2', 'голубой': 'BDD7EE', 'зелёный': 'C6EFCE', 'гарантия < 3 млн': 'E4DFEC', 'ошибка запроса': 'FFC000' };
   ws.columns = [{ header: '№', width: 5 }, { header: 'Площадка', width: 10 }, { header: 'Зона', width: 18 }, { header: 'Адрес', width: 48 }, { header: 'Метро', width: 22 },
@@ -897,7 +906,68 @@ ipcMain.handle('exportRows', async (_e, rows, opt) => {
     [8, 9].forEach(k => (row.getCell(k).numFmt = '#,##0'));
   });
   ws.getRow(1).font = { bold: true }; ws.getRow(1).alignment = { wrapText: true, vertical: 'middle' }; ws.views = [{ state: 'frozen', ySplit: 1 }]; ws.autoFilter = { from: 'A1', to: 'U1' };
-  await wb.xlsx.writeFile(r.filePath); shell.showItemInFolder(r.filePath); return r.filePath;
+  return wb;
+}
+
+async function runSiteSearch(jobId, progress) {
+  const cfg = loadCfg(), job = findJob(cfg, jobId);
+  if (!job || job.archived || running || ozonRunning) throw new Error('Заказ недоступен или Raspberry Pi занят.');
+  const flags = job.checks || {};
+  const outDir = job.res || cfg.ozonOut;
+  const opts = { ...cfg, chkOzon: !!flags.ozon, chkYandex: !!flags.yandex, chkWb: !!flags.wb, ozonOut: outDir };
+  if (!enabledPlatforms(opts).length || !outDir) throw new Error('Настройте папку результатов и площадки проверки.');
+  if (!job.sources?.cian && !job.sources?.avito && !(job.sources?.winner && Object.values(job.orders || {}).some(o => o?.on)))
+    throw new Error('В заказе нет активных источников.');
+  siteExportJob = jobId;
+  let ownsCheck = false;
+  try {
+    progress('Выгружаю объявления');
+    const files = await win.webContents.executeJavaScript('window.runSiteJob(' + JSON.stringify(jobId) + ')');
+    if (!files.length) return { rows: [], checked: 0 };
+    if (ozonRunning) throw new Error('Проверка зон занята. Запустите поиск позже.');
+    ozonRunning = ownsCheck = true; ozonStop = false; ozonSkip = false;
+    progress('Проверяю зоны');
+    fs.mkdirSync(outDir, { recursive: true });
+    const outcomes = [];
+    await checkFiles(opts, files, outDir, outcomes);
+    const rows = [];
+    let checked = 0;
+    for (const spec of enabledPlatforms(opts)) {
+      const journalFile = path.join(outDir, spec.journal);
+      if (!fs.existsSync(journalFile)) throw new Error(spec.label + ': проверка не завершилась. Проверьте доступ к карте на Raspberry Pi.');
+      const records = JSON.parse(fs.readFileSync(journalFile, 'utf8')).files;
+      let count = 0;
+      for (const file of new Set(files)) {
+        const item = records[file];
+        if (!item?.result || item.pending?.length || item.size !== fs.statSync(file).size)
+          throw new Error(spec.label + ': часть объявлений не проверена. Откройте карту на Raspberry Pi.');
+        rows.push(...results.readCheckedFile(item.result));
+        count += item.rows || 0;
+      }
+      checked = Math.max(checked, count);
+    }
+    progress('Готовлю Excel');
+    return { rows, checked };
+  } finally {
+    siteExportJob = null;
+    if (ownsCheck) { ozonRunning = false; send('ozonDone', { ok: !ozonStop, results: [] }); if (ozonQueue.length) void pumpOzon(); }
+  }
+}
+function startSiteBridge() {
+  if (process.platform !== 'linux') return;
+  siteBridge = require('./site-bridge').create({ dir: app.getPath('userData'),
+    jobs: () => loadCfg().jobs.filter(j => !j.archived).map(({ id, name }) => ({ id, name })),
+    ready: async () => !running && !ozonRunning && !win.isDestroyed() && await win.webContents.executeJavaScript('Boolean(window.siteReady?.())'),
+    execute: runSiteSearch, workbook: rows => reportWorkbook(rows, 'Результаты').xlsx.writeBuffer() });
+  siteBridge.start();
+}
+ipcMain.handle('siteConnection', () => siteBridge ? siteBridge.connection() : null);
+ipcMain.handle('siteImport', async e => {
+  if (!siteBridge || e.sender !== win.webContents) return null;
+  const dialogResult = await dialog.showOpenDialog(win, { title: 'Подключить личный сайт PVZ Master', properties: ['openFile'], filters: [{ name: 'Файл подключения', extensions: ['json'] }] });
+  if (dialogResult.canceled) return null;
+  try { siteBridge.import(dialogResult.filePaths[0]); return 'Настройки сохранены'; }
+  catch { return 'Не удалось прочитать файл подключения. Скачайте его на вашем сайте PVZ Master.'; }
 });
 ipcMain.handle('openLogs', () => { fs.mkdirSync(trace.dir(), { recursive: true }); return shell.openPath(trace.dir()); });
 ipcMain.handle('makeReport', async () => {
@@ -1016,7 +1086,7 @@ if (!gotLock) app.quit();
 app.on('second-instance', () => { if (win) { win.show(); win.focus(); } });
 app.on('activate', () => { if (win) win.show(); });
 if (gotLock) app.whenReady().then(() => {
-  createWindow(); updater.schedule(win);
+  createWindow(); updater.schedule(win); startSiteBridge();
   win.webContents.on('did-finish-load', applyUiScale); win.on('resize', () => { clearTimeout(uiT); uiT = setTimeout(applyUiScale, 250); }); applyUiScale();
   scheduler.setupTray(win); scheduler.bindClose(win, loadCfg);
   // VPN: предупреждение при запуске и если включится во время работы
@@ -1180,3 +1250,4 @@ async function selfTest(dir) {
   console.log('SELFTEST DONE'); app.exit(0);
 }
 app.on('window-all-closed', () => { if (scheduler.isQuitting() || !loadCfg().tray) app.quit(); });
+

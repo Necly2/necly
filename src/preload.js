@@ -1,5 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('pvz', {
+  siteConnection: () => ipcRenderer.invoke('siteConnection'),
+  siteImport: () => ipcRenderer.invoke('siteImport'),
   getCfg: () => ipcRenderer.invoke('getCfg'),
   uiScale: v => ipcRenderer.invoke('uiScale', v),
   onUiScale: cb => ipcRenderer.on('uiScale', (_e, z) => cb(z)),
@@ -89,3 +91,4 @@ contextBridge.exposeInMainWorld('pvz', {
   mingkhVerify: () => ipcRenderer.invoke('mingkhVerify'),
   flatsAroundCached: pts => ipcRenderer.invoke('flatsAroundCached', pts)
 });
+

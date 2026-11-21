@@ -81,4 +81,10 @@ function collect(dirs) {
   return { rows, files: files.length, errors };
 }
 
-module.exports = { collect };
+function readCheckedFile(file) {
+  const spec = PLAT.find(x => x.re.test(path.basename(file)));
+  if (!spec) throw new Error('Неизвестный формат файла проверки');
+  return readFile(file, spec, fs.statSync(file).mtimeMs);
+}
+module.exports = { collect, readCheckedFile };
+

@@ -45,6 +45,10 @@ async function loadSettings() {
   { const w = Object.values(c.resWatch || {}), n = w.filter(x => x.row && x.row.url).length, last = Math.max(0, ...w.map(x => (x.pc && x.pc.at) || 0));
     $('setPriceInfo').textContent = n ? `Объявлений со ссылкой: ${fmtNum(n)}` + (last ? ` · последняя проверка ${new Date(last).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : '') : 'Отслеживаемых объявлений пока нет'; }
   syncInfo();
+  const siteStatus = await pvz.siteConnection();
+  $('siteBox').hidden = siteStatus === null;
+  $('siteStatus').textContent = siteStatus || '';
+  $('siteImport').onclick = async () => { const message = await pvz.siteImport(); if (message) $('siteStatus').textContent = message; };
   $('sTray').checked = c.tray !== false; $('sAuto').checked = !!c.autostart;
   const mode = window.getThemeMode ? getThemeMode() : 'auto';
   $('setTheme').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === mode));
@@ -183,3 +187,4 @@ async function loadJokes() {
 $('joke').onclick = e => { if (e.target.id === 'jokeSrc') { e.preventDefault(); pvz.openExternal(e.target.dataset.href); return; } showJoke(1); };
 $('jokeBest').onchange = async () => { await pvz.setCfg({ jokesBest: $('jokeBest').checked }); loadJokes(); };
 loadJokes(); setInterval(loadJokes, 3 * 3600e3);
+
