@@ -24,6 +24,10 @@ function canWrite(dir) {
 }
 
 async function check(win, { manual = false } = {}) {
+  if (process.platform === 'linux') {
+    if (manual) await dialog.showMessageBox(win, { message: 'Для обновления установите новый пакет .deb со страницы сборок PVZ Master для Linux.' });
+    return;
+  }
   if (!app.isPackaged) { if (manual) dialog.showMessageBox(win, { message: 'Обновление работает только в собранной программе.' }); return; }
   try { fs.writeFileSync(STAMP(), String(Date.now())); } catch {}
   let latest;
@@ -70,6 +74,7 @@ async function check(win, { manual = false } = {}) {
 
 // раз в день: при запуске (если с прошлой проверки прошло > 20 ч) и далее каждые 24 ч
 function schedule(win) {
+  if (process.platform === 'linux') return;
   let last = 0; try { last = +fs.readFileSync(STAMP(), 'utf8') || 0; } catch {}
   if (Date.now() - last > 20 * 3600e3) setTimeout(() => check(win), 8000);
   setInterval(() => check(win), 24 * 3600e3);

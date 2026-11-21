@@ -1,0 +1,39 @@
+name: PVZ Master Linux
+on:
+  push:
+    branches: [avito-windows, linux-raspberry-pi]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm pkg set version=1.0.${{ github.run_number }}
+      - run: bash tools/build-linux.sh
+      - name: Install and launch packaged application
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ./dist/*.deb xvfb xauth xdotool
+          xvfb-run -a bash -eu -o pipefail <<'EOF'
+          pvz-master >"$RUNNER_TEMP/pvz-launch.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for i in {1..60}; do
+            if xdotool search --onlyvisible --name 'PVZ Master' >/dev/null; then exit 0; fi
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/pvz-launch.log"
+          exit 1
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PVZ-Master-Linux-arm64
+          path: dist/*.deb
+          if-no-files-found: error
