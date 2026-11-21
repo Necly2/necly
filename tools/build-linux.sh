@@ -11,11 +11,12 @@ version=$(node -p 'require("./package.json").version')
 mkdir -p dist
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
-npx --no-install electron-packager . "PVZ Master" --platform=linux --arch="$electron_arch" \
-  --executable-name=pvz-master --asar --out=dist --overwrite \
+npx --no-install electron-packager . pvz-master --platform=linux --arch="$electron_arch" \
+  --asar --out=dist --overwrite \
   --ignore='^/(dist|tools|build|\.agents|\.github|\.claude)(/|$)' --ignore='\.md$'
 install -d "$stage"/{DEBIAN,opt,usr/bin,usr/share/applications,usr/share/pixmaps}
-cp -a "dist/PVZ Master-linux-$electron_arch" "$stage/opt/pvz-master"
+cp -a "dist/pvz-master-linux-$electron_arch" "$stage/opt/pvz-master"
+test -x "$stage/opt/pvz-master/pvz-master"
 chmod 4755 "$stage/opt/pvz-master/chrome-sandbox"
 ln -s /opt/pvz-master/pvz-master "$stage/usr/bin/pvz-master"
 install -m644 src/icon.png "$stage/usr/share/pixmaps/pvz-master.png"
