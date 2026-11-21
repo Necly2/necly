@@ -32,7 +32,7 @@ const WINNER_URL = 'https://w7.baza-winner.ru/';
 const CIAN_URL = 'https://www.cian.ru/cat.php?deal_type=rent&engine_version=2&offer_type=offices&office_type[0]=2&office_type[1]=4&office_type[2]=5&office_type[3]=12&region=1&minarea=24&maxarea=130&minfloor=1&maxfloor=1&minfloorn=3&sort=creation_date_desc';
 const MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 // папка проекта: Windows — OneDrive\Desktop\PVZ, Mac — ~/Desktop/PVZ (можно выбрать в панели)
-const PVZ_BASE = IS_MAC ? path.join(app.getPath('home'), 'Desktop', 'PVZ') : path.join(app.getPath('home'), 'OneDrive', 'Desktop', 'PVZ');
+const PVZ_BASE = process.platform === 'linux' ? path.join(app.getPath('home'), 'PVZ') : IS_MAC ? path.join(app.getPath('home'), 'Desktop', 'PVZ') : path.join(app.getPath('home'), 'OneDrive', 'Desktop', 'PVZ');
 const DEF_ROOT = path.join(PVZ_BASE, 'АДРЕСА');
 const DEF_CIAN = path.join(PVZ_BASE, 'АДРЕСА ЦИАН');
 const DEF_OZON = path.join(PVZ_BASE, 'ПРОВЕРКА OZON');
