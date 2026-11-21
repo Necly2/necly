@@ -16,6 +16,7 @@ npx --no-install electron-packager . pvz-master --platform=linux --arch="$electr
   --ignore='^/(dist|tools|build|\.agents|\.github|\.claude)(/|$)' --ignore='\.md$'
 install -d "$stage"/{DEBIAN,opt,usr/bin,usr/share/applications,usr/share/pixmaps}
 cp -a "dist/pvz-master-linux-$electron_arch" "$stage/opt/pvz-master"
+chmod 0755 "$stage" "$stage/opt/pvz-master"
 test -x "$stage/opt/pvz-master/pvz-master"
 chmod 4755 "$stage/opt/pvz-master/chrome-sandbox"
 ln -s /opt/pvz-master/pvz-master "$stage/usr/bin/pvz-master"
