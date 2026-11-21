@@ -308,7 +308,7 @@ async function runOrder(p, presetName, opt = {}) {
       }
     }
     if (go) {
-      const { r, text } = await runExport(Object.assign({ title: (presetName || 'Авито') }, extra));
+      const { r, text } = await runExport(Object.assign({ title: (presetName || 'Авито') }, extra, opt.custom ? { noNewMoscow: false } : {}));
       if (opt.onExport) opt.onExport(r);
       report.push('Авито: ' + (r.ok ? `${r.total} объявл., файлов ${r.saved.length}` : 'ошибка — ' + r.error));
       setStatus(text, r.ok ? 'done' : 'err');
@@ -1113,18 +1113,18 @@ $('sAdd').onclick = () => {
 const wait = ms => new Promise(r => setTimeout(r, ms));
 let siteJobActive = false, scheduledActive = false;
 window.siteReady = () => !siteJobActive && !scheduledActive && !running && !window.wizBusy?.() && document.body.dataset.mode !== 'setup';
-window.runSiteJob = async id => {
+window.runSiteJob = async (id, custom) => {
   if (!window.siteReady()) throw new Error('На Raspberry Pi уже выполняется задание.');
   siteJobActive = true;
   try {
-    const j = (await pvz.jobs()).find(x => x.id === id && !x.archived);
+    const j = custom || (await pvz.jobs()).find(x => x.id === id && !x.archived);
     if (!j || j.busy) throw new Error('Заказ недоступен или занят другим компьютером.');
     if (!Object.values(j.checks || {}).some(Boolean)) throw new Error('Выберите площадки проверки в заказе на Raspberry Pi.');
     if (!(await pvz.folderState()).ok) throw new Error('Сначала настройте папки PVZ Master на Raspberry Pi.');
     const p = Object.assign({}, j.params, j.sources, { avitoUrl: j.avitoUrl, orders: j.orders });
     if (p.avito && !p.avitoUrl && avitoManual(p).length) throw new Error('Сохраните фильтры Авито в заказе на Raspberry Pi.');
     const saved = [];
-    await runOrder(p, j.name, { job: j.id, unattended: true, onExport(r) {
+    await runOrder(p, j.name, { job: j.id, custom: !!custom, unattended: true, onExport(r) {
       if (!r.ok || /ошибк|робота|капч|остановлено|ответил [45]|не удалось|доступ ограничен/i.test(r.reason || ''))
         throw new Error((r.site || 'Выгрузка') + ': ' + (r.error || r.reason || 'ошибка'));
       saved.push(...(r.saved || []));

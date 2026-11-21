@@ -15,8 +15,9 @@ function atomic(file, text) {
   fs.renameSync(file + '.tmp', file);
 }
 
-function create({ dir, jobs, ready, execute, workbook, request = fetch }) {
-  const configFile = path.join(dir, 'pvz-site.json');
+function create({ dir, sshConfigFile, jobs, ready, execute, workbook, request = fetch }) {
+  const configFile = sshConfigFile || path.join(dir, 'pvz-site.json');
+  const existingFile = () => fs.existsSync(configFile) ? configFile : path.join(dir, 'pvz-site.json');
   const stateFile = path.join(dir, 'pvz-site-run.json');
   const excelFile = path.join(dir, 'pvz-site-result.xlsx');
   let state = fs.existsSync(stateFile) ? JSON.parse(fs.readFileSync(stateFile, 'utf8')) : null;
@@ -37,7 +38,7 @@ function create({ dir, jobs, ready, execute, workbook, request = fetch }) {
   async function run(command) {
     executing = true;
     try {
-      const report = await execute(command.jobId, message => {
+      const report = await execute(command, message => {
         if (state?.status === 'running' && state.message !== message) save({ ...state, message });
       });
       atomic(excelFile, await workbook(report.rows));
@@ -49,10 +50,10 @@ function create({ dir, jobs, ready, execute, workbook, request = fetch }) {
     } finally { executing = false; }
   }
   async function tick() {
-    if (busy || !fs.existsSync(configFile)) return;
+    if (busy || !fs.existsSync(existingFile())) return;
     busy = true;
     try {
-      const config = validateConfig(JSON.parse(fs.readFileSync(configFile, 'utf8')));
+      const config = validateConfig(JSON.parse(fs.readFileSync(existingFile(), 'utf8')));
       const active = state;
       if (active) {
         if (active.status === 'done') await api(config, 'file?id=' + encodeURIComponent(active.id), fs.readFileSync(excelFile), true);
@@ -63,10 +64,10 @@ function create({ dir, jobs, ready, execute, workbook, request = fetch }) {
         }
       }
       const available = !state && !executing && await ready();
-      const response = await api(config, 'sync', { ready: available, jobs: jobs() });
+      const response = await api(config, 'sync', { ready: available, customSearch: true, jobs: jobs() });
       const { command } = await response.json();
       connection = 'Подключено';
-      if (available && command && typeof command.id === 'string' && typeof command.jobId === 'string') {
+      if (available && command && typeof command.id === 'string' && (typeof command.jobId === 'string' || (command.custom && typeof command.custom === 'object'))) {
         save({ id: command.id, status: 'running', message: 'Запускаю поиск' });
         try {
           await api(config, 'status', state);

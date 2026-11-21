@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+export PVZ_HEADLESS=1 GDK_BACKEND=x11
+unset WAYLAND_DISPLAY
+case "${1:-}" in
+  --vnc)
+    command -v x11vnc >/dev/null || { echo 'Install x11vnc first.' >&2; exit 1; }
+    test -r "$HOME/.vnc/passwd" || { echo 'Create a password using x11vnc -storepasswd.' >&2; exit 1; }
+    # VNC shares only the virtual display, via an SSH tunnel to loopback.
+    exec xvfb-run -a -s "-screen 0 1440x900x24 -nolisten tcp" sh -eu -c '
+      x11vnc -display "$DISPLAY" -auth "$XAUTHORITY" -localhost -rfbauth "$HOME/.vnc/passwd" -rfbport 5901 -forever -shared &
+      vnc=$!
+      trap '\''kill "$vnc" 2>/dev/null || true'\'' EXIT
+      /opt/pvz-master/pvz-master --ozone-platform=x11
+    '
+    ;;
+  '') exec xvfb-run -a -s "-screen 0 1440x900x24 -nolisten tcp" /opt/pvz-master/pvz-master --ozone-platform=x11 ;;
+  *) echo 'Usage: pvz-master-headless [--vnc]' >&2; exit 2 ;;
+esac

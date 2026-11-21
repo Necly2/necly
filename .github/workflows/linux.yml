@@ -19,21 +19,48 @@ jobs:
       - name: Install and launch packaged application
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y ./dist/*.deb xvfb xauth xdotool
-          xvfb-run -a bash -eu -o pipefail <<'EOF'
-          pvz-master >"$RUNNER_TEMP/pvz-launch.log" 2>&1 &
+          sudo apt-get install -y ./dist/*.deb
+          unset DISPLAY WAYLAND_DISPLAY
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/pvz-config"
+          pvz-master-headless >"$RUNNER_TEMP/pvz-launch.log" 2>&1 &
           pid=$!
           trap 'kill "$pid" 2>/dev/null || true' EXIT
           for i in {1..60}; do
-            if xdotool search --onlyvisible --name 'PVZ Master' >/dev/null; then exit 0; fi
+            if grep -q 'PVZ Master: headless interface ready' "$RUNNER_TEMP/pvz-launch.log"; then
+              test -d "$HOME/PVZ/ПРОВЕРКА OZON"
+              exit 0
+            fi
             kill -0 "$pid" 2>/dev/null || break
             sleep 1
           done
           cat "$RUNNER_TEMP/pvz-launch.log"
           exit 1
-          EOF
       - uses: actions/upload-artifact@v4
         with:
           name: PVZ-Master-Linux-arm64
           path: dist/*.deb
           if-no-files-found: error
+
+  release:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: PVZ-Master-Linux-arm64
+          path: package
+      - name: Publish the tested ARM64 package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="pvz-linux-arm64-1.0.${GITHUB_RUN_NUMBER}"
+          deb="package/pvz-master_1.0.${GITHUB_RUN_NUMBER}_arm64.deb"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" "$deb" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$tag" "$deb" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --prerelease --latest=false --title "PVZ Master для Raspberry Pi · 1.0.${GITHUB_RUN_NUMBER}" \
+              --notes "Пакет ARM64 для Raspberry Pi OS с запуском по SSH и мобильным веб-поиском."
+          fi

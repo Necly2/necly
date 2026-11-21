@@ -1,0 +1,10 @@
+[Unit]
+Description=PVZ Master on a virtual display
+
+[Service]
+ExecStart=/usr/bin/pvz-master-headless
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

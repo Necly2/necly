@@ -40,7 +40,8 @@ const DEF_OZON = path.join(PVZ_BASE, 'ПРОВЕРКА OZON');
 let win, view, ozonView, wbView, running = false, stopFlag = false;
 let currentSite = null, ozonRunning = false, ozonStop = false, ozonSkip = false;
 const ozonQueue = [];
-let siteBridge, siteExportJob = null;
+let siteBridge, siteExportJob = null, adHocJob = null;
+const siteCustom = require('./site-custom');
 const cfgPath = () => path.join(app.getPath('userData'), 'config.json');
 function loadCfg() {
   const d = { root: '', cianRoot: '', ozonOut: '', onlyNew: true, seenDays: 0, autoCheck: false, ozonGreenMin: 60, zoom: {}, showExpert: false, ozonDays: 3, ozonThreads: 2, ozonPause: 2, ozonWait: 25, ozonTries: 3, ozonAuto: false, ozonCache: true, chkOzon: true, chkYandex: false, chkWb: false,
@@ -448,11 +449,12 @@ ipcMain.handle('start', async (_e, c) => {
   const { job: jobId, ...cc } = c;
   const cfg = Object.assign(loadCfg(), cc);
   cfg.delay = Math.max(3, cfg.delay);
-  saveCfg(cfg);
+  const isAdHoc = !!adHocJob && adHocJob.id === jobId;
+  if (!isAdHoc) saveCfg(cfg);
   // выгрузка заказа: его папки и его журнал «уже выгруженных» (только на этот запуск)
-  const job = findJob(cfg, jobId);
+  const job = isAdHoc ? adHocJob : findJob(cfg, jobId);
   if (job) Object.assign(cfg, jobRunCfg(cfg, job));
-  if (job) busyMark(job.id);
+  if (job && !isAdHoc) busyMark(job.id);
   const url = view.webContents.getURL();
   const site = /^https:\/\/(www\.)?avito\.ru\//.test(url) ? 'avito' : /^https:\/\/([a-z0-9-]+\.)?cian\.ru\//.test(url) ? 'cian'
              : /^https:\/\/w7\.baza-winner\.ru\//.test(url) ? 'winner' : '';
@@ -464,13 +466,13 @@ ipcMain.handle('start', async (_e, c) => {
     running = true; stopFlag = false;
     try {
       const m = url.match(/\/search\/([0-9a-f-]{36})/i);
-      if (m && c.bw) { const b = loadCfg(); b.bwOrders = Object.assign({}, b.bwOrders, { [m[1]]: { tag: c.bw.tag, hide: c.bw.hide, name: c.bw.name || (b.bwOrders && b.bwOrders[m[1]] && b.bwOrders[m[1]].name) || '' } }); saveCfg(b); cfg.bwOrders = b.bwOrders; }
+      if (m && c.bw && !isAdHoc) { const b = loadCfg(); b.bwOrders = Object.assign({}, b.bwOrders, { [m[1]]: { tag: c.bw.tag, hide: c.bw.hide, name: c.bw.name || (b.bwOrders && b.bwOrders[m[1]] && b.bwOrders[m[1]].name) || '' } }); saveCfg(b); cfg.bwOrders = b.bwOrders; }
       const r = await winner.run(view.webContents, cfg, c.bw || {}, st => send('status', st), () => stopFlag);
       const q = siteExportJob && jobId === siteExportJob ? 0 : autoOzon(cfg, r.saved, c.forceCheck);
       if (!r.ok) journal.logError('Winner', r.error);
       else if (/ошибк/i.test(r.reason || '')) journal.logError('Winner', r.reason);
       journal.addHistory({ type: 'export', site, job: jobId || '', dur: Date.now() - t0, title: c.title || (r.extra || '').replace(/^Заказ: /, '').split(';')[0], ok: !!r.ok, total: r.total || 0, files: r.saved || [], reason: r.reason || r.error });
-      if (job && r.ok) touchJob(job.id);
+      if (job && !isAdHoc && r.ok) touchJob(job.id);
       return Object.assign({ site, withCoords: r.total, ozonQueued: q }, r);
     } catch (e) { journal.logError('Winner', e); journal.addHistory({ type: 'export', site, ok: false, total: 0, files: [], reason: String(e && e.message || e) }); return { ok: false, error: String(e && e.message || e) }; }
     finally { running = false; delete procs.export; procUpdate(); syncer.soon(3000); }
@@ -498,11 +500,11 @@ ipcMain.handle('start', async (_e, c) => {
     }
     if (res.rows.length) {
       out = saveRows(res.rows, cfg, site);
-      if (res.ids) addSeen(cfg, res.ids, site);
+      if (res.ids && !isAdHoc) addSeen(cfg, res.ids, site);
     }
     const q = siteExportJob && jobId === siteExportJob ? 0 : autoOzon(cfg, out.saved, c.forceCheck);
     journal.addHistory({ type: 'export', site, job: jobId || '', dur: Date.now() - t0, title: c.title || '', ok: true, total: res.rows.length, files: out.saved, reason: res.reason });
-    if (job) touchJob(job.id);
+    if (job && !isAdHoc) touchJob(job.id);
     return { ok: true, site, reason: res.reason, extra: res.extra || '', total: res.rows.length, withCoords: res.withCoords, ozonQueued: q, ...out };
   } catch (e) {
     clearInterval(timer);
@@ -909,8 +911,26 @@ function reportWorkbook(rows, title) {
   return wb;
 }
 
-async function runSiteSearch(jobId, progress) {
-  const cfg = loadCfg(), job = findJob(cfg, jobId);
+// Zone engines read the same checked subset for all selected platforms. Keep original source files intact.
+function customInputs(paths, job) {
+  const dest = path.join(job.exp, 'Отбор');
+  fs.mkdirSync(dest, { recursive: true });
+  const selected = [];
+  for (const source of new Set(paths)) {
+    const rows = ozon.readExport(source).map(x => siteCustom.filterRow(x, job.params)).filter(Boolean);
+    if (!rows.length) continue;
+    const ws = XLSX.utils.aoa_to_sheet([HEAD, ...rows.map(row => HEAD.map(k => k === 'Ссылка на первоисточник' ? row._url : row[k]))]);
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'W7 экспорт');
+    const file = path.join(dest, `export_excel ${selected.length + 1}.xlsx`);
+    XLSX.writeFile(wb, file); selected.push(file);
+  }
+  return selected;
+}
+
+async function runSiteSearch(command, progress) {
+  const cfg = loadCfg();
+  const job = command.custom ? siteCustom.makeJob(command.custom, cfg.jobs, pvzBase(cfg), command.id) : findJob(cfg, command.jobId);
+  const jobId = job?.id;
   if (!job || job.archived || running || ozonRunning) throw new Error('Заказ недоступен или Raspberry Pi занят.');
   const flags = job.checks || {};
   const outDir = job.res || cfg.ozonOut;
@@ -919,10 +939,12 @@ async function runSiteSearch(jobId, progress) {
   if (!job.sources?.cian && !job.sources?.avito && !(job.sources?.winner && Object.values(job.orders || {}).some(o => o?.on)))
     throw new Error('В заказе нет активных источников.');
   siteExportJob = jobId;
+  adHocJob = command.custom ? job : null;
   let ownsCheck = false;
   try {
     progress('Выгружаю объявления');
-    const files = await win.webContents.executeJavaScript('window.runSiteJob(' + JSON.stringify(jobId) + ')');
+    const exported = await win.webContents.executeJavaScript('window.runSiteJob(' + JSON.stringify(jobId) + ',' + JSON.stringify(adHocJob) + ')');
+    const files = adHocJob ? customInputs(exported, job) : exported;
     if (!files.length) return { rows: [], checked: 0 };
     if (ozonRunning) throw new Error('Проверка зон занята. Запустите поиск позже.');
     ozonRunning = ownsCheck = true; ozonStop = false; ozonSkip = false;
@@ -949,14 +971,15 @@ async function runSiteSearch(jobId, progress) {
     progress('Готовлю Excel');
     return { rows, checked };
   } finally {
-    siteExportJob = null;
+    siteExportJob = null; adHocJob = null;
     if (ownsCheck) { ozonRunning = false; send('ozonDone', { ok: !ozonStop, results: [] }); if (ozonQueue.length) void pumpOzon(); }
   }
 }
 function startSiteBridge() {
   if (process.platform !== 'linux') return;
   siteBridge = require('./site-bridge').create({ dir: app.getPath('userData'),
-    jobs: () => loadCfg().jobs.filter(j => !j.archived).map(({ id, name }) => ({ id, name })),
+    sshConfigFile: path.join(app.getPath('appData'), 'pvz-master', 'pvz-site.json'),
+    jobs: () => loadCfg().jobs.filter(j => !j.archived).map(siteCustom.describe),
     ready: async () => !running && !ozonRunning && !win.isDestroyed() && await win.webContents.executeJavaScript('Boolean(window.siteReady?.())'),
     execute: runSiteSearch, workbook: rows => reportWorkbook(rows, 'Результаты').xlsx.writeBuffer() });
   siteBridge.start();
@@ -1086,7 +1109,18 @@ if (!gotLock) app.quit();
 app.on('second-instance', () => { if (win) { win.show(); win.focus(); } });
 app.on('activate', () => { if (win) win.show(); });
 if (gotLock) app.whenReady().then(() => {
+  if (process.platform === 'linux' && process.env.PVZ_HEADLESS === '1') {
+    const cfg = loadCfg();
+    for (const [key, dir] of Object.entries({ root: DEF_ROOT, cianRoot: DEF_CIAN, ozonOut: DEF_OZON })) {
+      if (!cfg[key]) { fs.mkdirSync(dir, { recursive: true }); cfg[key] = dir; }
+    }
+    saveCfg(cfg);
+  }
   createWindow(); updater.schedule(win); startSiteBridge();
+  if (process.env.PVZ_HEADLESS === '1') win.webContents.once('did-finish-load', async () => {
+    if (await win.webContents.executeJavaScript("typeof window.runSiteJob === 'function' && !!document.getElementById('welcome')"))
+      console.log('PVZ Master: headless interface ready');
+  });
   win.webContents.on('did-finish-load', applyUiScale); win.on('resize', () => { clearTimeout(uiT); uiT = setTimeout(applyUiScale, 250); }); applyUiScale();
   scheduler.setupTray(win); scheduler.bindClose(win, loadCfg);
   // VPN: предупреждение при запуске и если включится во время работы
