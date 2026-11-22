@@ -12,8 +12,7 @@ const PLAT = [
 ];
 const num = v => { const n = parseFloat(String(v ?? '').replace(/\s/g, '').replace(',', '.')); return isFinite(n) ? n : null; };
 
-function readFile(file, spec, mtime, exported) {
-  const wb = XLSX.readFile(file, { cellDates: true });
+function readFile(file, spec, mtime, exported, wb = XLSX.readFile(file, { cellDates: true })) {
   const ws = typeof spec.sheet === 'number' ? wb.Sheets[wb.SheetNames[spec.sheet]] : wb.Sheets[spec.sheet];
   if (!ws || !ws['!ref']) return [];
   const range = XLSX.utils.decode_range(ws['!ref']);
@@ -27,16 +26,17 @@ function readFile(file, spec, mtime, exported) {
     // Ozon без поддержки под площадь объявления (площадь меньше ступеней) — в итог не входит (в старых файлах такие строки есть;
     // отслеживаемые всё равно видны — из сохранённой копии)
     if (spec.platform === 'Ozon' && head['Поддержка под площадь, ₽/мес'] != null && num(g(r, 'Поддержка под площадь, ₽/мес')) === 0 && !num(g(r, 'Поддержка всего, ₽')) && String(g(r, spec.zoneCol) || '') !== 'ошибка запроса') continue;
-    const lc = head['Ссылка на первоисточник'] != null ? cell(r, head['Ссылка на первоисточник']) : null;
+    const linkColumn = head['Ссылка на первоисточник'] ?? head['Ссылка'];
+    const lc = linkColumn != null ? cell(r, linkColumn) : null;
     const url = (lc && lc.l && lc.l.Target) || (lc && /^https?:/.test(String(lc.v)) ? String(lc.v) : '');
     const coords = String(g(r, 'Координаты') || '').replace(/\s/g, '').replace(';', ',');
     const [lat, lon] = coords.split(',').map(Number);
     out.push({
-      platform: spec.platform, zone: String(g(r, spec.zoneCol) || ''), note: String(g(r, spec.noteCol) || ''),
-      address: String(addr), metro: String(g(r, 'Метро / ЖД станции') || ''),
+      platform: spec.platform || String(g(r, 'Площадка') || ''), zone: String(g(r, spec.zoneCol) || ''), note: String(g(r, spec.noteCol) || ''),
+      address: String(addr), metro: String(g(r, 'Метро / ЖД станции') || g(r, 'Метро') || ''),
       areaMin: num(g(r, 'Мин. площадь')), areaMax: num(g(r, 'Макс. площадь')), price: num(g(r, 'Цена, ₽')),
-      money: spec.moneyCol ? num(g(r, spec.moneyCol)) : null, supMonth: num(g(r, 'Поддержка под площадь, ₽/мес')), supTotal: num(g(r, 'Поддержка всего, ₽')), supTier: String(g(r, 'Ступень площади') || ''), near: num(g(r, 'Ближайший ПВЗ Ozon, м')), source: String(g(r, 'Источник') || ''), date: String(g(r, 'Дата') || ''),
-      url, lat: isFinite(lat) ? lat : null, lon: isFinite(lon) ? lon : null,
+      money: spec.moneyCol ? num(g(r, spec.moneyCol)) : null, supMonth: num(g(r, 'Поддержка под площадь, ₽/мес') ?? g(r, 'Поддержка Ozon, ₽/мес')), supTotal: num(g(r, 'Поддержка всего, ₽')), supTier: String(g(r, 'Ступень площади') || ''), near: num(g(r, 'Ближайший ПВЗ Ozon, м')), source: String(g(r, 'Источник') || ''), date: String(g(r, 'Дата') || ''),
+      url: /^https?:\/\//i.test(url) ? url : '', lat: isFinite(lat) ? lat : null, lon: isFinite(lon) ? lon : null,
       file: path.basename(file), filePath: file, checked: mtime, exported: exported || mtime
     });
   }
@@ -86,5 +86,19 @@ function readCheckedFile(file) {
   if (!spec) throw new Error('Неизвестный формат файла проверки');
   return readFile(file, spec, fs.statSync(file).mtimeMs);
 }
-module.exports = { collect, readCheckedFile };
+function readImportedFile(file) {
+  const wb = XLSX.readFile(file, { cellDates: true });
+  const sheet = wb.Sheets['Результат'] ? 'Результат' : wb.SheetNames[0];
+  const ws = wb.Sheets[sheet];
+  if (!ws || !ws['!ref']) throw new Error('Лист Excel пуст.');
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  range.e.r = range.s.r;
+  const header = (XLSX.utils.sheet_to_json(ws, { header: 1, range })[0] || []).map(v => String(v).trim());
+  let spec = PLAT.find(p => header.includes(p.zoneCol));
+  if (!spec && header.includes('Площадка') && header.includes('Зона'))
+    spec = { zoneCol: 'Зона', moneyCol: 'Выплата, ₽', noteCol: 'Сверка адреса' };
+  if (!spec || !header.includes('Адрес')) throw new Error('В файле нет результатов проверки. Выберите площадку для проверки выгрузки.');
+  return readFile(file, { ...spec, sheet }, fs.statSync(file).mtimeMs, null, wb);
+}
+module.exports = { collect, readCheckedFile, readImportedFile };
 

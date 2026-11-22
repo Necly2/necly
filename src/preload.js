@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('pvz', {
   siteConnection: () => ipcRenderer.invoke('siteConnection'),
   siteImport: () => ipcRenderer.invoke('siteImport'),
@@ -54,6 +54,9 @@ contextBridge.exposeInMainWorld('pvz', {
   onMapFail: cb => ipcRenderer.on('mapFail', (_e, d) => cb(d)),
   extExternal: k => ipcRenderer.invoke('extExternal', k),
   history: () => ipcRenderer.invoke('history'),
+  excelImport: (file, mode) => ipcRenderer.invoke('excelImport', webUtils.getPathForFile(file), mode),
+  excelBatches: () => ipcRenderer.invoke('excelBatches'),
+  excelRows: id => ipcRenderer.invoke('excelRows', id),
   results: () => ipcRenderer.invoke('results'),
   bwOrders: () => ipcRenderer.invoke('bwOrders'),
   notify: (t, b) => ipcRenderer.invoke('notify', t, b),
