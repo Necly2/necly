@@ -997,7 +997,7 @@ body[data-mode="addr"] #addr{display:flex}
 @media (max-width:1100px){.jc-grid{grid-template-columns:1fr}}
 
 /* ---------- главный экран: плитки с цифрами ---------- */
-.home-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:min(560px,90vw);margin-top:4px}
+.home-tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;width:min(560px,90vw);margin-top:4px}
 .h-tile{display:flex;align-items:center;gap:10px;padding:11px 13px;border-radius:14px;border:1px solid var(--line);background:color-mix(in srgb,var(--card) 85%,transparent);color:var(--text);text-align:left;transition:.15s;min-width:0}
 .h-tile:hover{border-color:var(--accent);transform:translateY(-2px)}
 .h-tile svg{color:var(--muted);flex:none}
@@ -1141,3 +1141,11 @@ dialog.modal[open]::backdrop{@starting-style{background-color:rgba(0,0,0,0)}}
 .r-table th.mk:hover .mk-h{background:var(--hover)}
 .seen-all{padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--sub);font-size:12px;font-weight:600;white-space:nowrap}
 .seen-all:hover{border-color:var(--accent);color:var(--accent)}
+
+body[data-mode="excel"] #excel{display:flex}
+#excelForm{width:min(100%,640px);margin:24px auto;display:grid;gap:18px}
+#excelDrop{min-height:140px;border:2px dashed var(--accent);white-space:normal;overflow-wrap:anywhere;justify-content:center}
+#excelDrop.drag{background:color-mix(in srgb,var(--accent) 15%,var(--bg))}
+#batchTabs{overflow-x:auto;flex-shrink:0}
+#batchTabs button{white-space:nowrap}
+#batchTabs[hidden],#batchNote[hidden]{display:none}

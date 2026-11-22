@@ -545,6 +545,27 @@ const wbFetch = async url => {
   return { status: r.s, ok: r.s >= 200 && r.s < 300, json: async () => JSON.parse(r.t) };
 };
 
+async function checkFiles(gcfg, gpaths, outDir, results) {
+  for (const p of enabledPlatforms(gcfg)) {
+    if (ozonStop) break;
+    const files = needs(gcfg, p, gpaths);
+    if (!files.length) continue;
+    const status = (text, extra) => send('ozonStatus', Object.assign({ text, running: true }, extra || {}));
+    if (p.key === 'ozon') {
+      results.push(Object.assign({ kind: 'ozon', label: 'Ozon' }, await ozon.run(files, {
+        wc: ozonView.webContents, cfg: gcfg, log: m => trace.log('Ozon', m), cachePath: path.join(app.getPath('userData'), 'ozon_cache.json'), status, isStopped: () => ozonStop, takeSkip: () => { const v = ozonSkip; ozonSkip = false; return v; } })));
+    } else {
+      let fetchFn = trace.wrapFetch(u => net.fetch(u), p.key === 'wb' ? 'WB' : 'Яндекс');
+      if (p.key === 'wb') {
+        status('Wildberries: открываю карту map.wb.ru…');
+        if (!(await ensureWb())) { results.push({ kind: 'wb', label: 'Wildberries', reason: 'карта WB не ответила — откройте вкладку позже и повторите', saved: [], errors: [], stats: {}, main: 0, excluded: 0, unchecked: 0, manual: [], files: files.length, addresses: 0 }); continue; }
+        fetchFn = wbFetch;
+      }
+      results.push(await platforms.run(p.key, files, { fetch: fetchFn, status, isStopped: () => ozonStop, outDir }));
+    }
+  }
+}
+
 async function pumpOzon() {
   if (ozonRunning) { send('ozonStatus', { text: `В очереди ещё файлов: ${ozonQueue.length}`, running: true, queued: ozonQueue.length }); return; }
   ozonRunning = true; ozonStop = false; ozonSkip = false;
@@ -563,24 +584,7 @@ async function pumpOzon() {
       if (ozonStop) break;
       try { fs.mkdirSync(outDir, { recursive: true }); } catch {}
       const gcfg = Object.assign({}, cfg, { ozonOut: outDir });
-      for (const p of enabledPlatforms(cfg)) {
-        if (ozonStop) break;
-        const files = needs(gcfg, p, gpaths);
-        if (!files.length) continue;
-        const status = (text, extra) => send('ozonStatus', Object.assign({ text, running: true }, extra || {}));
-        if (p.key === 'ozon') {
-          results.push(Object.assign({ kind: 'ozon', label: 'Ozon' }, await ozon.run(files, {
-            wc: ozonView.webContents, cfg: gcfg, log: m => trace.log('Ozon', m), cachePath: path.join(app.getPath('userData'), 'ozon_cache.json'), status, isStopped: () => ozonStop, takeSkip: () => { const v = ozonSkip; ozonSkip = false; return v; } })));
-        } else {
-          let fetchFn = trace.wrapFetch(u => net.fetch(u), p.key === 'wb' ? 'WB' : 'Яндекс');
-          if (p.key === 'wb') {
-            status('Wildberries: открываю карту map.wb.ru…');
-            if (!(await ensureWb())) { results.push({ kind: 'wb', label: 'Wildberries', reason: 'карта WB не ответила — откройте вкладку позже и повторите', saved: [], errors: [], stats: {}, main: 0, excluded: 0, unchecked: 0, manual: [], files: files.length, addresses: 0 }); continue; }
-            fetchFn = wbFetch;
-          }
-          results.push(await platforms.run(p.key, files, { fetch: fetchFn, status, isStopped: () => ozonStop, outDir }));
-        }
-      }
+        await checkFiles(gcfg, gpaths, outDir, results);
       }
       send('ozonDone', { ok: true, results });
       if (results.length && (!win.isVisible() || !win.isFocused())) scheduler.notify('PVZ Master — проверка зон завершена', results.map(r => `${r.label}: ${r.kind === 'ozon' ? 'файлов ' + r.saved.length : 'в «Результат» ' + r.main}`).join(' · '));
@@ -916,6 +920,29 @@ ipcMain.handle('ozonClearCache', () => {
 ipcMain.handle('ozonState', () => ({ running: ozonRunning, queued: ozonQueue.length }));
 
 ipcMain.handle('history', () => journal.readHistory());
+const excelImport = require('./excel-import');
+const importRoot = () => path.join(app.getPath('userData'), 'excel-imports');
+ipcMain.handle('excelBatches', () => excelImport.list(importRoot()));
+ipcMain.handle('excelRows', (_e, id) => excelImport.read(importRoot(), id));
+ipcMain.handle('excelImport', async (_e, file, mode) => {
+  try {
+    const batch = await excelImport.run(importRoot(), file, mode, async (source, key, dir) => {
+      if (running || ozonRunning || zwBusy) throw new Error('Сейчас идёт поиск или проверка. Повторите импорт после завершения.');
+      ozonRunning = true; ozonStop = false; ozonSkip = false;
+      const outcomes = [];
+      try {
+        const cfg = { ...loadCfg(), ozonOut: dir, chkOzon: key === 'ozon', chkWb: key === 'wb', chkYandex: key === 'yandex' };
+        await checkFiles(cfg, [source], dir, outcomes);
+        return outcomes[0];
+      } finally {
+        ozonRunning = false;
+        send('ozonDone', { ok: true, results: outcomes });
+        if (ozonQueue.length) void pumpOzon();
+      }
+    });
+    return { batch };
+  } catch (e) { return { error: e.message }; }
+});
 ipcMain.handle('results', () => results.collect(outDirs(loadCfg())));
 ipcMain.handle('bwOrders', () => {
   const cfg = loadCfg(), out = {};
