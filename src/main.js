@@ -1009,6 +1009,29 @@ ipcMain.handle('ozonClearCache', () => {
 ipcMain.handle('ozonState', () => ({ running: ozonRunning, queued: ozonQueue.length }));
 
 ipcMain.handle('history', () => journal.readHistory());
+const excelImport = require('./excel-import');
+const importRoot = () => path.join(app.getPath('userData'), 'excel-imports');
+ipcMain.handle('excelBatches', () => excelImport.list(importRoot()));
+ipcMain.handle('excelRows', (_e, id) => excelImport.read(importRoot(), id));
+ipcMain.handle('excelImport', async (_e, file, mode) => {
+  try {
+    const batch = await excelImport.run(importRoot(), file, mode, async (source, key, dir) => {
+      if (running || ozonRunning || zwBusy) throw new Error('Сейчас идёт поиск или проверка. Повторите импорт после завершения.');
+      ozonRunning = true; ozonStop = false; ozonSkip = false;
+      const outcomes = [];
+      try {
+        const cfg = { ...loadCfg(), ozonOut: dir, chkOzon: key === 'ozon', chkWb: key === 'wb', chkYandex: key === 'yandex' };
+        await checkFiles(cfg, [source], dir, outcomes);
+        return outcomes[0];
+      } finally {
+        ozonRunning = false;
+        send('ozonDone', { ok: true, results: outcomes });
+        if (ozonQueue.length) void pumpOzon();
+      }
+    });
+    return { batch };
+  } catch (e) { return { error: e.message }; }
+});
 ipcMain.handle('results', () => results.collect(outDirs(loadCfg())));
 ipcMain.handle('bwOrders', () => {
   const cfg = loadCfg(), out = {};
