@@ -332,10 +332,10 @@ async function runOrder(p, presetName, opt = {}) {
 
 
 // ================= страницы: Результаты, История, Расписание =================
-function openPage(page) {
+function openPage(page, batch = '') {
   document.body.dataset.mode = page;
   pvz.nav('welcome');
-  if (page === 'results') loadResults();
+  if (page === 'results') { R.batch = batch; loadResults(); }
   if (page === 'history') loadHistory();
   if (page === 'schedule') loadSchedule();
   if (page === 'settings') window.loadSettings && loadSettings();
@@ -370,7 +370,7 @@ const inJob = x => !R.jobF || (R.jobF === '-' ? !x.job : x.job === R.jobF);
 function renderDays() {
   const cnt = {}; let marked = 0, watched = 0, unseen = 0, matched = 0;
   for (const x of R.rows) { if ((x.dupHidden && R.dedup) || x.archived || !inJob(x)) continue; const k = upDay(x); cnt[k] = (cnt[k] || 0) + 1; if (x.mark) marked++; if (!R.seen[markKey(x)]) unseen++; if (x.also && x.also.length) matched++; }
-  watched = Object.keys(R.watch).length;
+  watched = R.batch ? R.rows.filter(x => R.watch[markKey(x)]).length : Object.keys(R.watch).length;
   const days = [];
   for (let i = 0; i < 5; i++) { const d = new Date(); d.setDate(d.getDate() - i); days.push([dayKey(d), i === 0 ? 'Сегодня' : i === 1 ? 'Вчера' : d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) + ', ' + d.toLocaleDateString('ru-RU', { weekday: 'short' })]); }
   const b = (k, label, n) => `<button data-day="${k}" class="${R.day === k ? 'on' : ''}${n ? '' : ' empty'}">${label}<span>${fmtNum(n)}</span></button>`;
@@ -418,7 +418,7 @@ function prepRows(rows) {
   R.rows = rows.map((x, i) => Object.assign(x.addrSrc === undefined ? fixAddr(x) : x, { id: i, mark: R.marks[markKey(x)] ? 1 : 0 }));
   // отслеживаемые, которых уже нет в файлах результатов, — из сохранённой копии
   const have = new Set(R.rows.map(markKey));
-  for (const [k, w] of Object.entries(R.watch)) if (!have.has(k) && w.row) { const r0 = Object.assign({}, w.row); R.rows.push(Object.assign(r0.addrSrc === undefined ? fixAddr(r0) : r0, { id: R.rows.length, mark: R.marks[k] ? 1 : 0, archived: true })); }
+  for (const [k, w] of Object.entries(R.watch)) if (!R.batch && !have.has(k) && w.row) { const r0 = Object.assign({}, w.row); R.rows.push(Object.assign(r0.addrSrc === undefined ? fixAddr(r0) : r0, { id: R.rows.length, mark: R.marks[k] ? 1 : 0, archived: true })); }
   R.rows.forEach(x => (x.net = netOf(x)));
   // одинаковые помещения в один день: первое оставляем, остальные скрываем (переключатель «Скрыть одинаковые»)
   const firstOf = new Map(); R.dupCount = 0;
@@ -436,10 +436,38 @@ pvz.onSynced(async d => {
   if (m === 'jobs' && window.openJobs) openJobs(window.jobsOpenId && jobsOpenId());
   if (m === 'schedule') loadSchedule();
 });
+let loadGeneration = 0;
+function selectBatch(id) {
+  R.day = R.up = 'all'; R.jobF = ''; R.onlyNew = R.onlyMatch = false;
+  for (const key of ['rSearch', 'rArea', 'rPrice', 'rZone']) $(key).value = '';
+  $('rPlat').querySelectorAll('input').forEach(input => { input.checked = true; });
+  openPage('results', id);
+}
+function showBatches(batches) {
+  const tabs = $('batchTabs');
+  tabs.hidden = !batches.length;
+  tabs.replaceChildren();
+  for (const b of [{ id: '', name: 'Основные результаты' }, ...batches]) {
+    const btn = document.createElement('button');
+    btn.textContent = b.id ? b.name + ' · ' + fmtTime(b.created) : b.name;
+    btn.classList.toggle('on', b.id === R.batch);
+    btn.onclick = () => selectBatch(b.id);
+    tabs.append(btn);
+  }
+  const batch = batches.find(b => b.id === R.batch);
+  $('batchNote').textContent = batch ? [batch.note, 'Объявлений в результате: ' + batch.count].filter(Boolean).join(' · ') : '';
+  $('batchNote').hidden = !batch;
+  $('rRecheck').hidden = !!batch;
+}
 async function loadResults() {
+  const generation = ++loadGeneration;
   $('rCount').textContent = 'загрузка…';
-  const r = await pvz.results();
-  const cfg = await pvz.getCfg();
+  const [r, cfg, batches, jobs] = await Promise.all([
+    R.batch ? pvz.excelRows(R.batch).then(rows => ({ rows, errors: [] })) : pvz.results(),
+    pvz.getCfg(), pvz.excelBatches(), pvz.jobs().catch(() => [])
+  ]);
+  if (generation !== loadGeneration) return;
+  showBatches(batches);
   if (R.showLst === undefined) { R.showLst = cfg.resShowLst != null ? (cfg.resShowLst && lstAuto()) || (cfg.resShowLst && window.innerWidth >= 1400) : lstAuto(); R.base = cfg.resBase || '2gis'; $('rBase').value = R.base; R.mapMode = cfg.resMap || 'yandex'; }
   setMapLists(cfg.resMapsGen, cfg.resMapsAgg);
   R.split = !!cfg.resSplit;
@@ -448,7 +476,7 @@ async function loadResults() {
   R.marks = cfg.resMarks || {}; R.seen = cfg.resSeen || {}; R.watch = cfg.resWatch || {}; R.watchDel = cfg.resWatchDel || {}; if (cfg.resDedup === false) R.dedup = false;
   prepRows(r.rows);
   // заказы со своими папками — фильтр «Заказ»
-  R.jobs = (await pvz.jobs().catch(() => [])).filter(j => !j.shared);
+  R.jobs = R.batch ? [] : jobs.filter(j => !j.shared);
   const hasGen = R.rows.some(x => !x.job && !x.archived);
   if (R.jobF && R.jobF !== '-' && !R.jobs.some(j => j.id === R.jobF)) R.jobF = '';
   $('rJobF').style.display = R.jobs.length ? '' : 'none';
@@ -1251,3 +1279,39 @@ $('netTip').addEventListener('beforetoggle', e => {
   const b = e.source || document.querySelector('#rRows .zb.net:hover, #rRows .zb.net:focus-visible'); if (!b) return;
   $('netTip').innerHTML = `<div><span>Выплата</span><b>${fmtNum(+b.dataset.sup)} ₽</b></div><div><span>Аренда</span><b>− ${fmtNum(+b.dataset.price)} ₽</b></div>${+b.dataset.staff ? `<div><span>Сотрудники</span><b>− ${fmtNum(+b.dataset.staff)} ₽</b></div>` : ''}`;
 });
+
+
+let excelFile = null;
+const drop = $('excelDrop'), picker = $('excelFile'), go = $('excelGo');
+const dropPrompt = drop.textContent;
+function chooseExcel(files) {
+  excelFile = files.length === 1 && /\.xlsx$/i.test(files[0].name) ? files[0] : null;
+  drop.textContent = excelFile ? excelFile.name : dropPrompt;
+  $('excelStatus').textContent = excelFile ? '' : 'Выберите один файл .xlsx.';
+  go.disabled = !excelFile;
+}
+drop.onclick = () => picker.click();
+picker.onchange = () => chooseExcel(picker.files);
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('drag'); };
+drop.ondragleave = () => drop.classList.remove('drag');
+drop.ondrop = e => {
+  e.preventDefault(); drop.classList.remove('drag');
+  if (!drop.disabled) chooseExcel(e.dataTransfer.files);
+};
+pvz.onOzonStatus(s => {
+  if (drop.disabled && $('excelMode').value !== 'view') $('excelStatus').textContent = s.text;
+});
+$('excelForm').onsubmit = async e => {
+  e.preventDefault();
+  if (go.disabled || !excelFile) return;
+  go.disabled = drop.disabled = $('excelMode').disabled = true;
+  $('excelStatus').textContent = 'Идёт импорт…';
+  try {
+    const { batch, error } = await pvz.excelImport(excelFile, $('excelMode').value);
+    if (error) throw new Error(error);
+    excelFile = null; picker.value = ''; drop.textContent = dropPrompt;
+    $('excelStatus').textContent = 'Импорт завершён: ' + batch.name;
+    if (document.body.dataset.mode === 'excel') selectBatch(batch.id);
+  } catch (error) { $('excelStatus').textContent = error.message; }
+  finally { drop.disabled = $('excelMode').disabled = false; go.disabled = !excelFile; }
+};

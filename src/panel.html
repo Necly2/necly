@@ -24,6 +24,7 @@
     </div>
     <form class="home-addr" id="homeAddr" autocomplete="off"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="homeAddrQ" placeholder="Поиск по адресу — проверить помещение на карте Ozon"><button class="ghost" type="submit">Проверить</button></form>
     <div class="home-tiles">
+      <button class="h-tile" data-page="excel"><svg viewBox="0 0 24 24"><path d="M4 15v5h16v-5M12 3v12m-5-5 5 5 5-5"/></svg><span class="ht-t"><b>Импорт Excel</b></span></button>
       <button class="h-tile" data-page="results"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg><span class="ht-t"><b>Результаты</b><small id="htRes"></small></span></button>
       <button class="h-tile" data-page="watch"><svg viewBox="0 0 24 24"><path d="M12 17.3l-5.2 3 1.4-5.9L3.5 10.4l6-.5L12 4.3l2.5 5.6 6 .5-4.7 4 1.4 5.9z"/></svg><span class="ht-t"><b>Отслеживаемые</b><small id="htWatch"></small></span></button>
       <button class="h-tile" data-page="schedule"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg><span class="ht-t"><b>Расписание</b><small id="htSched"></small></span></button>
@@ -71,6 +72,23 @@
 <dialog id="modal" class="modal" aria-labelledby="mTitle" aria-describedby="mText"><div class="m-box"><div class="m-ico" id="mIco" aria-hidden="true"></div><h3 id="mTitle"></h3><div class="m-text" id="mText"></div><div class="m-btns" id="mBtns"></div><button type="button" class="m-x" id="mX" title="Закрыть" aria-label="Закрыть">✕</button></div></dialog>
 
 <!-- ================= РЕЗУЛЬТАТЫ ================= -->
+<section class="page" id="excel">
+  <div class="p-head"><button class="ghost back-home">← Главная</button><h1>Импорт Excel</h1></div>
+  <form id="excelForm">
+    <button type="button" class="ghost" id="excelDrop">Перетащите файл .xlsx сюда или нажмите для выбора</button>
+    <input hidden type="file" accept=".xlsx" id="excelFile">
+    <label class="field">Что сделать с объявлениями
+      <select id="excelMode">
+        <option value="view">Открыть готовые результаты</option>
+        <option value="ozon">Проверить на Ozon</option>
+        <option value="wb">Проверить на Wildberries</option>
+        <option value="yandex">Проверить на Яндекс Маркете</option>
+      </select>
+    </label>
+    <button class="start" id="excelGo" disabled>Импортировать</button>
+    <p class="muted" role="status" id="excelStatus"></p>
+  </form>
+</section>
 <section id="results" class="page">
   <div class="p-head">
     <button class="icon-btn back-home" title="На главный экран"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
@@ -88,6 +106,8 @@
       </div></div>
       <button class="ghost gear-btn" data-settings title="Настройки"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   </div>
+  <div class="r-days" id="batchTabs" aria-label="Источник результатов" hidden></div>
+  <div class="muted" id="batchNote" hidden></div>
   <div class="r-filters" id="rFilters">
     <div class="r-chips" id="rPlat"><label><input type="checkbox" value="Ozon" checked><span>Ozon</span></label><label><input type="checkbox" value="Яндекс" checked><span>Яндекс</span></label><label><input type="checkbox" value="WB" checked><span>WB</span></label></div>
     <label class="field" id="rJobF" style="display:none">Заказ<select id="rJob"><option value="">все</option></select></label>
