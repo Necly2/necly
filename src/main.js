@@ -522,7 +522,7 @@ function enqueueOzon(paths) {
 }
 const PLATFORMS = [
   { key: 'yandex', cfg: 'chkYandex', journal: 'yandex_checked.json', label: 'Яндекс Маркет' },
-  { key: 'wb', cfg: 'chkWb', journal: 'wb_checked.json', label: 'Wildberries' },
+  { key: 'wb', turnoverRule: 1, cfg: 'chkWb', journal: 'wb_checked.json', label: 'Wildberries' },
   { key: 'ozon', cfg: 'chkOzon', journal: 'ozon_checked.json', label: 'Ozon' }
 ];
 const enabledPlatforms = cfg => PLATFORMS.filter(p => (p.key === 'ozon' ? cfg.chkOzon !== false : !!cfg[p.cfg]));
@@ -530,11 +530,11 @@ const enabledPlatforms = cfg => PLATFORMS.filter(p => (p.key === 'ozon' ? cfg.ch
 function needs(cfg, p, paths) {
   const j = (() => { try { return JSON.parse(fs.readFileSync(path.join(cfg.ozonOut, p.journal), 'utf8')); } catch { return { files: {} }; } })();
   return paths.map(f => { try { return { path: f, size: fs.statSync(f).size }; } catch { return null; } })
-    .filter(Boolean).filter(f => { const r = j.files[f.path]; return !r || r.size !== f.size || (r.pending && r.pending.length); });
+    .filter(Boolean).filter(f => { const r = j.files[f.path]; return !r || (p.turnoverRule && r.turnoverRule !== p.turnoverRule) || r.size !== f.size || (r.pending && r.pending.length); });
 }
 async function ensureWb() {
   const wc = wbView.webContents;
-  const test = () => wc.executeJavaScript(`fetch('/pvz-map-backend/api/v2/map/check-point?point.longitude=37.6176&point.latitude=55.7558&area=70&tariff_type=BasicTariff',{headers:{Accept:'application/json'}}).then(r=>r.status).catch(()=>0)`, true).catch(() => 0);
+  const test = () => wc.executeJavaScript(`fetch('/pvz-map-backend/api/v2/map/check-point?point.longitude=37.6176&point.latitude=55.7558&area=70&tariff_type=BasicTariff',{headers:{Accept:'application/json'}}).then(async r => r.ok && typeof (await r.json()).can_open === 'boolean' ? 200 : 0).catch(()=>0)`, true).catch(() => 0);
   if (/map\.wb\.ru/.test(wc.getURL()) && (await test()) === 200) return true;
   await wc.loadURL('https://map.wb.ru/').catch(() => {});
   for (let i = 0; i < 20; i++) { await new Promise(r => setTimeout(r, 2000)); if ((await test()) === 200) return true; }
@@ -601,7 +601,7 @@ ipcMain.handle('ozonScan', () => {
   const map = new Map();
   for (const p of enabledPlatforms(cfg)) {
     const sets = [[[cfg.root, cfg.cianRoot], cfg.ozonOut], ...cfg.jobs.filter(j => j.exp && !j.archived).map(j => [[j.exp], j.res || cfg.ozonOut])];
-    for (const f of sets.flatMap(([roots, out]) => ozon.scan(roots, out, cfg.ozonDays, p.journal))) {
+    for (const f of sets.flatMap(([roots, out]) => ozon.scan(roots, out, cfg.ozonDays, p.journal, p.turnoverRule))) {
       const e = map.get(f.path) || { path: f.path, name: path.basename(f.path), folder: path.basename(path.dirname(f.path)), partial: false, platforms: [] };
       e.platforms.push(p.key); e.partial = e.partial || f.partial; map.set(f.path, e);
     }
@@ -861,6 +861,33 @@ ipcMain.handle('extShow', async (_e, key, rect, q, pt) => {
     if (key === 'listing') { if (q && wc.getURL() !== q) await wc.loadURL(q).catch(() => {}); return { ok: true }; }
     // без адреса (объявление ещё не выбрано) — просто карта Москвы, если ничего не открыто
     if (!q) { if (key !== 'listing' && !wc.getURL()) await wc.loadURL(EXT[key].base || IDLE[key]).catch(() => {}); applyZoom(wc); return { ok: true, idle: true }; }
+    if (key === 'wb') {
+      if (!Number.isFinite(pt?.lat) || !Number.isFinite(pt?.lon) || !pt.lat || !pt.lon) {
+        return { ok: false, why: 'У объявления нет точных координат' };
+      }
+      await e.ready;
+      if (seq !== e.seq) return { ok: false, why: 'Выбрано другое объявление' };
+      const url = new URL(EXT.wb.base);
+      url.searchParams.set('lat', pt.lat);
+      url.searchParams.set('lng', pt.lon);
+      url.searchParams.set('area', '70');
+      await wc.loadURL(url.href);
+      applyZoom(wc);
+      // WB запрашивает check-point после выбора точки. Сверяем фактический запрос карты.
+      for (let i = 0; i < 30 && seq === e.seq; i++) {
+        const selected = await wc.executeJavaScript(`(() => {
+          if (!document.querySelector('canvas.maplibregl-canvas')) return null;
+          const point = performance.getEntriesByType('resource').filter(r =>
+            new URL(r.name, location.href).pathname === '/pvz-map-backend/api/v2/map/check-point').pop();
+          if (!point) return null;
+          const p = new URL(point.name).searchParams;
+          return [p.get('point.latitude'), p.get('point.longitude')];
+        })()`).catch(() => null);
+        if (selected && Number(selected[0]) === pt.lat && Number(selected[1]) === pt.lon) return { ok: true };
+        await new Promise(r => setTimeout(r, 400));
+      }
+      return { ok: false, why: 'Карта WB не подтвердила точку объявления' };
+    }
     if (EXT[key].url) { await wc.loadURL(EXT[key].url(q, pt)).catch(() => {}); applyZoom(wc); return { ok: true }; }
     await e.ready; applyZoom(wc);
     await new Promise(r => setTimeout(r, 1500));

@@ -666,6 +666,7 @@ async function showOnMap(x) {
   if (R.rows[R.sel] !== x) return;
   zoomShow($('rMapZoom').dataset.zoom); if ($('rMapZoom2').style.display !== 'none') zoomShow($('rMapZoom2').dataset.zoom); syncRects();
   if (!res || res.ok) $('rOzQ').textContent = res && res.how === 'enter' ? q + ' (подсказка не появилась — нажат Enter)' : '';
+  else if (s.agg === 'wb') $('rOzQ').textContent = res.why || 'Не удалось открыть точку на карте WB';
   else { $('rOzQ').textContent = 'Не удалось ввести адрес (' + (res.why || 'ошибка') + ') — он скопирован, вставьте в поиск Ctrl+V'; navigator.clipboard && navigator.clipboard.writeText(q).catch(() => {}); }
 }
 const showOnOzon = x => showOnMap(x);

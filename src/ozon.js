@@ -63,7 +63,7 @@ const writeJson = (p, o) => { fs.mkdirSync(path.dirname(p), { recursive: true })
 const journalPath = out => path.join(out, 'ozon_checked.json');
 
 // новые выгрузки: export_excel… / avito… в папках АДРЕСА и АДРЕСА ЦИАН, изменённые за N дней и ещё не проверенные
-function scan(roots, outDir, days, journalName) {
+function scan(roots, outDir, days, journalName, turnoverRule) {
   const j = readJson(journalName ? path.join(outDir, journalName) : journalPath(outDir), { files: {} });
   const since = Date.now() - (days || 3650) * 864e5;
   const found = [];
@@ -76,7 +76,7 @@ function scan(roots, outDir, days, journalName) {
       let st; try { st = fs.statSync(p); } catch { continue; }
       if (st.mtimeMs < since) continue;
       const rec = j.files[p];
-      if (rec && rec.size === st.size && !(rec.pending && rec.pending.length)) continue;
+      if (rec && (!turnoverRule || rec.turnoverRule === turnoverRule) && rec.size === st.size && !(rec.pending && rec.pending.length)) continue;
       found.push({ path: p, size: st.size, partial: !!(rec && rec.pending && rec.pending.length) });
     }
   };

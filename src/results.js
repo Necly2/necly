@@ -4,6 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const XLSX = require('xlsx');
 
+const { WB_MIN_TURNOVER, WB_TURNOVER_COL } = require('./platforms');
+
 const cache = new Map();   // путь → { mtime, rows }
 const PLAT = [
   { re: /^OZON /i, platform: 'Ozon', zoneCol: 'Зона Ozon', noteCol: 'Сверка адреса', moneyCol: null, sheet: 0 },
@@ -27,6 +29,7 @@ function readFile(file, spec, mtime, exported) {
     // Ozon без поддержки под площадь объявления (площадь меньше ступеней) — в итог не входит (в старых файлах такие строки есть;
     // отслеживаемые всё равно видны — из сохранённой копии)
     if (spec.platform === 'Ozon' && head['Поддержка под площадь, ₽/мес'] != null && num(g(r, 'Поддержка под площадь, ₽/мес')) === 0 && !num(g(r, 'Поддержка всего, ₽')) && String(g(r, spec.zoneCol) || '') !== 'ошибка запроса') continue;
+    if (spec.platform === 'WB' && !(num(g(r, WB_TURNOVER_COL)) >= WB_MIN_TURNOVER)) continue;
     const lc = head['Ссылка на первоисточник'] != null ? cell(r, head['Ссылка на первоисточник']) : null;
     const url = (lc && lc.l && lc.l.Target) || (lc && /^https?:/.test(String(lc.v)) ? String(lc.v) : '');
     const coords = String(g(r, 'Координаты') || '').replace(/\s/g, '').replace(';', ',');

@@ -120,6 +120,20 @@ function makeYandex(fetchFn) {
 
 // ============================ Wildberries ============================
 const WB_API = 'https://map.wb.ru/pvz-map-backend/api/v2/map/check-point';
+const WB_PREDICT = 'https://map.wb.ru/pvz-map-backend/api/v1/turnover-predict';
+const WB_MIN_TURNOVER = 5_000_000;
+const WB_TURNOVER_COL = 'Мин. оборот с апреля, ₽/мес';
+function wbTurnover(data, now = new Date()) {
+  const values = data?.turnover_year_prediction, offset = data?.prediction_relative_first_month;
+  if (data?.prediction_currency !== 'RU' || !Array.isArray(values) || values.length !== 12 || !Number.isInteger(offset)) return null;
+  const first = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  const april = (3 - first.getMonth() + 12) % 12;
+  const months = values.slice(april);
+  if (!months.every(v => Number.isFinite(v) && v >= 0)) return null;
+  const period = i => new Date(first.getFullYear(), first.getMonth() + i, 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+  const min = Math.min(...months);
+  return { min, note: `Прогноз WB для 70 м², ${period(april)} — ${period(11)}: минимум ${min.toLocaleString('ru-RU')} ₽/мес (${period(april + months.indexOf(min))})` };
+}
 const WB_MIN_AREA = 25;
 const WB_ZONES = { // код: [название, цвет, причина исключения]
   GUARANTEED_INCOME: ['приоритетная зона — гарантированный доход', 'E4D2F5', null],
@@ -132,7 +146,7 @@ const WB_ZONES = { // код: [название, цвет, причина иск
   ERROR: ['ошибка запроса', 'F8CBAD', null]
 };
 function wbClassify(resp) {
-  if (!resp || resp._err) return { code: 'ERROR', sub: null, tariff: null, note: (resp && resp._err) || 'нет ответа' };
+  if (typeof resp?.can_open !== 'boolean' || resp._err) return { code: 'ERROR', sub: null, tariff: null, note: (resp && resp._err) || 'нет ответа' };
   const pi = resp.point_info || {}, nc = (pi.zone_info || {}).number_code;
   const t0 = (pi.tariffs_info || []).find(t => t.tariff_id === 0);
   const tariff = t0 ? t0.total_tariff : null, desc = resp.description || '';
@@ -153,8 +167,7 @@ function wbClassify(resp) {
   return { code: 'STANDARD', sub: null, tariff, note: `неизвестный код зоны ${nc} — проверить вручную` };
 }
 function makeWB(fetchFn) {
-  async function call(lat, lon) {
-    const u = `${WB_API}?point.longitude=${lon}&point.latitude=${lat}&area=70&tariff_type=BasicTariff`;
+  async function call(u) {
     for (let a = 1; a <= 5; a++) {
       try {
         const r = await fetchFn(u, { headers: { Accept: 'application/json' } });
@@ -165,7 +178,14 @@ function makeWB(fetchFn) {
     }
     return { _err: 'нет ответа сервера — повторить запуск' };
   }
-  return { check: async (lat, lon) => wbClassify(await call(lat, lon)) };
+  return { async check(lat, lon) {
+    const point = `?point.longitude=${lon}&point.latitude=${lat}&area=70`;
+    const zone = wbClassify(await call(WB_API + point + '&tariff_type=BasicTariff'));
+    if (zone.code === 'ERROR' || WB_ZONES[zone.code][2]) return zone;
+    const turnover = wbTurnover(await call(WB_PREDICT + point));
+    const note = turnover?.note || 'Прогноз товарооборота с апреля недоступен';
+    return { ...zone, turnover, note: [zone.note, note].filter(Boolean).join('; ') };
+  } };
 }
 function wbArea(d) {
   const mn = num(d['Мин. площадь']), mx = num(d['Макс. площадь']), top = mx ?? mn;
@@ -182,7 +202,7 @@ const SPEC = {
     add: ['Зона Яндекс', 'Код зоны', 'Субсидия, ₽', 'Проверка'], money: 'Субсидия, ₽',
     widths: { 'Адрес': 38, 'Метро / ЖД станции': 24, 'Ссылка на первоисточник': 20, 'Координаты': 24, 'Зона Яндекс': 32, 'Код зоны': 22, 'Проверка': 48, 'Причина исключения': 38 } },
   wb: { label: 'Wildberries', prefix: 'WB', journal: 'wb_checked.json',
-    add: ['Зона WB', 'Код зоны', 'Гарантия, ₽', 'Тариф, %', 'Проверка'], money: 'Гарантия, ₽',
+    add: ['Зона WB', 'Код зоны', 'Гарантия, ₽', 'Тариф, %', WB_TURNOVER_COL, 'Проверка'], money: 'Гарантия, ₽',
     widths: { 'Адрес': 38, 'Метро / ЖД станции': 24, 'Ссылка на первоисточник': 20, 'Координаты': 24, 'Зона WB': 40, 'Код зоны': 22, 'Проверка': 48, 'Причина исключения': 40 } }
 };
 const thin = { style: 'thin', color: { argb: 'FFBFBFBF' } }, border = { top: thin, left: thin, bottom: thin, right: thin };
@@ -199,7 +219,7 @@ function writeSheet(ws, spec, rows, withReason) {
       cell.border = border;
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + r.color } };
       if (c === 'Ссылка на первоисточник' && r.d._url) { cell.value = { text: 'Открыть объявление', hyperlink: r.d._url }; cell.font = { color: { argb: 'FF0563C1' }, underline: true }; }
-      if ((c === spec.money || c === 'Цена, ₽') && typeof cell.value === 'number') cell.numFmt = '#,##0';
+      if ((c === WB_TURNOVER_COL || c === spec.money || c === 'Цена, ₽') && typeof cell.value === 'number') cell.numFmt = '#,##0';
     });
   }
   cols.forEach((c, j) => (ws.getColumn(j + 1).width = spec.widths[c] || 14));
@@ -267,11 +287,14 @@ async function run(kind, files, ctx) {
         const info = WB_ZONES[z.code] || WB_ZONES.ERROR;
         const notes = z.note ? [z.note] : [];
         let reason = info[2];
+        if (!reason && !z.turnover) reason = z.note || 'Товарооборот не подтверждён';
+        if (z.turnover && z.turnover.min < WB_MIN_TURNOVER) reason = 'Прогноз ниже 5 млн ₽/мес в периоде с апреля';
         const [ok, an] = wbArea(d);
+        if (ok && pc(d._key) && !info[2] && !z.turnover) pending.push(d._key);
         if (an) notes.push(an);
         if (!ok) reason = (reason ? reason + '; ' : '') + an;
         item = { d, batch, order, color: info[1], reason, sub: z.sub, note: notes.join('; '),
-          extra: { 'Зона WB': info[0], 'Код зоны': z.code, 'Гарантия, ₽': z.sub, 'Тариф, %': z.tariff, 'Проверка': notes.join('; ') } };
+          extra: { 'Зона WB': info[0], 'Код зоны': z.code, 'Гарантия, ₽': z.sub, 'Тариф, %': z.tariff, [WB_TURNOVER_COL]: z.turnover?.min, 'Проверка': notes.join('; ') } };
         if (reason) excluded.push(item); else main.push(item);
       }
       const label = item.extra['Зона Яндекс'] || item.extra['Зона WB'];
@@ -279,19 +302,20 @@ async function run(kind, files, ctx) {
       if (/проверить вручную/.test(item.note || '') && !item.reason) manual.push(`${d['Адрес']} — ${item.note}`);
     });
     unchecked += pending.length;
-    if (pending.length === rows.length && rows.length) continue;
+    if (pending.length === rows.length && rows.length && !excluded.length) continue;
     if (kind === 'yandex') main.sort((a, b) => a.group - b.group || a.order - b.order);
     else main.sort((a, b) => (b.sub || 0) - (a.sub || 0) || a.order - b.order);
-    mainN += main.length; exclN += excluded.length;
+    mainN += main.length;
+    exclN += rows.length - main.length - pending.length;
     const prev = j.files[f.path];
     const outFile = (prev && prev.result) || path.join(ctx.outDir, MONTHS[now.getMonth()], `${spec.prefix} ${path.basename(f.path)}`);
     await writeFile(outFile, spec, main, excluded);
     saved.push(outFile);
-    j.files[f.path] = { size: f.size, result: outFile, checked: now.toISOString(), rows: rows.length, suitable: main.length,
+    j.files[f.path] = { ...(kind === 'wb' ? { turnoverRule: 1 } : {}), size: f.size, result: outFile, checked: now.toISOString(), rows: rows.length, suitable: main.length,
       status: pending.length ? 'partial' : 'done', ...(pending.length ? { pending } : {}) };
   }
   writeJson(jPath, j);
   return { kind, label: spec.label, reason: stopped ? 'остановлено вручную' : 'проверка завершена', saved, errors, stats, main: mainN, excluded: exclN, unchecked, manual, addresses: coords.length, files: data.length };
 }
 
-module.exports = { run, SPEC, makeYandex, makeWB, wbClassify, Y_ZONES, WB_ZONES };
+module.exports = { run, SPEC, WB_MIN_TURNOVER, WB_TURNOVER_COL, wbTurnover, makeYandex, makeWB, wbClassify, Y_ZONES, WB_ZONES };
